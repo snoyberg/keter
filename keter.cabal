@@ -21,6 +21,7 @@ Library
                      , data-default
                      , blaze-builder             >= 0.3           && < 0.4
   Exposed-Modules:     Keter.Nginx
+                       Keter.Process
   ghc-options:         -Wall -Werror
 
 Executable keter

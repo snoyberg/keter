@@ -2,9 +2,6 @@ Deployment system for Yesod (and other Haskell) web apps.
 
 Components:
 
-* Port assigner. Ask it for a new port, and notify it when a port is no longer
-  in use.
-
 * Logger: provides a file descriptor to redirect output to. Takes the name of
   the app.
 
@@ -17,7 +14,8 @@ Components:
   available, it will create a database/user.
 
 * Nginx: Send it commands to add/modify/remove a virtual host. It will write
-  the config file and reload nginx.
+  the config file and reload nginx. Also handles management of the pool of open
+  ports to be assigned.
 
 * App: Started with a path to an app bundle. Unpacks into a random folder
   inside the temp folder, gets a random port, starts a Process, updates Nginx,

@@ -1,0 +1,20 @@
+Name:                keter
+Version:             0.1
+Synopsis:            Yesod deployment manager
+Description:         Handles deployment of web apps, using Nginx as a reverse proxy to achieve zero downtime deployments.
+Homepage:            http://www.yesodweb.com/
+License:             MIT
+License-file:        LICENSE
+Author:              Michael Snoyman
+Maintainer:          michael@snoyman.com
+Category:            Web
+Build-type:          Simple
+Cabal-version:       >=1.6
+
+Executable keter
+  Main-is:             keter.hs
+  Build-depends:       base                      >= 4             && < 5
+
+source-repository head
+  type:     git
+  location: https://github.com/snoyberg/keter

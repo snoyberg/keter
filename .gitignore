@@ -3,3 +3,4 @@ nginx.conf
 dist/
 process.txt
 process2.txt
+postgres.yaml

@@ -15,13 +15,17 @@ Library
   Build-depends:       base                      >= 4             && < 5
                      , directory
                      , bytestring
+                     , text
                      , containers
                      , transformers
                      , process
+                     , random
                      , data-default
                      , blaze-builder             >= 0.3           && < 0.4
+                     , yaml                      >= 0.7           && < 0.8
   Exposed-Modules:     Keter.Nginx
                        Keter.Process
+                       Keter.Postgres
   ghc-options:         -Wall -Werror
 
 Executable keter

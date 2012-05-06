@@ -9,11 +9,19 @@ Author:              Michael Snoyman
 Maintainer:          michael@snoyman.com
 Category:            Web
 Build-type:          Simple
-Cabal-version:       >=1.6
+Cabal-version:       >=1.8
 
-Executable keter
-  Main-is:             keter.hs
+Library
   Build-depends:       base                      >= 4             && < 5
+                     , directory
+                     , bytestring
+                     , containers
+                     , transformers
+                     , process
+                     , data-default
+                     , blaze-builder             >= 0.3           && < 0.4
+  Exposed-Modules:     Keter.Nginx
+  ghc-options:         -Wall -Werror
 
 source-repository head
   type:     git

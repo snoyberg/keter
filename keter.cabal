@@ -23,6 +23,11 @@ Library
   Exposed-Modules:     Keter.Nginx
   ghc-options:         -Wall -Werror
 
+Executable keter
+  Main-is:             ../keter.hs
+  hs-source-dirs:      dist
+  Build-depends:       base, keter
+
 source-repository head
   type:     git
   location: https://github.com/snoyberg/keter

@@ -1,9 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Keter.Postgres
     ( -- * Types
       Appname
     , DBInfo (..)
     , Postgres
+      -- ** Settings
+    , Settings
+    , setupDBInfo
       -- * Functions
     , load
     , getInfo
@@ -27,9 +31,29 @@ import System.Directory (renameFile)
 import Data.Text.Lazy.Builder (toLazyText, fromText)
 import qualified Data.Text.Lazy as TL
 import System.Process (readProcess)
+import Data.Default (Default (def))
 
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
+
+data Settings = Settings
+    { setupDBInfo :: DBInfo -> IO ()
+      -- ^ How to create the given user/database. Default: uses the @psql@
+      -- command line tool and @sudo -u postgres@.
+    }
+
+instance Default Settings where
+    def = Settings
+        { setupDBInfo = \DBInfo{..} -> do
+            let sql = toLazyText $
+                    "CREATE USER "         <> fromText dbiUser <>
+                    " PASSWORD '"          <> fromText dbiPass <>
+                    "';\nCREATE DATABASE " <> fromText dbiName <>
+                    " OWNER "              <> fromText dbiUser <>
+                    ";"
+            _ <- readProcess "sudo" ["-u", "postgres", "psql"] $ TL.unpack sql
+            return ()
+        }
 
 -- | Name of the application. Should just be the basename of the application
 -- file.
@@ -76,8 +100,8 @@ data Command = GetConfig Appname (DBInfo -> IO ())
 -- | Load a set of existing connections from a config file. If the file does
 -- not exist, it will be created. Any newly created databases will
 -- automatically be saved to this file.
-load :: FilePath -> IO Postgres
-load fp = do
+load :: Settings -> FilePath -> IO Postgres
+load Settings{..} fp = do
     e <- doesFileExist fp
     mdb <-
         if e
@@ -101,14 +125,7 @@ load fp = do
                             { dbiName = T.append appname $ dbiName dbi'
                             , dbiUser = T.append appname $ dbiUser dbi'
                             }
-                    -- FIXME: create in db itself
-                    let sql = toLazyText $
-                            "CREATE USER "         <> fromText (dbiUser dbi) <>
-                            " PASSWORD '"          <> fromText (dbiPass dbi) <>
-                            "';\nCREATE DATABASE " <> fromText (dbiName dbi) <>
-                            " OWNER "              <> fromText (dbiUser dbi) <>
-                            ";"
-                    _ <- lift $ readProcess "sudo" ["-u", "postgres", "psql"] $ TL.unpack sql
+                    lift $ setupDBInfo dbi
                     let db' = Map.insert appname dbi db
                     lift $ encodeFile tmpfp db'
                     lift $ renameFile tmpfp fp

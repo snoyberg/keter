@@ -17,6 +17,9 @@ Components:
   the config file and reload nginx. Also handles management of the pool of open
   ports to be assigned.
 
+* TempFolder: Wipes out a folder on startup, then assigns random, unique
+  folders inside it on request.
+
 * App: Started with a path to an app bundle. Unpacks into a random folder
   inside the temp folder, gets a random port, starts a Process, updates Nginx,
   and waits for commands. Accepts two commands: reload and terminate.

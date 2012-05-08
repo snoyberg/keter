@@ -26,6 +26,7 @@ Library
   Exposed-Modules:     Keter.Nginx
                        Keter.Process
                        Keter.Postgres
+                       Keter.TempFolder
   ghc-options:         -Wall -Werror
 
 Executable keter

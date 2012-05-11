@@ -1,5 +1,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Keter.Nginx
     ( -- * Types
       Port
@@ -36,6 +37,8 @@ import Blaze.ByteString.Builder.Char.Utf8 (fromString, fromShow)
 import Data.Monoid (Monoid, mappend, mconcat)
 import Data.ByteString.Char8 ()
 import System.Directory (renameFile)
+import qualified Network
+import Control.Exception (SomeException, try)
 
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
@@ -90,15 +93,24 @@ start Settings{..} = do
         command <- lift $ C.readChan chan
         case command of
             GetPort f -> do
-                ns <- S.get
-                let (port, ns') =
+                ns0 <- S.get
+                let loop ns =
                         case nsAvail ns of
-                            p:ps -> (p, ns { nsAvail = ps })
+                            p:ps -> do
+                                res <- try $ Network.listenOn $ Network.PortNumber $ fromIntegral p
+                                case res of
+                                    Left (_ :: SomeException) -> do
+                                        putStrLn $ "Removing port from use: " ++ show p
+                                        loop ns { nsAvail = ps }
+                                    Right socket -> do
+                                        Network.sClose socket
+                                        return (p, ns { nsAvail = ps })
                             [] ->
                                 case reverse $ nsRecycled ns of
-                                    [] -> (error "No ports available", ns)
-                                    p:ps -> (p, ns { nsAvail = ps, nsRecycled = [] })
-                S.put ns'
+                                    [] -> return (error "No ports available", ns)
+                                    ps -> loop ns { nsAvail = ps, nsRecycled = [] }
+                (port, ns) <- lift $ loop ns0
+                S.put ns
                 lift $ f port
             ReleasePort p ->
                 S.modify $ \ns -> ns { nsRecycled = p : nsRecycled ns }

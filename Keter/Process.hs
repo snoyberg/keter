@@ -24,6 +24,7 @@ run exec dir args env = do
                     NoRestart -> return (NoRestart, return ())
                     _ -> do
                         (_, _, _, ph) <- SP.createProcess cp
+                        putStrLn "Process created"
                         return (Running ph, SP.waitForProcess ph >> loop)
             next
     _ <- forkIO loop

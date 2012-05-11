@@ -21,12 +21,16 @@ Library
                      , process
                      , random
                      , data-default
+                     , filepath
+                     , zlib
+                     , tar
                      , blaze-builder             >= 0.3           && < 0.4
                      , yaml                      >= 0.7           && < 0.8
   Exposed-Modules:     Keter.Nginx
                        Keter.Process
                        Keter.Postgres
                        Keter.TempFolder
+                       Keter.App
   ghc-options:         -Wall -Werror
 
 Executable keter

@@ -1,0 +1,4 @@
+exec: ../hello
+args:
+    - Hello World 1
+host: tealc-mint

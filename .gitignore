@@ -4,3 +4,9 @@ dist/
 process.txt
 process2.txt
 postgres.yaml
+*.o
+*.hi
+temp/
+*.keter
+test/app
+incoming/foo/hello

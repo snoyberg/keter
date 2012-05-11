@@ -24,8 +24,10 @@ Library
                      , filepath
                      , zlib
                      , tar
+                     , network
                      , blaze-builder             >= 0.3           && < 0.4
                      , yaml                      >= 0.7           && < 0.8
+                     , unix-compat               >= 0.3           && < 0.4
   Exposed-Modules:     Keter.Nginx
                        Keter.Process
                        Keter.Postgres

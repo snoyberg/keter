@@ -18,7 +18,6 @@ import qualified System.FilePath as F
 import Data.Text (pack)
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>))
-import qualified Data.IORef as I
 import System.PosixCompat.Files
 import qualified Control.Concurrent.Chan as C
 import Control.Concurrent (forkIO, threadDelay)

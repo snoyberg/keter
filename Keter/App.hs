@@ -27,11 +27,13 @@ import Control.Exception (try, SomeException, onException)
 import System.IO (hClose)
 import System.Directory (removeDirectoryRecursive)
 import Control.Monad (when)
+import Data.Text (unpack)
 
 data Config = Config
     { configExec :: FilePath
     , configArgs :: [String]
     , configHost :: String
+    , configPostgres :: Bool
     }
 
 instance FromJSON Config where
@@ -39,6 +41,7 @@ instance FromJSON Config where
         <$> o .: "exec"
         <*> o .:? "args" .!= []
         <*> o .: "host"
+        <*> o .:? "postgres" .!= False
     parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
@@ -70,11 +73,12 @@ unpackBundle tf bundle appname = tryM $ do
 
 start :: TempFolder
       -> Nginx
+      -> Postgres
       -> Appname
       -> FilePath -- ^ app bundle
       -> IO () -- ^ action to perform to remove this App from list of actives
       -> IO (App, IO ())
-start tf nginx appname bundle removeFromList = do
+start tf nginx postgres appname bundle removeFromList = do
     chan <- C.newChan
     return (App $ C.writeChan chan, rest chan)
   where
@@ -82,12 +86,25 @@ start tf nginx appname bundle removeFromList = do
 
     runApp port dir config = do
         setFileMode (dir F.</> "config" F.</> configExec config) ownerExecuteMode
+        otherEnv <-
+            if configPostgres config
+                then do
+                    dbi <- getInfo postgres appname
+                    return
+                        [ ("PGHOST", "localhost")
+                        , ("PGPORT", "5432")
+                        , ("PGUSER", unpack $ dbiUser dbi)
+                        , ("PGPASS", unpack $ dbiPass dbi)
+                        , ("PGDATABASE", unpack $ dbiName dbi)
+                        ]
+                else return []
         run
             ("config" F.</> configExec config)
             dir
             (configArgs config)
-            [ ("PORT", show port)
-            ]
+            $ ("PORT", show port)
+            : ("APPROOT", "http://" ++ configHost config)
+            : otherEnv
 
     rest chan = void $ forkIO $ do
         mres <- unpackBundle tf bundle appname

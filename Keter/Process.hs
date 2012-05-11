@@ -23,6 +23,9 @@ run exec dir args env = do
                 case status of
                     NoRestart -> return (NoRestart, return ())
                     _ -> do
+                        -- FIXME put in some kind of rate limiting: if we last
+                        -- tried to restart within five second, wait an extra
+                        -- five seconds
                         (_, _, _, ph) <- SP.createProcess cp
                         putStrLn "Process created"
                         return (Running ph, SP.waitForProcess ph >> loop)

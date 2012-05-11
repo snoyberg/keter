@@ -5,6 +5,7 @@ module Keter.Main
 import qualified Keter.Nginx as Nginx
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
+import qualified Keter.Postgres as Postgres
 
 import Data.Default (def)
 import System.FilePath ((</>), takeBaseName)
@@ -22,6 +23,7 @@ keter :: FilePath -- ^ root directory, with incoming, temp, and etc folders
 keter dir = do
     nginx <- Nginx.start def
     tf <- TempFolder.setup $ dir </> "temp"
+    postgres <- Postgres.load def $ dir </> "etc" </> "postgres.yaml"
 
     mappMap <- M.newMVar Map.empty
     let removeApp appname = M.modifyMVar_ mappMap $ return . Map.delete appname
@@ -33,7 +35,7 @@ keter dir = do
                         App.reload app
                         return (appMap, return ())
                     Nothing -> do
-                        (app, rest) <- App.start tf nginx appname bundle $ removeApp appname
+                        (app, rest) <- App.start tf nginx postgres appname bundle $ removeApp appname
                         let appMap' = Map.insert appname app appMap
                         return (appMap', rest)
             rest

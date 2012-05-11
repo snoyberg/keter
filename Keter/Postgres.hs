@@ -27,7 +27,8 @@ import Control.Monad.Trans.Class (lift)
 import Control.Applicative ((<$>), (<*>))
 import qualified System.Random as R
 import Data.Monoid (Monoid, mappend)
-import System.Directory (renameFile)
+import System.Directory (renameFile, createDirectoryIfMissing)
+import System.FilePath (takeDirectory)
 import Data.Text.Lazy.Builder (toLazyText, fromText)
 import qualified Data.Text.Lazy as TL
 import System.Process (readProcess)
@@ -102,6 +103,7 @@ data Command = GetConfig Appname (DBInfo -> IO ())
 -- automatically be saved to this file.
 load :: Settings -> FilePath -> IO Postgres
 load Settings{..} fp = do
+    createDirectoryIfMissing True $ takeDirectory fp
     e <- doesFileExist fp
     mdb <-
         if e

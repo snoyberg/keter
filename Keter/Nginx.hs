@@ -30,7 +30,7 @@ import Control.Concurrent (forkIO)
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Map as Map
-import Control.Monad (forever)
+import Control.Monad (forever, unless)
 import qualified Data.ByteString.Lazy as L
 import Blaze.ByteString.Builder (copyByteString, toLazyByteString)
 import Blaze.ByteString.Builder.Char.Utf8 (fromString, fromShow)
@@ -39,6 +39,8 @@ import Data.ByteString.Char8 ()
 import System.Directory (renameFile)
 import qualified Network
 import Control.Exception (SomeException, try)
+import qualified Data.ByteString as S
+import System.Exit (ExitCode (ExitSuccess))
 
 (<>) :: Monoid m => m -> m -> m
 (<>) = mappend
@@ -79,15 +81,25 @@ data Settings = Settings
 instance Default Settings where
     def = Settings
         { configFile = "/etc/nginx/sites-enabled/keter"
-        , reloadAction = rawSystem "/etc/init.d/nginx" ["reload"] >> return ()
-        , startAction = rawSystem "/etc/init.d/nginx" ["start"] >> return ()
+        , reloadAction = rawSystem' "/etc/init.d/nginx" ["reload"]
+        , startAction = rawSystem' "/etc/init.d/nginx" ["start"]
         , portRange = [4000..4999]
         }
+
+rawSystem' :: FilePath -> [String] -> IO ()
+rawSystem' fp args = do
+    ec <- rawSystem fp args
+    unless (ec == ExitSuccess) $ error $ "Received exit failure when running: " ++ show (fp:args)
 
 -- | Start running a separate thread which will accept commands and modify
 -- Nginx's behavior accordingly.
 start :: Settings -> IO Nginx
 start Settings{..} = do
+    -- Start off by ensuring we can read and write the config file and reload
+    config0 <- S.readFile configFile
+    S.writeFile configFile config0
+    reloadAction
+
     chan <- C.newChan
     _ <- forkIO $ flip S.evalStateT (NState portRange [] Map.empty) $ forever $ do
         command <- lift $ C.readChan chan

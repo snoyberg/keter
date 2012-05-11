@@ -15,7 +15,6 @@ import qualified Codec.Archive.Tar as Tar
 import qualified Data.ByteString.Lazy as L
 import Codec.Compression.GZip (decompress)
 import qualified System.FilePath as F
-import Data.Text (pack)
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>))
 import System.PosixCompat.Files
@@ -71,14 +70,14 @@ unpackBundle tf bundle appname = tryM $ do
 
 start :: TempFolder
       -> Nginx
+      -> Appname
       -> FilePath -- ^ app bundle
       -> IO () -- ^ action to perform to remove this App from list of actives
       -> IO (App, IO ())
-start tf nginx bundle removeFromList = do
+start tf nginx appname bundle removeFromList = do
     chan <- C.newChan
     return (App $ C.writeChan chan, rest chan)
   where
-    appname = pack $ F.takeBaseName bundle
     void f = f >> return ()
 
     runApp port dir config = do
@@ -113,6 +112,7 @@ start tf nginx bundle removeFromList = do
             Terminate -> do
                 removeFromList
                 removeEntry nginx $ configHost configOld
+                putStrLn $ "Received terminate signal for app: " ++ show appname
                 terminateOld
             Reload -> do
                 mres <- unpackBundle tf bundle appname
@@ -129,6 +129,7 @@ start tf nginx bundle removeFromList = do
                                 addEntry nginx (configHost config) $ AppEntry port
                                 when (configHost config /= configHost configOld) $
                                     removeEntry nginx $ configHost configOld
+                                putStrLn $ "Finished reloading: " ++ show appname
                                 terminateOld
                                 loop chan dir process port config
                             else do

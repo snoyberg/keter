@@ -1,4 +1,11 @@
-import Keter.Nginx ()
+import System.Environment (getArgs, getProgName)
+import Keter.Main (keter)
 
 main :: IO ()
-main = putStrLn "Nothing here yet"
+main = do
+    args <- getArgs
+    case args of
+        [dir] -> keter dir
+        _ -> do
+            pn <- getProgName
+            error $ "Usage: " ++ pn ++ " <root folder>"

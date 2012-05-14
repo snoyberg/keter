@@ -7,8 +7,6 @@ module Keter.Process
 
 import Keter.Prelude
 import qualified System.Process as SP
-import Control.Concurrent (forkIO)
-import qualified Control.Concurrent.MVar as M
 
 data Status = NeedsRestart | NoRestart | Running SP.ProcessHandle
 
@@ -17,22 +15,27 @@ run :: FilePath -- ^ executable
     -> FilePath -- ^ working directory
     -> [String] -- ^ command line parameter
     -> [(String, String)] -- ^ environment
-    -> IO Process
+    -> KIO Process
 run exec dir args env = do
-    mstatus <- M.newMVar NeedsRestart
+    mstatus <- newMVar NeedsRestart
     let loop = do
-            next <- M.modifyMVar mstatus $ \status ->
+            next <- modifyMVar mstatus $ \status ->
                 case status of
                     NoRestart -> return (NoRestart, return ())
                     _ -> do
                         -- FIXME put in some kind of rate limiting: if we last
                         -- tried to restart within five second, wait an extra
                         -- five seconds
-                        (_, _, _, ph) <- SP.createProcess cp
-                        log $ ProcessCreated exec
-                        return (Running ph, SP.waitForProcess ph >> loop)
+                        res <- liftIO $ SP.createProcess cp
+                        case res of
+                            Left e -> do
+                                log $ ExceptionThrown e
+                                return (NeedsRestart, return ())
+                            Right (_, _, _, ph) -> do
+                                log $ ProcessCreated exec
+                                return (Running ph, liftIO (SP.waitForProcess ph) >> loop)
             next
-    _ <- forkIO loop
+    forkKIO loop
     return $ Process mstatus
   where
     cp = (SP.proc (toString exec) $ map toString args)
@@ -45,12 +48,12 @@ run exec dir args env = do
         }
 
 -- | Abstract type containing information on a process which will be restarted.
-newtype Process = Process (M.MVar Status)
+newtype Process = Process (MVar Status)
 
 -- | Terminate the process and prevent it from being restarted.
-terminate :: Process -> IO ()
+terminate :: Process -> KIO ()
 terminate (Process mstatus) = do
-    status <- M.swapMVar mstatus NoRestart
+    status <- swapMVar mstatus NoRestart
     case status of
-        Running ph -> SP.terminateProcess ph
+        Running ph -> void $ liftIO $ SP.terminateProcess ph
         _ -> return ()

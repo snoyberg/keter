@@ -23,7 +23,7 @@ import Control.Concurrent (forkIO, threadDelay)
 import System.Timeout (timeout)
 import qualified Network
 import Data.Maybe (fromMaybe)
-import Control.Exception (try, SomeException, onException)
+import Control.Exception (try, SomeException, onException, throwIO)
 import System.IO (hClose)
 import System.Directory (removeDirectoryRecursive)
 import Control.Monad (when)
@@ -61,7 +61,8 @@ unpackBundle :: TempFolder
              -> Appname
              -> IO (Maybe (FilePath, Config))
 unpackBundle tf bundle appname = tryM $ do
-    lbs <- Keter.Prelude.readFileLBS bundle
+    elbs <- runKIO $ Keter.Prelude.readFileLBS bundle
+    lbs <- either throwIO return elbs
     dir <- getFolder tf appname
     putStrLn $ "Unpacking bundle to: " ++ dir
     let rest = do
@@ -98,7 +99,7 @@ start tf nginx postgres appname bundle removeFromList = do
                         , ("PGDATABASE", dbiName dbi)
                         ]
                 else return []
-        run
+        runKIO $ run
             ("config" F.</> configExec config)
             (F.decodeString dir)
             (configArgs config)
@@ -121,7 +122,7 @@ start tf nginx postgres appname bundle removeFromList = do
                     else do
                         removeFromList
                         releasePort nginx port
-                        Keter.Process.terminate process
+                        runKIO $ Keter.Process.terminate process
 
     loop chan dirOld processOld portOld configOld = do
         command <- C.readChan chan
@@ -135,7 +136,7 @@ start tf nginx postgres appname bundle removeFromList = do
                 mres <- unpackBundle tf bundle appname
                 case mres of
                     Nothing -> do
-                        Keter.Prelude.log $ Keter.Prelude.InvalidBundle bundle
+                        runKIO $ Keter.Prelude.log $ Keter.Prelude.InvalidBundle bundle
                         loop chan dirOld processOld portOld configOld
                     Just (dir, config) -> do
                         port <- getPort nginx
@@ -151,17 +152,20 @@ start tf nginx postgres appname bundle removeFromList = do
                                 loop chan dir process port config
                             else do
                                 releasePort nginx port
-                                Keter.Process.terminate process
-                                Keter.Prelude.log $ Keter.Prelude.ProcessDidNotStart bundle
+                                runKIO $ Keter.Process.terminate process
+                                runKIO $ Keter.Prelude.log $ Keter.Prelude.ProcessDidNotStart bundle
                                 loop chan dirOld processOld portOld configOld
       where
         terminateOld = void $ forkIO $ do
             threadDelay $ 20 * 1000 * 1000
             putStrLn $ "Terminating old process for: " ++ show appname
-            Keter.Process.terminate processOld
+            runKIO $ Keter.Process.terminate processOld
             threadDelay $ 60 * 1000 * 1000
             putStrLn $ "Removing folder: " ++ dirOld
             removeDirectoryRecursive dirOld
+
+runKIO :: Keter.Prelude.KIO a -> IO a -- FIXME remove this
+runKIO = Keter.Prelude.runKIO print
 
 testApp :: Port -> IO Bool
 testApp port = do

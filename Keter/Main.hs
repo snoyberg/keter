@@ -28,7 +28,8 @@ keter dir = do
     nginx <- Nginx.start def
     etf <- Keter.Prelude.runKIO print $ TempFolder.setup $ F.decodeString dir F.</> "temp"
     tf <- either throwIO return etf
-    postgres <- Postgres.load def $ dir </> "etc" </> "postgres.yaml"
+    epostgres <- Keter.Prelude.runKIO print $ Postgres.load def $ F.decodeString $ dir </> "etc" </> "postgres.yaml"
+    postgres <- either throwIO return epostgres
 
     mappMap <- M.newMVar Map.empty
     let removeApp appname = M.modifyMVar_ mappMap $ return . Map.delete appname

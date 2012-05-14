@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Keter.Prelude
     ( T.Text
     , String
@@ -16,6 +17,7 @@ module Keter.Prelude
     , (A.***)
     , readFileLBS
     , P.Either (..)
+    , P.either
     , E.SomeException
     , runKIO
     , void
@@ -26,22 +28,39 @@ module Keter.Prelude
     , P.succ
     , show
     , Control.Monad.when
+    , fromText
+    , P.flip
+    , P.Show
+    , KeterException (..)
+    , E.toException
+    , newStdGen
       -- * Filepath
     , (F.</>)
-    , F.fromText
+    , (F.<.>)
     , F.FilePath
     , F.isDirectory
+    , F.isFile
     , F.removeTree
     , F.createTree
+    , F.directory
+    , F.rename
       -- * MVar
     , M.MVar
     , newMVar
+    , newEmptyMVar
     , modifyMVar
     , swapMVar
+    , takeMVar
+    , putMVar
       -- * IORef
     , I.IORef
     , newIORef
     , atomicModifyIORef
+      -- * Chan
+    , C.Chan
+    , newChan
+    , readChan
+    , writeChan
     ) where
 
 import qualified Filesystem.Path.CurrentOS as F
@@ -58,6 +77,10 @@ import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.IORef as I
 import Data.Monoid (Monoid, mappend)
+import qualified Data.Text.Lazy.Builder as B
+import Data.Typeable (Typeable)
+import qualified Control.Concurrent.Chan as C
+import qualified System.Random as R
 
 type String = T.Text
 
@@ -118,11 +141,20 @@ runKIO f (KIO g) = g f
 newMVar :: a -> KIO (M.MVar a)
 newMVar = liftIO_ . M.newMVar
 
+newEmptyMVar :: KIO (M.MVar a)
+newEmptyMVar = liftIO_ M.newEmptyMVar
+
 modifyMVar :: M.MVar a -> (a -> KIO (a, b)) -> KIO b
 modifyMVar m f = KIO $ \x -> M.modifyMVar m (\a -> unKIO (f a) x)
 
 swapMVar :: M.MVar a -> a -> KIO a
 swapMVar m = liftIO_ . M.swapMVar m
+
+takeMVar :: M.MVar a -> KIO a
+takeMVar = liftIO_ . M.takeMVar
+
+putMVar :: M.MVar a -> a -> KIO ()
+putMVar m = liftIO_ . M.putMVar m
 
 forkKIO :: KIO () -> KIO ()
 forkKIO f = do
@@ -140,3 +172,28 @@ atomicModifyIORef x = liftIO_ . I.atomicModifyIORef x
 
 show :: P.Show a => a -> T.Text
 show = T.pack . P.show
+
+class FromText a where
+    fromText :: T.Text -> a
+instance FromText T.Text where
+    fromText = P.id
+instance FromText F.FilePath where
+    fromText = F.fromText
+instance FromText B.Builder where
+    fromText = B.fromText
+
+data KeterException = CannotParsePostgres F.FilePath
+    deriving (P.Show, Typeable)
+instance E.Exception KeterException
+
+newChan :: KIO (C.Chan a)
+newChan = liftIO_ C.newChan
+
+newStdGen :: KIO R.StdGen
+newStdGen = liftIO_ R.newStdGen
+
+readChan :: C.Chan a -> KIO a
+readChan = liftIO_ . C.readChan
+
+writeChan :: C.Chan a -> a -> KIO ()
+writeChan c = liftIO_ . C.writeChan c

@@ -88,18 +88,26 @@ start tf nginx postgres appname bundle removeFromList = do
 
     runApp port dir config = do
         setFileMode (F.encodeString $ F.decodeString dir F.</> "config" F.</> configExec config) ownerExecuteMode
-        otherEnv <-
-            if configPostgres config
-                then do
-                    dbi <- getInfo postgres appname
-                    return
-                        [ ("PGHOST", "localhost")
-                        , ("PGPORT", "5432")
-                        , ("PGUSER", dbiUser dbi)
-                        , ("PGPASS", dbiPass dbi)
-                        , ("PGDATABASE", dbiName dbi)
-                        ]
-                else return []
+        otherEnv <- do
+            mdbi <-
+                if configPostgres config
+                    then do
+                        edbi <- Keter.Prelude.runKIO print $ getInfo postgres appname
+                        case edbi of
+                            Left e -> do
+                                Keter.Prelude.runKIO print $ Keter.Prelude.log $ Keter.Prelude.ExceptionThrown e
+                                return Nothing
+                            Right dbi -> return $ Just dbi
+                    else return Nothing
+            return $ case mdbi of
+                Just dbi ->
+                    [ ("PGHOST", "localhost")
+                    , ("PGPORT", "5432")
+                    , ("PGUSER", dbiUser dbi)
+                    , ("PGPASS", dbiPass dbi)
+                    , ("PGDATABASE", dbiName dbi)
+                    ]
+                Nothing -> []
         runKIO $ run
             ("config" F.</> configExec config)
             (F.decodeString dir)

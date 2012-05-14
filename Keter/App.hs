@@ -63,14 +63,15 @@ unpackBundle :: TempFolder
 unpackBundle tf bundle appname = tryM $ do
     elbs <- runKIO $ Keter.Prelude.readFileLBS bundle
     lbs <- either throwIO return elbs
-    dir <- getFolder tf appname
-    putStrLn $ "Unpacking bundle to: " ++ dir
+    edir <- runKIO $ getFolder tf appname
+    dir <- either throwIO return edir
+    putStrLn $ "Unpacking bundle to: " ++ show dir
     let rest = do
-            Tar.unpack dir $ Tar.read $ decompress lbs
-            let configFP = F.decodeString dir F.</> "config" F.</> "keter.yaml"
+            Tar.unpack (F.encodeString dir) $ Tar.read $ decompress lbs
+            let configFP = dir F.</> "config" F.</> "keter.yaml"
             Just config <- decodeFile $ F.encodeString configFP
-            return (dir, config)
-    rest `onException` removeDirectoryRecursive dir
+            return (F.encodeString dir, config)
+    rest `onException` Keter.Prelude.removeTree dir
 
 start :: TempFolder
       -> Nginx

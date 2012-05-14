@@ -1,8 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 module Keter.Prelude
-    ( F.FilePath
-    , T.Text
+    ( T.Text
     , String
     , P.Monad (..)
     , P.Maybe (..)
@@ -22,14 +21,31 @@ module Keter.Prelude
     , void
     , liftIO
     , forkKIO
+    , (++)
+    , P.minBound
+    , P.succ
+    , show
+    , Control.Monad.when
+      -- * Filepath
+    , (F.</>)
+    , F.fromText
+    , F.FilePath
+    , F.isDirectory
+    , F.removeTree
+    , F.createTree
       -- * MVar
     , M.MVar
     , newMVar
     , modifyMVar
     , swapMVar
+      -- * IORef
+    , I.IORef
+    , newIORef
+    , atomicModifyIORef
     ) where
 
 import qualified Filesystem.Path.CurrentOS as F
+import qualified Filesystem as F
 import qualified Data.Text as T
 import qualified Prelude as P
 import qualified Control.Arrow as A
@@ -40,6 +56,8 @@ import qualified Control.Monad
 import qualified Control.Applicative
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
+import qualified Data.IORef as I
+import Data.Monoid (Monoid, mappend)
 
 type String = T.Text
 
@@ -110,3 +128,15 @@ forkKIO :: KIO () -> KIO ()
 forkKIO f = do
     x <- KIO P.return
     void $ liftIO $ forkIO $ unKIO f x
+
+newIORef :: a -> KIO (I.IORef a)
+newIORef = liftIO_ . I.newIORef
+
+atomicModifyIORef :: I.IORef a -> (a -> (a, b)) -> KIO b
+atomicModifyIORef x = liftIO_ . I.atomicModifyIORef x
+
+(++) :: Monoid m => m -> m -> m
+(++) = mappend
+
+show :: P.Show a => a -> T.Text
+show = T.pack . P.show

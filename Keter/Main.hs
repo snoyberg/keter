@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 module Keter.Main
     ( keter
     ) where
@@ -6,6 +7,7 @@ import qualified Keter.Nginx as Nginx
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
 import qualified Keter.Postgres as Postgres
+import qualified Keter.Prelude
 
 import Data.Default (def)
 import System.FilePath ((</>), takeBaseName)
@@ -18,12 +20,14 @@ import qualified System.INotify as I
 import Control.Monad (forever, when)
 import Data.List (isSuffixOf)
 import qualified Filesystem.Path.CurrentOS as F
+import Control.Exception (throwIO)
 
 keter :: FilePath -- ^ root directory, with incoming, temp, and etc folders
       -> IO ()
 keter dir = do
     nginx <- Nginx.start def
-    tf <- TempFolder.setup $ dir </> "temp"
+    etf <- Keter.Prelude.runKIO print $ TempFolder.setup $ F.decodeString dir F.</> "temp"
+    tf <- either throwIO return etf
     postgres <- Postgres.load def $ dir </> "etc" </> "postgres.yaml"
 
     mappMap <- M.newMVar Map.empty

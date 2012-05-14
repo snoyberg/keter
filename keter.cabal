@@ -30,6 +30,7 @@ Library
                      , unix-compat               >= 0.3           && < 0.4
                      , hinotify                  >= 0.3           && < 0.4
                      , system-filepath           >= 0.4           && < 0.5
+                     , system-fileio             >= 0.3           && < 0.4
   Exposed-Modules:     Keter.Nginx
                        Keter.Process
                        Keter.Postgres

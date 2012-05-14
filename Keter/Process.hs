@@ -1,9 +1,11 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 module Keter.Process
     ( run
     , terminate
     , Process
     ) where
 
+import Keter.Prelude
 import qualified System.Process as SP
 import Control.Concurrent (forkIO)
 import qualified Control.Concurrent.MVar as M
@@ -27,15 +29,15 @@ run exec dir args env = do
                         -- tried to restart within five second, wait an extra
                         -- five seconds
                         (_, _, _, ph) <- SP.createProcess cp
-                        putStrLn "Process created"
+                        log $ ProcessCreated exec
                         return (Running ph, SP.waitForProcess ph >> loop)
             next
     _ <- forkIO loop
     return $ Process mstatus
   where
-    cp = (SP.proc exec args)
-        { SP.cwd = Just dir
-        , SP.env = Just env
+    cp = (SP.proc (toString exec) $ map toString args)
+        { SP.cwd = Just $ toString dir
+        , SP.env = Just $ map (toString *** toString) env
         , SP.std_in = SP.Inherit -- FIXME
         , SP.std_out = SP.Inherit -- FIXME
         , SP.std_err = SP.Inherit -- FIXME

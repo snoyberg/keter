@@ -17,6 +17,7 @@ import Control.Concurrent (threadDelay)
 import qualified System.INotify as I
 import Control.Monad (forever, when)
 import Data.List (isSuffixOf)
+import qualified Filesystem.Path.CurrentOS as F
 
 keter :: FilePath -- ^ root directory, with incoming, temp, and etc folders
       -> IO ()
@@ -35,7 +36,13 @@ keter dir = do
                         App.reload app
                         return (appMap, return ())
                     Nothing -> do
-                        (app, rest) <- App.start tf nginx postgres appname bundle $ removeApp appname
+                        (app, rest) <- App.start
+                            tf
+                            nginx
+                            postgres
+                            appname
+                            (F.decodeString bundle)
+                            (removeApp appname)
                         let appMap' = Map.insert appname app appMap
                         return (appMap', rest)
             rest

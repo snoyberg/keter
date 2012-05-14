@@ -11,10 +11,10 @@ import Keter.TempFolder
 import Keter.Postgres
 import Keter.Process
 import Keter.Nginx hiding (start)
+import qualified Keter.Prelude
 import qualified Codec.Archive.Tar as Tar
-import qualified Data.ByteString.Lazy as L
 import Codec.Compression.GZip (decompress)
-import qualified System.FilePath as F
+import qualified Filesystem.Path.CurrentOS as F
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>))
 import System.PosixCompat.Files
@@ -27,18 +27,18 @@ import Control.Exception (try, SomeException, onException)
 import System.IO (hClose)
 import System.Directory (removeDirectoryRecursive)
 import Control.Monad (when)
-import Data.Text (unpack)
+import Data.Text (Text, pack)
 
 data Config = Config
-    { configExec :: FilePath
-    , configArgs :: [String]
+    { configExec :: F.FilePath
+    , configArgs :: [Text]
     , configHost :: String
     , configPostgres :: Bool
     }
 
 instance FromJSON Config where
     parseJSON (Object o) = Config
-        <$> o .: "exec"
+        <$> (F.fromText <$> o .: "exec")
         <*> o .:? "args" .!= []
         <*> o .: "host"
         <*> o .:? "postgres" .!= False
@@ -57,17 +57,17 @@ tryM f = do
         Right x -> return $ Just x
 
 unpackBundle :: TempFolder
-             -> FilePath
+             -> F.FilePath
              -> Appname
              -> IO (Maybe (FilePath, Config))
 unpackBundle tf bundle appname = tryM $ do
-    lbs <- L.readFile bundle
+    lbs <- Keter.Prelude.readFileLBS bundle
     dir <- getFolder tf appname
     putStrLn $ "Unpacking bundle to: " ++ dir
     let rest = do
             Tar.unpack dir $ Tar.read $ decompress lbs
-            let configFP = dir F.</> "config" F.</> "keter.yaml"
-            Just config <- decodeFile configFP
+            let configFP = F.decodeString dir F.</> "config" F.</> "keter.yaml"
+            Just config <- decodeFile $ F.encodeString configFP
             return (dir, config)
     rest `onException` removeDirectoryRecursive dir
 
@@ -75,7 +75,7 @@ start :: TempFolder
       -> Nginx
       -> Postgres
       -> Appname
-      -> FilePath -- ^ app bundle
+      -> F.FilePath -- ^ app bundle
       -> IO () -- ^ action to perform to remove this App from list of actives
       -> IO (App, IO ())
 start tf nginx postgres appname bundle removeFromList = do
@@ -85,7 +85,7 @@ start tf nginx postgres appname bundle removeFromList = do
     void f = f >> return ()
 
     runApp port dir config = do
-        setFileMode (dir F.</> "config" F.</> configExec config) ownerExecuteMode
+        setFileMode (F.encodeString $ F.decodeString dir F.</> "config" F.</> configExec config) ownerExecuteMode
         otherEnv <-
             if configPostgres config
                 then do
@@ -93,17 +93,17 @@ start tf nginx postgres appname bundle removeFromList = do
                     return
                         [ ("PGHOST", "localhost")
                         , ("PGPORT", "5432")
-                        , ("PGUSER", unpack $ dbiUser dbi)
-                        , ("PGPASS", unpack $ dbiPass dbi)
-                        , ("PGDATABASE", unpack $ dbiName dbi)
+                        , ("PGUSER", dbiUser dbi)
+                        , ("PGPASS", dbiPass dbi)
+                        , ("PGDATABASE", dbiName dbi)
                         ]
                 else return []
         run
             ("config" F.</> configExec config)
-            dir
+            (F.decodeString dir)
             (configArgs config)
-            $ ("PORT", show port)
-            : ("APPROOT", "http://" ++ configHost config)
+            $ ("PORT", pack $ show port)
+            : ("APPROOT", pack $ "http://" ++ configHost config)
             : otherEnv
 
     rest chan = void $ forkIO $ do
@@ -135,7 +135,7 @@ start tf nginx postgres appname bundle removeFromList = do
                 mres <- unpackBundle tf bundle appname
                 case mres of
                     Nothing -> do
-                        putStrLn $ "Invalid bundle: " ++ bundle
+                        Keter.Prelude.log $ Keter.Prelude.InvalidBundle bundle
                         loop chan dirOld processOld portOld configOld
                     Just (dir, config) -> do
                         port <- getPort nginx
@@ -152,7 +152,7 @@ start tf nginx postgres appname bundle removeFromList = do
                             else do
                                 releasePort nginx port
                                 Keter.Process.terminate process
-                                putStrLn $ "Processing didn't start correctly: " ++ bundle
+                                Keter.Prelude.log $ Keter.Prelude.ProcessDidNotStart bundle
                                 loop chan dirOld processOld portOld configOld
       where
         terminateOld = void $ forkIO $ do

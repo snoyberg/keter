@@ -25,7 +25,8 @@ import Control.Exception (throwIO)
 keter :: FilePath -- ^ root directory, with incoming, temp, and etc folders
       -> IO ()
 keter dir = do
-    nginx <- Nginx.start def
+    enginx <- Keter.Prelude.runKIO print $ Nginx.start def
+    nginx <- either throwIO return enginx
     etf <- Keter.Prelude.runKIO print $ TempFolder.setup $ F.decodeString dir F.</> "temp"
     tf <- either throwIO return etf
     epostgres <- Keter.Prelude.runKIO print $ Postgres.load def $ F.decodeString $ dir </> "etc" </> "postgres.yaml"

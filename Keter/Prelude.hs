@@ -34,6 +34,12 @@ module Keter.Prelude
     , KeterException (..)
     , E.toException
     , newStdGen
+    , Default (..)
+    , P.Int
+    , (P.==)
+    , P.fromIntegral
+    , P.reverse
+    , P.otherwise
       -- * Filepath
     , (F.</>)
     , (F.<.>)
@@ -81,6 +87,10 @@ import qualified Data.Text.Lazy.Builder as B
 import Data.Typeable (Typeable)
 import qualified Control.Concurrent.Chan as C
 import qualified System.Random as R
+import Data.Default (Default (..))
+import System.Exit (ExitCode)
+import qualified Blaze.ByteString.Builder as Blaze
+import qualified Blaze.ByteString.Builder.Char.Utf8
 
 type String = T.Text
 
@@ -114,6 +124,7 @@ data LogMessage
     | InvalidBundle F.FilePath
     | ProcessDidNotStart F.FilePath
     | ExceptionThrown E.SomeException
+    | RemovingPort P.Int
   deriving P.Show
 
 class ToString a where
@@ -181,8 +192,12 @@ instance FromText F.FilePath where
     fromText = F.fromText
 instance FromText B.Builder where
     fromText = B.fromText
+instance FromText Blaze.Builder where
+    fromText = Blaze.ByteString.Builder.Char.Utf8.fromText
 
 data KeterException = CannotParsePostgres F.FilePath
+                    | ExitCodeFailure F.FilePath ExitCode
+                    | NoPortsAvailable
     deriving (P.Show, Typeable)
 instance E.Exception KeterException
 

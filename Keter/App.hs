@@ -121,24 +121,29 @@ start tf nginx postgres appname bundle removeFromList = do
         case mres of
             Nothing -> removeFromList
             Just (dir, config) -> do
-                port <- getPort nginx
-                process <- runApp port dir config
-                b <- testApp port
-                if b
-                    then do
-                        addEntry nginx (configHost config) $ AppEntry port
-                        loop chan dir process port config
-                    else do
+                eport <- runKIO $ getPort nginx
+                case eport of
+                    Left e -> do
+                        runKIO $ Keter.Prelude.log $ Keter.Prelude.ExceptionThrown e
                         removeFromList
-                        releasePort nginx port
-                        runKIO $ Keter.Process.terminate process
+                    Right port -> do
+                        process <- runApp port dir config
+                        b <- testApp port
+                        if b
+                            then do
+                                runKIO $ addEntry nginx (pack $ configHost config) $ AppEntry port
+                                loop chan dir process port config
+                            else do
+                                removeFromList
+                                runKIO $ releasePort nginx port
+                                runKIO $ Keter.Process.terminate process
 
     loop chan dirOld processOld portOld configOld = do
         command <- C.readChan chan
         case command of
             Terminate -> do
                 removeFromList
-                removeEntry nginx $ configHost configOld
+                runKIO $ removeEntry nginx $ pack $ configHost configOld
                 putStrLn $ "Received terminate signal for app: " ++ show appname
                 terminateOld
             Reload -> do
@@ -148,22 +153,26 @@ start tf nginx postgres appname bundle removeFromList = do
                         runKIO $ Keter.Prelude.log $ Keter.Prelude.InvalidBundle bundle
                         loop chan dirOld processOld portOld configOld
                     Just (dir, config) -> do
-                        port <- getPort nginx
-                        process <- runApp port dir config
-                        b <- testApp port
-                        if b
-                            then do
-                                addEntry nginx (configHost config) $ AppEntry port
-                                when (configHost config /= configHost configOld) $
-                                    removeEntry nginx $ configHost configOld
-                                putStrLn $ "Finished reloading: " ++ show appname
-                                terminateOld
-                                loop chan dir process port config
-                            else do
-                                releasePort nginx port
-                                runKIO $ Keter.Process.terminate process
-                                runKIO $ Keter.Prelude.log $ Keter.Prelude.ProcessDidNotStart bundle
-                                loop chan dirOld processOld portOld configOld
+                        eport <- runKIO $ getPort nginx
+                        case eport of
+                            Left e -> runKIO $ Keter.Prelude.log $ Keter.Prelude.ExceptionThrown e
+                            Right port -> do
+                                process <- runApp port dir config
+                                b <- testApp port
+                                if b
+                                    then do
+                                        runKIO $ addEntry nginx (pack $ configHost config) $ AppEntry port
+                                        when (configHost config /= configHost configOld) $
+                                            runKIO $ removeEntry nginx $ pack $ configHost configOld
+                                        putStrLn $ "Finished reloading: " ++ show appname
+                                        terminateOld
+                                        loop chan dir process port config
+                                    else do
+                                        runKIO $ do
+                                            releasePort nginx port
+                                            Keter.Process.terminate process
+                                            Keter.Prelude.log $ Keter.Prelude.ProcessDidNotStart bundle
+                                        loop chan dirOld processOld portOld configOld
       where
         terminateOld = void $ forkIO $ do
             threadDelay $ 20 * 1000 * 1000

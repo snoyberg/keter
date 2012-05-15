@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 module Keter.Nginx
     ( -- * Types
       Port
@@ -22,28 +23,20 @@ module Keter.Nginx
     , start
     ) where
 
-import Data.Default (Default (def))
+import Keter.Prelude
 import System.Cmd (rawSystem)
-import qualified Control.Concurrent.MVar as M
-import qualified Control.Concurrent.Chan as C
-import Control.Concurrent (forkIO)
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Map as Map
-import Control.Monad (forever, unless)
+import Control.Monad (forever)
 import qualified Data.ByteString.Lazy as L
 import Blaze.ByteString.Builder (copyByteString, toLazyByteString)
 import Blaze.ByteString.Builder.Char.Utf8 (fromString, fromShow)
-import Data.Monoid (Monoid, mappend, mconcat)
+import Data.Monoid (Monoid, mconcat)
 import Data.ByteString.Char8 ()
-import System.Directory (renameFile)
 import qualified Network
-import Control.Exception (SomeException, try)
 import qualified Data.ByteString as S
 import System.Exit (ExitCode (ExitSuccess))
-
-(<>) :: Monoid m => m -> m -> m
-(<>) = mappend
 
 -- | A port for an individual app to listen on.
 type Port = Int
@@ -51,7 +44,7 @@ type Port = Int
 -- | A virtual host we want to serve content from.
 type Host = String
 
-data Command = GetPort (Port -> IO ())
+data Command = GetPort (Either SomeException Port -> KIO ())
              | ReleasePort Port
              | AddEntry Host Entry
              | RemoveEntry Host
@@ -63,16 +56,16 @@ data Entry = AppEntry Port
 
 -- | An abstract type which can accept commands and sends them to a background
 -- nginx thread.
-newtype Nginx = Nginx (Command -> IO ())
+newtype Nginx = Nginx (Command -> KIO ())
 
 -- | Controls execution of the nginx thread. Follows the settings type pattern.
 -- See: <http://www.yesodweb.com/book/settings-types>.
 data Settings = Settings
     { configFile :: FilePath
       -- ^ Location of config file. Default: \/etc\/nginx\/sites-enabled\/keter
-    , reloadAction :: IO ()
+    , reloadAction :: KIO (Either SomeException ())
       -- ^ How to tell Nginx to reload config file. Default: \/etc\/init.d\/nginx reload
-    , startAction :: IO ()
+    , startAction :: KIO (Either SomeException ())
       -- ^ How to tell Nginx to start running. Default: \/etc\/init.d\/nginx start
     , portRange :: [Port]
       -- ^ Which ports to assign to apps. Default: 4000-4999
@@ -86,69 +79,98 @@ instance Default Settings where
         , portRange = [4000..4999]
         }
 
-rawSystem' :: FilePath -> [String] -> IO ()
+rawSystem' :: FilePath -> [String] -> KIO (Either SomeException ())
 rawSystem' fp args = do
-    ec <- rawSystem fp args
-    unless (ec == ExitSuccess) $ error $ "Received exit failure when running: " ++ show (fp:args)
+    eec <- liftIO $ rawSystem (toString fp) (map toString args)
+    case eec of
+        Left e -> return $ Left e
+        Right ec
+            | ec == ExitSuccess -> return $ Right ()
+            | otherwise -> return $ Left $ toException $ ExitCodeFailure fp ec
 
 -- | Start running a separate thread which will accept commands and modify
 -- Nginx's behavior accordingly.
-start :: Settings -> IO Nginx
+start :: Settings -> KIO (Either SomeException Nginx)
 start Settings{..} = do
     -- Start off by ensuring we can read and write the config file and reload
-    config0 <- S.readFile configFile
-    S.writeFile configFile config0
-    reloadAction
+    eres <- liftIO $ do
+        config0 <- S.readFile $ toString configFile
+        let tmp = configFile <.> "tmp"
+        S.writeFile (toString tmp) config0
+        rename tmp configFile
+    case eres of
+        Left e -> return $ Left e
+        Right () -> do
+            eres2 <- reloadAction
+            case eres2 of
+                Left e -> return $ Left e
+                Right () -> go
 
-    chan <- C.newChan
-    _ <- forkIO $ flip S.evalStateT (NState portRange [] Map.empty) $ forever $ do
-        command <- lift $ C.readChan chan
-        case command of
-            GetPort f -> do
-                ns0 <- S.get
-                let loop ns =
-                        case nsAvail ns of
-                            p:ps -> do
-                                res <- try $ Network.listenOn $ Network.PortNumber $ fromIntegral p
-                                case res of
-                                    Left (_ :: SomeException) -> do
-                                        putStrLn $ "Removing port from use: " ++ show p
-                                        loop ns { nsAvail = ps }
-                                    Right socket -> do
-                                        Network.sClose socket
-                                        return (p, ns { nsAvail = ps })
-                            [] ->
-                                case reverse $ nsRecycled ns of
-                                    [] -> return (error "No ports available", ns)
-                                    ps -> loop ns { nsAvail = ps, nsRecycled = [] }
-                (port, ns) <- lift $ loop ns0
-                S.put ns
-                lift $ f port
-            ReleasePort p ->
-                S.modify $ \ns -> ns { nsRecycled = p : nsRecycled ns }
-            AddEntry h e -> change $ Map.insert h e
-            RemoveEntry h -> change $ Map.delete h
-    return $ Nginx $ C.writeChan chan
-  where
+ where
+    go :: KIO (Either SomeException Nginx)
+    go = do
+        chan <- newChan
+        forkKIO $ flip S.evalStateT (NState portRange [] Map.empty) $ forever $ do
+            command <- lift $ readChan chan
+            case command of
+                GetPort f -> do
+                    ns0 <- S.get
+                    let loop :: NState -> KIO (Either SomeException Port, NState)
+                        loop ns =
+                            case nsAvail ns of
+                                p:ps -> do
+                                    res <- liftIO $ Network.listenOn $ Network.PortNumber $ fromIntegral p
+                                    case res of
+                                        Left (_ :: SomeException) -> do
+                                            log $ RemovingPort p
+                                            loop ns { nsAvail = ps }
+                                        Right socket -> do
+                                            res' <- liftIO $ Network.sClose socket
+                                            case res' of
+                                                Left e -> do
+                                                    log $ ExceptionThrown e
+                                                    log $ RemovingPort p
+                                                    loop ns { nsAvail = ps }
+                                                Right () -> return (Right p, ns { nsAvail = ps })
+                                [] ->
+                                    case reverse $ nsRecycled ns of
+                                        [] -> return (Left $ toException NoPortsAvailable, ns)
+                                        ps -> loop ns { nsAvail = ps, nsRecycled = [] }
+                    (eport, ns) <- lift $ loop ns0
+                    S.put ns
+                    lift $ f eport
+                ReleasePort p ->
+                    S.modify $ \ns -> ns { nsRecycled = p : nsRecycled ns }
+                AddEntry h e -> change $ Map.insert h e
+                RemoveEntry h -> change $ Map.delete h
+        return $ Right $ Nginx $ writeChan chan
+
     change f = do
         ns <- S.get
         let entries = f $ nsEntries ns
         S.put $ ns { nsEntries = entries }
-        let tmp = configFile ++ ".tmp"
-        lift $ L.writeFile tmp $ mkConfig entries
-        lift $ renameFile tmp configFile
-        lift reloadAction
+        let tmp = configFile <.> "tmp"
+        lift $ do
+            res1 <- liftIO $ do
+                L.writeFile (toString tmp) $ mkConfig entries
+                rename tmp configFile
+            res2 <- case res1 of
+                Left e -> return $ Left e
+                Right () -> reloadAction
+            case res2 of
+                Left e -> log $ ExceptionThrown e
+                Right () -> return ()
     mkConfig = toLazyByteString . mconcat . map mkConfig' . Map.toList
     mkConfig' (host, entry) =
-        copyByteString "server {\n    listen 80;\n    server_name " <>
-        fromString host <> copyByteString ";\n" <>
-        mkConfigEntry entry <>
+        copyByteString "server {\n    listen 80;\n    server_name " ++
+        fromText host ++ copyByteString ";\n" ++
+        mkConfigEntry entry ++
         copyByteString "}\n"
     mkConfigEntry (AppEntry port) =
-        copyByteString "    location / {\n        proxy_pass http://127.0.0.1:" <>
-        fromShow port <> copyByteString ";\n    }\n"
+        copyByteString "    location / {\n        proxy_pass http://127.0.0.1:" ++
+        fromShow port ++ copyByteString ";\n    }\n"
     mkConfigEntry (StaticEntry fp) =
-        copyByteString "    root " <> fromString fp <> copyByteString ";\n    expires max;\n"
+        copyByteString "    root " ++ fromString (toString fp) ++ copyByteString ";\n    expires max;\n"
 
 data NState = NState
     { nsAvail :: [Port]
@@ -157,26 +179,26 @@ data NState = NState
     }
 
 -- | Gets an unassigned port number.
-getPort :: Nginx -> IO Port
+getPort :: Nginx -> KIO (Either SomeException Port)
 getPort (Nginx f) = do
-    x <- M.newEmptyMVar
-    f $ GetPort $ \p -> M.putMVar x p
-    M.takeMVar x
+    x <- newEmptyMVar
+    f $ GetPort $ \p -> putMVar x p
+    takeMVar x
 
 -- | Inform the nginx thread that the given port number is no longer being
 -- used, and may be reused by a new process. Note that recycling puts the new
 -- ports at the end of the queue (FIFO), so that if an application holds onto
 -- the port longer than expected, there should be no issues.
-releasePort :: Nginx -> Port -> IO ()
+releasePort :: Nginx -> Port -> KIO ()
 releasePort (Nginx f) p = f $ ReleasePort p
 
 -- | Add a new entry to the configuration for the given hostname and reload
 -- nginx. Will overwrite any existing configuration for the given host. The
 -- second point is important: it is how we achieve zero downtime transitions
 -- between an old and new version of an app.
-addEntry :: Nginx -> Host -> Entry -> IO ()
+addEntry :: Nginx -> Host -> Entry -> KIO ()
 addEntry (Nginx f) h e = f $ AddEntry h e
 
 -- | Remove an entry from the configuration and reload nginx.
-removeEntry :: Nginx -> Host -> IO ()
+removeEntry :: Nginx -> Host -> KIO ()
 removeEntry (Nginx f) h = f $ RemoveEntry h

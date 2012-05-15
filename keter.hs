@@ -1,3 +1,5 @@
+{-# LANGUAGE NoImplicitPrelude #-}
+import Prelude (error, (++), ($), IO)
 import System.Environment (getArgs, getProgName)
 import Keter.Main (keter)
 

@@ -25,24 +25,25 @@ import Control.Exception (throwIO)
 keter :: FilePath -- ^ root directory, with incoming, temp, and etc folders
       -> IO ()
 keter dir = do
-    enginx <- Keter.Prelude.runKIO print $ Nginx.start def
+    let runKIO = Keter.Prelude.runKIO print
+    enginx <- runKIO $ Nginx.start def
     nginx <- either throwIO return enginx
-    etf <- Keter.Prelude.runKIO print $ TempFolder.setup $ F.decodeString dir F.</> "temp"
+    etf <- runKIO $ TempFolder.setup $ F.decodeString dir F.</> "temp"
     tf <- either throwIO return etf
-    epostgres <- Keter.Prelude.runKIO print $ Postgres.load def $ F.decodeString $ dir </> "etc" </> "postgres.yaml"
+    epostgres <- runKIO $ Postgres.load def $ F.decodeString $ dir </> "etc" </> "postgres.yaml"
     postgres <- either throwIO return epostgres
 
     mappMap <- M.newMVar Map.empty
-    let removeApp appname = M.modifyMVar_ mappMap $ return . Map.delete appname
+    let removeApp appname = Keter.Prelude.modifyMVar_ mappMap $ return . Map.delete appname
         addApp bundle = do
             let appname = getAppname bundle
             rest <- M.modifyMVar mappMap $ \appMap ->
                 case Map.lookup appname appMap of
                     Just app -> do
-                        App.reload app
+                        runKIO $ App.reload app
                         return (appMap, return ())
                     Nothing -> do
-                        (app, rest) <- App.start
+                        (app, rest) <- runKIO $ App.start
                             tf
                             nginx
                             postgres
@@ -51,12 +52,12 @@ keter dir = do
                             (removeApp appname)
                         let appMap' = Map.insert appname app appMap
                         return (appMap', rest)
-            rest
+            runKIO rest
         terminateApp appname = do
             appMap <- M.readMVar mappMap
             case Map.lookup appname appMap of
                 Nothing -> return ()
-                Just app -> App.terminate app
+                Just app -> runKIO $ App.terminate app
 
     let incoming = dir </> "incoming"
     let hidden ('.':_) = True

@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 module Keter.App
     ( App
     , start
@@ -7,27 +8,21 @@ module Keter.App
     , Keter.App.terminate
     ) where
 
+import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
 import Keter.Process
 import Keter.Nginx hiding (start)
-import qualified Keter.Prelude
 import qualified Codec.Archive.Tar as Tar
 import Codec.Compression.GZip (decompress)
 import qualified Filesystem.Path.CurrentOS as F
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>))
 import System.PosixCompat.Files
-import qualified Control.Concurrent.Chan as C
-import Control.Concurrent (forkIO, threadDelay)
-import System.Timeout (timeout)
 import qualified Network
 import Data.Maybe (fromMaybe)
-import Control.Exception (try, SomeException, onException, throwIO)
+import Control.Exception (onException)
 import System.IO (hClose)
-import System.Directory (removeDirectoryRecursive)
-import Control.Monad (when)
-import Data.Text (Text, pack)
 
 data Config = Config
     { configExec :: F.FilePath
@@ -45,57 +40,53 @@ instance FromJSON Config where
     parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
-newtype App = App (Command -> IO ())
-
-tryM :: IO a -> IO (Maybe a)
-tryM f = do
-    res <- try f
-    case res of
-        Left (e :: SomeException) -> do
-            putStrLn $ "Exception received: " ++ show e
-            return Nothing
-        Right x -> return $ Just x
+newtype App = App (Command -> KIO ())
 
 unpackBundle :: TempFolder
              -> F.FilePath
              -> Appname
-             -> IO (Maybe (FilePath, Config))
-unpackBundle tf bundle appname = tryM $ do
-    elbs <- runKIO $ Keter.Prelude.readFileLBS bundle
-    lbs <- either throwIO return elbs
-    edir <- runKIO $ getFolder tf appname
-    dir <- either throwIO return edir
-    putStrLn $ "Unpacking bundle to: " ++ show dir
-    let rest = do
-            Tar.unpack (F.encodeString dir) $ Tar.read $ decompress lbs
-            let configFP = dir F.</> "config" F.</> "keter.yaml"
-            Just config <- decodeFile $ F.encodeString configFP
-            return (F.encodeString dir, config)
-    rest `onException` Keter.Prelude.removeTree dir
+             -> KIO (Either SomeException (FilePath, Config))
+unpackBundle tf bundle appname = do
+    elbs <- readFileLBS bundle
+    case elbs of
+        Left e -> return $ Left e
+        Right lbs -> do
+            edir <- getFolder tf appname
+            case edir of
+                Left e -> return $ Left e
+                Right dir -> do
+                    log $ UnpackingBundle bundle dir
+                    let rest = do
+                            Tar.unpack (F.encodeString dir) $ Tar.read $ decompress lbs
+                            let configFP = dir F.</> "config" F.</> "keter.yaml"
+                            Just config <- decodeFile $ F.encodeString configFP
+                            return (dir, config)
+                    liftIO $ rest `onException` removeTree dir
 
 start :: TempFolder
       -> Nginx
       -> Postgres
       -> Appname
       -> F.FilePath -- ^ app bundle
-      -> IO () -- ^ action to perform to remove this App from list of actives
-      -> IO (App, IO ())
+      -> KIO () -- ^ action to perform to remove this App from list of actives
+      -> KIO (App, KIO ())
 start tf nginx postgres appname bundle removeFromList = do
-    chan <- C.newChan
-    return (App $ C.writeChan chan, rest chan)
+    chan <- newChan
+    return (App $ writeChan chan, rest chan)
   where
-    void f = f >> return ()
-
     runApp port dir config = do
-        setFileMode (F.encodeString $ F.decodeString dir F.</> "config" F.</> configExec config) ownerExecuteMode
+        res1 <- liftIO $ setFileMode (toString $ dir </> "config" </> configExec config) ownerExecuteMode
+        case res1 of
+            Left e -> log $ ExceptionThrown e
+            Right () -> return ()
         otherEnv <- do
             mdbi <-
                 if configPostgres config
                     then do
-                        edbi <- Keter.Prelude.runKIO print $ getInfo postgres appname
+                        edbi <- getInfo postgres appname
                         case edbi of
                             Left e -> do
-                                Keter.Prelude.runKIO print $ Keter.Prelude.log $ Keter.Prelude.ExceptionThrown e
+                                log $ ExceptionThrown e
                                 return Nothing
                             Right dbi -> return $ Just dbi
                     else return Nothing
@@ -108,103 +99,103 @@ start tf nginx postgres appname bundle removeFromList = do
                     , ("PGDATABASE", dbiName dbi)
                     ]
                 Nothing -> []
-        runKIO $ run
-            ("config" F.</> configExec config)
-            (F.decodeString dir)
+        run
+            ("config" </> configExec config)
+            dir
             (configArgs config)
-            $ ("PORT", pack $ show port)
-            : ("APPROOT", pack $ "http://" ++ configHost config)
+            $ ("PORT", show port)
+            : ("APPROOT", "http://" ++ configHost config)
             : otherEnv
 
-    rest chan = void $ forkIO $ do
+    rest chan = forkKIO $ do
         mres <- unpackBundle tf bundle appname
         case mres of
-            Nothing -> removeFromList
-            Just (dir, config) -> do
-                eport <- runKIO $ getPort nginx
+            Left e -> do
+                log $ ExceptionThrown e
+                removeFromList
+            Right (dir, config) -> do
+                eport <- getPort nginx
                 case eport of
                     Left e -> do
-                        runKIO $ Keter.Prelude.log $ Keter.Prelude.ExceptionThrown e
+                        log $ ExceptionThrown e
                         removeFromList
                     Right port -> do
                         process <- runApp port dir config
                         b <- testApp port
                         if b
                             then do
-                                runKIO $ addEntry nginx (pack $ configHost config) $ AppEntry port
+                                addEntry nginx (configHost config) $ AppEntry port
                                 loop chan dir process port config
                             else do
                                 removeFromList
-                                runKIO $ releasePort nginx port
-                                runKIO $ Keter.Process.terminate process
+                                releasePort nginx port
+                                Keter.Process.terminate process
 
     loop chan dirOld processOld portOld configOld = do
-        command <- C.readChan chan
+        command <- readChan chan
         case command of
             Terminate -> do
                 removeFromList
-                runKIO $ removeEntry nginx $ pack $ configHost configOld
-                putStrLn $ "Received terminate signal for app: " ++ show appname
+                removeEntry nginx $ configHost configOld
+                log $ TerminatingApp appname
                 terminateOld
             Reload -> do
                 mres <- unpackBundle tf bundle appname
                 case mres of
-                    Nothing -> do
-                        runKIO $ Keter.Prelude.log $ Keter.Prelude.InvalidBundle bundle
+                    Left e -> do
+                        log $ InvalidBundle bundle e
                         loop chan dirOld processOld portOld configOld
-                    Just (dir, config) -> do
-                        eport <- runKIO $ getPort nginx
+                    Right (dir, config) -> do
+                        eport <- getPort nginx
                         case eport of
-                            Left e -> runKIO $ Keter.Prelude.log $ Keter.Prelude.ExceptionThrown e
+                            Left e -> log $ ExceptionThrown e
                             Right port -> do
                                 process <- runApp port dir config
                                 b <- testApp port
                                 if b
                                     then do
-                                        runKIO $ addEntry nginx (pack $ configHost config) $ AppEntry port
+                                        addEntry nginx (configHost config) $ AppEntry port
                                         when (configHost config /= configHost configOld) $
-                                            runKIO $ removeEntry nginx $ pack $ configHost configOld
-                                        putStrLn $ "Finished reloading: " ++ show appname
+                                            removeEntry nginx $ configHost configOld
+                                        log $ FinishedReloading appname
                                         terminateOld
                                         loop chan dir process port config
                                     else do
-                                        runKIO $ do
-                                            releasePort nginx port
-                                            Keter.Process.terminate process
-                                            Keter.Prelude.log $ Keter.Prelude.ProcessDidNotStart bundle
+                                        releasePort nginx port
+                                        Keter.Process.terminate process
+                                        log $ ProcessDidNotStart bundle
                                         loop chan dirOld processOld portOld configOld
       where
-        terminateOld = void $ forkIO $ do
+        terminateOld = forkKIO $ do
             threadDelay $ 20 * 1000 * 1000
-            putStrLn $ "Terminating old process for: " ++ show appname
-            runKIO $ Keter.Process.terminate processOld
+            log $ TerminatingOldProcess appname
+            Keter.Process.terminate processOld
             threadDelay $ 60 * 1000 * 1000
-            putStrLn $ "Removing folder: " ++ dirOld
-            removeDirectoryRecursive dirOld
+            log $ RemovingOldFolder dirOld
+            res <- liftIO $ removeTree dirOld
+            case res of
+                Left e -> log $ ExceptionThrown e
+                Right () -> return ()
 
-runKIO :: Keter.Prelude.KIO a -> IO a -- FIXME remove this
-runKIO = Keter.Prelude.runKIO print
-
-testApp :: Port -> IO Bool
+testApp :: Port -> KIO Bool
 testApp port = do
-    putStrLn $ "Testing app on port: " ++ show port
     res <- timeout (90 * 1000 * 1000) testApp'
     return $ fromMaybe False res
   where
     testApp' = do
         threadDelay $ 2 * 1000 * 1000
-        eres <- try $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
+        eres <- liftIO $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
         case eres of
-            Left (e :: SomeException) -> do
-                putStrLn $ "Connection failed: " ++ show e
-                testApp'
+            Left _ -> testApp'
             Right handle -> do
-                putStrLn $ "App is running on port: " ++ show port
-                hClose handle
+                res <- liftIO $ hClose handle
+                case res of
+                    Left e -> log $ ExceptionThrown e
+                    Right () -> return ()
                 return True
 
-reload :: App -> IO ()
+reload :: App -> KIO ()
 reload (App f) = f Reload
 
-terminate :: App -> IO ()
+terminate :: App -> KIO ()
 terminate (App f) = f Terminate

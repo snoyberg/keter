@@ -37,6 +37,8 @@ module Keter.Prelude
     , Default (..)
     , P.Int
     , (P.==)
+    , (P./=)
+    , (P.*)
     , P.fromIntegral
     , P.reverse
     , P.otherwise
@@ -50,11 +52,14 @@ module Keter.Prelude
     , F.createTree
     , F.directory
     , F.rename
+    , timeout
+    , threadDelay
       -- * MVar
     , M.MVar
     , newMVar
     , newEmptyMVar
     , modifyMVar
+    , modifyMVar_
     , swapMVar
     , takeMVar
     , putMVar
@@ -81,6 +86,7 @@ import qualified Control.Monad
 import qualified Control.Applicative
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
+import qualified Control.Concurrent
 import qualified Data.IORef as I
 import Data.Monoid (Monoid, mappend)
 import qualified Data.Text.Lazy.Builder as B
@@ -91,6 +97,7 @@ import Data.Default (Default (..))
 import System.Exit (ExitCode)
 import qualified Blaze.ByteString.Builder as Blaze
 import qualified Blaze.ByteString.Builder.Char.Utf8
+import qualified System.Timeout
 
 type String = T.Text
 
@@ -121,10 +128,15 @@ void f = f P.>> P.return ()
 
 data LogMessage
     = ProcessCreated F.FilePath
-    | InvalidBundle F.FilePath
+    | InvalidBundle F.FilePath E.SomeException
     | ProcessDidNotStart F.FilePath
     | ExceptionThrown E.SomeException
     | RemovingPort P.Int
+    | UnpackingBundle F.FilePath F.FilePath
+    | TerminatingApp T.Text
+    | FinishedReloading T.Text
+    | TerminatingOldProcess T.Text
+    | RemovingOldFolder F.FilePath
   deriving P.Show
 
 class ToString a where
@@ -157,6 +169,9 @@ newEmptyMVar = liftIO_ M.newEmptyMVar
 
 modifyMVar :: M.MVar a -> (a -> KIO (a, b)) -> KIO b
 modifyMVar m f = KIO $ \x -> M.modifyMVar m (\a -> unKIO (f a) x)
+
+modifyMVar_ :: M.MVar a -> (a -> KIO a) -> KIO ()
+modifyMVar_ m f = KIO $ \x -> M.modifyMVar_ m (\a -> unKIO (f a) x)
 
 swapMVar :: M.MVar a -> a -> KIO a
 swapMVar m = liftIO_ . M.swapMVar m
@@ -212,3 +227,9 @@ readChan = liftIO_ . C.readChan
 
 writeChan :: C.Chan a -> a -> KIO ()
 writeChan c = liftIO_ . C.writeChan c
+
+timeout :: P.Int -> KIO a -> KIO (P.Maybe a)
+timeout seconds (KIO f) = KIO $ \x -> System.Timeout.timeout seconds $ f x
+
+threadDelay :: P.Int -> KIO ()
+threadDelay = liftIO_ . Control.Concurrent.threadDelay

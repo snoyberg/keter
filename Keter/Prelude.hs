@@ -36,12 +36,20 @@ module Keter.Prelude
     , newStdGen
     , Default (..)
     , P.Int
+    , (P.&&)
     , (P.==)
     , (P./=)
     , (P.*)
     , P.fromIntegral
     , P.reverse
     , P.otherwise
+    , timeout
+    , threadDelay
+    , P.id
+    , P.filter
+    , P.mapM_
+    , P.fmap
+    , P.not
       -- * Filepath
     , (F.</>)
     , (F.<.>)
@@ -52,8 +60,10 @@ module Keter.Prelude
     , F.createTree
     , F.directory
     , F.rename
-    , timeout
-    , threadDelay
+    , F.basename
+    , F.toText
+    , F.hasExtension
+    , F.listDirectory
       -- * MVar
     , M.MVar
     , newMVar

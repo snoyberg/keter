@@ -16,6 +16,7 @@ import qualified Prelude as P
 import qualified Keter.LogFile as LogFile
 import Control.Concurrent (killThread)
 import qualified Data.ByteString as S
+import Control.Exception (fromException, AsyncException (ThreadKilled))
 
 data Handles = Handles
     { stdIn :: Maybe Handle
@@ -78,7 +79,9 @@ listener out lf =
         ebs <- liftIO $ S.hGetSome out 4096
         case ebs of
             Left e -> do
-                $logEx e
+                case fromException e of
+                    Just ThreadKilled -> return ()
+                    _ -> $logEx e
                 hmClose $ Just out
             Right bs
                 | S.null bs -> hmClose (Just out)

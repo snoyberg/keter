@@ -26,6 +26,7 @@ Library
                      , tar
                      , network
                      , time
+                     , template-haskell
                      , blaze-builder             >= 0.3           && < 0.4
                      , yaml                      >= 0.7           && < 0.8
                      , unix-compat               >= 0.3           && < 0.4
@@ -40,6 +41,7 @@ Library
                        Keter.Main
                        Keter.Prelude
                        Keter.LogFile
+                       Keter.Logger
   ghc-options:         -Wall -Werror
 
 Executable keter

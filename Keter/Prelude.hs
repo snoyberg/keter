@@ -1,6 +1,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Keter.Prelude
     ( T.Text
     , String
@@ -11,6 +12,7 @@ module Keter.Prelude
     , (P..)
     , LogMessage (..)
     , log
+    , logEx
     , KIO
     , toString
     , P.map
@@ -23,6 +25,7 @@ module Keter.Prelude
     , void
     , liftIO
     , forkKIO
+    , forkKIO'
     , (++)
     , P.minBound
     , P.succ
@@ -99,7 +102,7 @@ import qualified Control.Exception as E
 import qualified Control.Monad
 import qualified Control.Applicative
 import qualified Control.Concurrent.MVar as M
-import Control.Concurrent (forkIO)
+import Control.Concurrent (forkIO, ThreadId)
 import qualified Control.Concurrent
 import qualified Data.IORef as I
 import Data.Monoid (Monoid, mappend)
@@ -112,6 +115,7 @@ import System.Exit (ExitCode)
 import qualified Blaze.ByteString.Builder as Blaze
 import qualified Blaze.ByteString.Builder.Char.Utf8
 import qualified System.Timeout
+import qualified Language.Haskell.TH.Syntax as TH
 
 type String = T.Text
 
@@ -144,7 +148,7 @@ data LogMessage
     = ProcessCreated F.FilePath
     | InvalidBundle F.FilePath E.SomeException
     | ProcessDidNotStart F.FilePath
-    | ExceptionThrown E.SomeException
+    | ExceptionThrown T.Text E.SomeException
     | RemovingPort P.Int
     | UnpackingBundle F.FilePath F.FilePath
     | TerminatingApp T.Text
@@ -153,6 +157,18 @@ data LogMessage
     | RemovingOldFolder F.FilePath
     | ReceivedInotifyEvent T.Text
   deriving P.Show
+
+logEx :: TH.Q TH.Exp
+logEx = do
+    let showLoc TH.Loc { TH.loc_module = m, TH.loc_start = (l, c) } = P.concat
+            [ m
+            , ":"
+            , P.show l
+            , ":"
+            , P.show c
+            ]
+    loc <- P.fmap showLoc TH.qLocation
+    [|log P.. ExceptionThrown (T.pack $(TH.lift loc))|]
 
 class ToString a where
     toString :: a -> P.String
@@ -198,9 +214,12 @@ putMVar :: M.MVar a -> a -> KIO ()
 putMVar m = liftIO_ . M.putMVar m
 
 forkKIO :: KIO () -> KIO ()
-forkKIO f = do
+forkKIO = void . forkKIO'
+
+forkKIO' :: KIO () -> KIO (P.Either E.SomeException ThreadId)
+forkKIO' f = do
     x <- KIO P.return
-    void $ liftIO $ forkIO $ unKIO f x
+    liftIO $ forkIO $ unKIO f x
 
 newIORef :: a -> KIO (I.IORef a)
 newIORef = liftIO_ . I.newIORef

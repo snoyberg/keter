@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Keter.Main
     ( keter
     ) where
@@ -10,6 +11,7 @@ import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
 import qualified Keter.Postgres as Postgres
 import qualified Keter.LogFile as LogFile
+import qualified Keter.Logger as Logger
 
 import qualified Control.Concurrent.MVar as M
 import qualified Data.Map as Map
@@ -21,6 +23,7 @@ import qualified Prelude as P
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (getCurrentTime)
 import qualified Data.Text as T
+import Data.Maybe (fromMaybe)
 
 keter :: P.FilePath -- ^ root directory, with incoming, temp, and etc folders
       -> P.IO ()
@@ -33,7 +36,7 @@ keter dir' = do
     let runKIO' = runKIO $ \ml -> do
             now <- getCurrentTime
             let bs = encodeUtf8 $ T.concat
-                    [ show now
+                    [ T.take 22 $ show now
                     , ": "
                     , show ml
                     , "\n"
@@ -51,10 +54,28 @@ keter dir' = do
                         App.reload app
                         return (appMap, return ())
                     Nothing -> do
+                        mlogger <- do
+                            let dirout = dir </> "log" </> fromText ("app-" ++ appname)
+                                direrr = dirout </> "err"
+                            elfout <- LogFile.start dirout
+                            case elfout of
+                                Left e -> do
+                                    $logEx e
+                                    return Nothing
+                                Right lfout -> do
+                                    elferr <- LogFile.start direrr
+                                    case elferr of
+                                        Left e -> do
+                                            $logEx e
+                                            LogFile.close lfout
+                                            return Nothing
+                                        Right lferr -> fmap Just $ Logger.start lfout lferr
+                        let logger = fromMaybe Logger.dummy mlogger
                         (app, rest) <- App.start
                             tf
                             nginx
                             postgres
+                            logger
                             appname
                             bundle
                             (removeApp appname)

@@ -1,4 +1,5 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Keter.Process
     ( run
     , terminate
@@ -6,6 +7,7 @@ module Keter.Process
     ) where
 
 import Keter.Prelude
+import Keter.Logger
 import qualified System.Process as SP
 
 data Status = NeedsRestart | NoRestart | Running SP.ProcessHandle
@@ -15,8 +17,9 @@ run :: FilePath -- ^ executable
     -> FilePath -- ^ working directory
     -> [String] -- ^ command line parameter
     -> [(String, String)] -- ^ environment
+    -> Logger
     -> KIO Process
-run exec dir args env = do
+run exec dir args env logger = do
     mstatus <- newMVar NeedsRestart
     let loop = do
             next <- modifyMVar mstatus $ \status ->
@@ -29,9 +32,10 @@ run exec dir args env = do
                         res <- liftIO $ SP.createProcess cp
                         case res of
                             Left e -> do
-                                log $ ExceptionThrown e
+                                $logEx e
                                 return (NeedsRestart, return ())
-                            Right (_, _, _, ph) -> do
+                            Right (hin, hout, herr, ph) -> do
+                                attach logger $ Handles hin hout herr
                                 log $ ProcessCreated exec
                                 return (Running ph, liftIO (SP.waitForProcess ph) >> loop)
             next
@@ -41,9 +45,9 @@ run exec dir args env = do
     cp = (SP.proc (toString exec) $ map toString args)
         { SP.cwd = Just $ toString dir
         , SP.env = Just $ map (toString *** toString) env
-        , SP.std_in = SP.Inherit -- FIXME
-        , SP.std_out = SP.Inherit -- FIXME
-        , SP.std_err = SP.Inherit -- FIXME
+        , SP.std_in = SP.CreatePipe
+        , SP.std_out = SP.CreatePipe
+        , SP.std_err = SP.CreatePipe
         , SP.close_fds = True
         }
 

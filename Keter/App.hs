@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Keter.App
     ( App
     , start
@@ -12,6 +13,7 @@ import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
 import Keter.Process
+import Keter.Logger (Logger, detach)
 import Keter.Nginx hiding (start)
 import qualified Codec.Archive.Tar as Tar
 import Codec.Compression.GZip (decompress)
@@ -66,18 +68,19 @@ unpackBundle tf bundle appname = do
 start :: TempFolder
       -> Nginx
       -> Postgres
+      -> Logger
       -> Appname
       -> F.FilePath -- ^ app bundle
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
-start tf nginx postgres appname bundle removeFromList = do
+start tf nginx postgres logger appname bundle removeFromList = do
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
     runApp port dir config = do
         res1 <- liftIO $ setFileMode (toString $ dir </> "config" </> configExec config) ownerExecuteMode
         case res1 of
-            Left e -> log $ ExceptionThrown e
+            Left e -> $logEx e
             Right () -> return ()
         otherEnv <- do
             mdbi <-
@@ -86,7 +89,7 @@ start tf nginx postgres appname bundle removeFromList = do
                         edbi <- getInfo postgres appname
                         case edbi of
                             Left e -> do
-                                log $ ExceptionThrown e
+                                $logEx e
                                 return Nothing
                             Right dbi -> return $ Just dbi
                     else return Nothing
@@ -99,25 +102,27 @@ start tf nginx postgres appname bundle removeFromList = do
                     , ("PGDATABASE", dbiName dbi)
                     ]
                 Nothing -> []
+        let env = ("PORT", show port)
+                : ("APPROOT", "http://" ++ configHost config)
+                : otherEnv
         run
             ("config" </> configExec config)
             dir
             (configArgs config)
-            $ ("PORT", show port)
-            : ("APPROOT", "http://" ++ configHost config)
-            : otherEnv
+            env
+            logger
 
     rest chan = forkKIO $ do
         mres <- unpackBundle tf bundle appname
         case mres of
             Left e -> do
-                log $ ExceptionThrown e
+                $logEx e
                 removeFromList
             Right (dir, config) -> do
                 eport <- getPort nginx
                 case eport of
                     Left e -> do
-                        log $ ExceptionThrown e
+                        $logEx e
                         removeFromList
                     Right port -> do
                         process <- runApp port dir config
@@ -139,6 +144,7 @@ start tf nginx postgres appname bundle removeFromList = do
                 removeEntry nginx $ configHost configOld
                 log $ TerminatingApp appname
                 terminateOld
+                detach logger
             Reload -> do
                 mres <- unpackBundle tf bundle appname
                 case mres of
@@ -148,7 +154,7 @@ start tf nginx postgres appname bundle removeFromList = do
                     Right (dir, config) -> do
                         eport <- getPort nginx
                         case eport of
-                            Left e -> log $ ExceptionThrown e
+                            Left e -> $logEx e
                             Right port -> do
                                 process <- runApp port dir config
                                 b <- testApp port
@@ -174,7 +180,7 @@ start tf nginx postgres appname bundle removeFromList = do
             log $ RemovingOldFolder dirOld
             res <- liftIO $ removeTree dirOld
             case res of
-                Left e -> log $ ExceptionThrown e
+                Left e -> $logEx e
                 Right () -> return ()
 
 testApp :: Port -> KIO Bool
@@ -190,7 +196,7 @@ testApp port = do
             Right handle -> do
                 res <- liftIO $ hClose handle
                 case res of
-                    Left e -> log $ ExceptionThrown e
+                    Left e -> $logEx e
                     Right () -> return ()
                 return True
 

@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Keter.LogFile
     ( LogFile
     , start
@@ -53,19 +54,19 @@ start dir = do
             AddChunk bs -> do
                 let total' = total + S.length bs
                 res <- liftIO $ S.hPut handle bs >> SIO.hFlush handle
-                either (log . ExceptionThrown) return res
+                either $logEx return res
                 if total' > maxTotal
                     then do
                         res2 <- liftIO $ moveCurrent $ Just handle
                         case res2 of
                             Left e -> do
-                                log $ ExceptionThrown e
+                                $logEx e
                                 deadLoop chan
                             Right handle' -> loop chan handle' 0
                     else loop chan handle total'
             Close ->
                 liftIO (SIO.hClose handle) >>=
-                    either (log . ExceptionThrown) return
+                    either $logEx return
     deadLoop chan = do
         c <- readChan chan
         case c of

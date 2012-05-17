@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Keter.Nginx
     ( -- * Types
       Port
@@ -128,7 +129,7 @@ start Settings{..} = do
                                             res' <- liftIO $ Network.sClose socket
                                             case res' of
                                                 Left e -> do
-                                                    log $ ExceptionThrown e
+                                                    $logEx e
                                                     log $ RemovingPort p
                                                     loop ns { nsAvail = ps }
                                                 Right () -> return (Right p, ns { nsAvail = ps })
@@ -158,7 +159,7 @@ start Settings{..} = do
                 Left e -> return $ Left e
                 Right () -> reloadAction
             case res2 of
-                Left e -> log $ ExceptionThrown e
+                Left e -> $logEx e
                 Right () -> return ()
     mkConfig = toLazyByteString . mconcat . map mkConfig' . Map.toList
     mkConfig' (host, entry) =

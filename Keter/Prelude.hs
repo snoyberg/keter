@@ -50,6 +50,9 @@ module Keter.Prelude
     , P.mapM_
     , P.fmap
     , P.not
+    , P.maybe
+    , (P.>)
+    , (P.+)
       -- * Filepath
     , (F.</>)
     , (F.<.>)
@@ -64,6 +67,7 @@ module Keter.Prelude
     , F.toText
     , F.hasExtension
     , F.listDirectory
+    , F.decodeString
       -- * MVar
     , M.MVar
     , newMVar
@@ -147,6 +151,7 @@ data LogMessage
     | FinishedReloading T.Text
     | TerminatingOldProcess T.Text
     | RemovingOldFolder F.FilePath
+    | ReceivedInotifyEvent T.Text
   deriving P.Show
 
 class ToString a where

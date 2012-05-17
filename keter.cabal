@@ -25,6 +25,7 @@ Library
                      , zlib
                      , tar
                      , network
+                     , time
                      , blaze-builder             >= 0.3           && < 0.4
                      , yaml                      >= 0.7           && < 0.8
                      , unix-compat               >= 0.3           && < 0.4
@@ -38,6 +39,7 @@ Library
                        Keter.App
                        Keter.Main
                        Keter.Prelude
+                       Keter.LogFile
   ghc-options:         -Wall -Werror
 
 Executable keter

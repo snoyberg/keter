@@ -9,6 +9,7 @@ import qualified Keter.Nginx as Nginx
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
 import qualified Keter.Postgres as Postgres
+import qualified Keter.LogFile as LogFile
 
 import qualified Control.Concurrent.MVar as M
 import qualified Data.Map as Map
@@ -17,6 +18,9 @@ import Control.Monad (forever)
 import qualified Filesystem.Path.CurrentOS as F
 import Control.Exception (throwIO)
 import qualified Prelude as P
+import Data.Text.Encoding (encodeUtf8)
+import Data.Time (getCurrentTime)
+import qualified Data.Text as T
 
 keter :: P.FilePath -- ^ root directory, with incoming, temp, and etc folders
       -> P.IO ()
@@ -24,6 +28,18 @@ keter dir' = do
     nginx <- runThrow $ Nginx.start def
     tf <- runThrow $ TempFolder.setup $ dir </> "temp"
     postgres <- runThrow $ Postgres.load def $ dir </> "etc" </> "postgres.yaml"
+    mainlog <- runThrow $ LogFile.start $ dir </> "log" </> "keter"
+
+    let runKIO' = runKIO $ \ml -> do
+            now <- getCurrentTime
+            let bs = encodeUtf8 $ T.concat
+                    [ show now
+                    , ": "
+                    , show ml
+                    , "\n"
+                    ]
+            runKIOPrint $ LogFile.addChunk mainlog bs
+        runKIOPrint = runKIO P.print
 
     mappMap <- M.newMVar Map.empty
     let removeApp appname = Keter.Prelude.modifyMVar_ mappMap $ return . Map.delete appname
@@ -59,18 +75,18 @@ keter dir' = do
 
     let events = [I.MoveIn, I.MoveOut, I.Delete, I.CloseWrite]
     i <- I.initINotify
-    _ <- I.addWatch i events (toString incoming) $ \e ->
+    _ <- I.addWatch i events (toString incoming) $ \e -> do
+        runKIO' $ log $ ReceivedInotifyEvent $ show e
         case e of
             I.Deleted _ fp -> when (isKeter' fp) $ terminateApp $ getAppname' fp
             I.MovedOut _ fp _ -> when (isKeter' fp) $ terminateApp $ getAppname' fp
             I.Closed _ (Just fp) _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
             I.MovedIn _ fp _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
-            _ -> P.print e -- FIXME
+            _ -> return ()
 
     runKIO' $ forever $ threadDelay $ 60 * 1000 * 1000
   where
     getAppname = either id id . toText . basename
     getAppname' = getAppname . F.decodeString
-    runThrow f = runKIO' f >>= either throwIO return
-    runKIO' = runKIO P.print
+    runThrow f = runKIO P.print f >>= either throwIO return
     dir = F.decodeString dir'

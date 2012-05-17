@@ -10,3 +10,4 @@ temp/
 *.keter
 test/app
 incoming/foo/hello
+log/

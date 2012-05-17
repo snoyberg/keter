@@ -91,6 +91,7 @@ keter dir' = do
     let incoming = dir </> "incoming"
         isKeter fp = hasExtension fp "keter"
         isKeter' = isKeter . F.decodeString
+    createTree incoming
     bundles <- fmap (filter isKeter) $ listDirectory incoming
     runKIO' $ mapM_ addApp bundles
 

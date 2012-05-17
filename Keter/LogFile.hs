@@ -47,7 +47,10 @@ start dir = do
             now <- getCurrentTime
             rename current $ dir </> suffix now
         F.openFile current F.WriteMode
-    suffix now = fromText (T.replace " " "_" $ T.takeWhile (/= '.') $ show now) <.> "log"
+    suffix now = fromText (T.concatMap fix $ T.takeWhile (/= '.') $ show now) <.> "log"
+    fix ' ' = "_"
+    fix c | '0' <= c && c <= '9' = T.singleton c
+    fix _ = T.empty
     loop chan handle total = do
         c <- readChan chan
         case c of

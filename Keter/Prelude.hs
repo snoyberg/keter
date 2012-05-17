@@ -57,6 +57,7 @@ module Keter.Prelude
     , P.maybe
     , (P.>)
     , (P.<)
+    , (P.<=)
     , (P.+)
     , (P.-)
     , getCurrentTime

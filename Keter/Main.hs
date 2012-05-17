@@ -97,13 +97,12 @@ keter dir' = do
     let events = [I.MoveIn, I.MoveOut, I.Delete, I.CloseWrite]
     i <- I.initINotify
     _ <- I.addWatch i events (toString incoming) $ \e -> do
-        runKIO' $ log $ ReceivedInotifyEvent $ show e
         case e of
             I.Deleted _ fp -> when (isKeter' fp) $ terminateApp $ getAppname' fp
             I.MovedOut _ fp _ -> when (isKeter' fp) $ terminateApp $ getAppname' fp
             I.Closed _ (Just fp) _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
             I.MovedIn _ fp _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
-            _ -> return ()
+            _ -> runKIO' $ log $ ReceivedInotifyEvent $ show e
 
     runKIO' $ forever $ threadDelay $ 60 * 1000 * 1000
   where

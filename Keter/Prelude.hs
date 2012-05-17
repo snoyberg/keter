@@ -156,7 +156,36 @@ data LogMessage
     | TerminatingOldProcess T.Text
     | RemovingOldFolder F.FilePath
     | ReceivedInotifyEvent T.Text
-  deriving P.Show
+
+instance P.Show LogMessage where
+    show (ProcessCreated f) = "Created process: " ++ F.encodeString f
+    show (InvalidBundle f e) = P.concat
+        [ "Unable to parse bundle file '"
+        , F.encodeString f
+        , "': "
+        , P.show e
+        ]
+    show (ProcessDidNotStart fp) = P.concat
+        [ "Could not start process within timeout period: "
+        , F.encodeString fp
+        ]
+    show (ExceptionThrown t e) = P.concat
+        [ T.unpack t
+        , ": "
+        , P.show e
+        ]
+    show (RemovingPort p) = "Port in use, removing from port pool: " ++ P.show p
+    show (UnpackingBundle b dir) = P.concat
+        [ "Unpacking bundle '"
+        , F.encodeString b
+        , "' into folder: "
+        , F.encodeString dir
+        ]
+    show (TerminatingApp t) = "Shutting down app: " ++ T.unpack t
+    show (FinishedReloading t) = "App finished reloading: " ++ T.unpack t
+    show (TerminatingOldProcess t) = "Sending old process TERM signal: " ++ T.unpack t
+    show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ F.encodeString fp
+    show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ T.unpack t
 
 logEx :: TH.Q TH.Exp
 logEx = do

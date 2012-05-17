@@ -55,7 +55,10 @@ module Keter.Prelude
     , P.not
     , P.maybe
     , (P.>)
+    , (P.<)
     , (P.+)
+    , (P.-)
+    , getCurrentTime
       -- * Filepath
     , (F.</>)
     , (F.<.>)
@@ -116,6 +119,7 @@ import qualified Blaze.ByteString.Builder as Blaze
 import qualified Blaze.ByteString.Builder.Char.Utf8
 import qualified System.Timeout
 import qualified Language.Haskell.TH.Syntax as TH
+import qualified Data.Time
 
 type String = T.Text
 
@@ -156,6 +160,7 @@ data LogMessage
     | TerminatingOldProcess T.Text
     | RemovingOldFolder F.FilePath
     | ReceivedInotifyEvent T.Text
+    | ProcessWaiting F.FilePath
 
 instance P.Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ F.encodeString f
@@ -186,6 +191,7 @@ instance P.Show LogMessage where
     show (TerminatingOldProcess t) = "Sending old process TERM signal: " ++ T.unpack t
     show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ F.encodeString fp
     show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ T.unpack t
+    show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ F.encodeString f
 
 logEx :: TH.Q TH.Exp
 logEx = do
@@ -296,3 +302,6 @@ timeout seconds (KIO f) = KIO $ \x -> System.Timeout.timeout seconds $ f x
 
 threadDelay :: P.Int -> KIO ()
 threadDelay = liftIO_ . Control.Concurrent.threadDelay
+
+getCurrentTime :: KIO Data.Time.UTCTime
+getCurrentTime = liftIO_ Data.Time.getCurrentTime

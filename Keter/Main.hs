@@ -5,7 +5,7 @@ module Keter.Main
     ( keter
     ) where
 
-import Keter.Prelude
+import Keter.Prelude hiding (getCurrentTime)
 import qualified Keter.Nginx as Nginx
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App

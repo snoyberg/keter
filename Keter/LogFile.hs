@@ -8,7 +8,7 @@ module Keter.LogFile
     , close
     ) where
 
-import Keter.Prelude
+import Keter.Prelude hiding (getCurrentTime)
 import qualified Data.ByteString as S
 import Data.Time (getCurrentTime)
 import qualified System.IO as SIO

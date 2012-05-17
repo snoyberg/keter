@@ -9,6 +9,7 @@ module Keter.Process
 import Keter.Prelude
 import Keter.Logger
 import qualified System.Process as SP
+import Data.Time (diffUTCTime)
 
 data Status = NeedsRestart | NoRestart | Running SP.ProcessHandle
 
@@ -21,14 +22,17 @@ run :: FilePath -- ^ executable
     -> KIO Process
 run exec dir args env logger = do
     mstatus <- newMVar NeedsRestart
-    let loop = do
+    let loop mlast = do
             next <- modifyMVar mstatus $ \status ->
                 case status of
                     NoRestart -> return (NoRestart, return ())
                     _ -> do
-                        -- FIXME put in some kind of rate limiting: if we last
-                        -- tried to restart within five second, wait an extra
-                        -- five seconds
+                        now <- getCurrentTime
+                        case mlast of
+                            Just last | diffUTCTime now last < 5 -> do
+                                log $ ProcessWaiting exec
+                                threadDelay $ 5 * 1000 * 1000
+                            _ -> return ()
                         res <- liftIO $ SP.createProcess cp
                         case res of
                             Left e -> do
@@ -37,9 +41,9 @@ run exec dir args env logger = do
                             Right (hin, hout, herr, ph) -> do
                                 attach logger $ Handles hin hout herr
                                 log $ ProcessCreated exec
-                                return (Running ph, liftIO (SP.waitForProcess ph) >> loop)
+                                return (Running ph, liftIO (SP.waitForProcess ph) >> loop (Just now))
             next
-    forkKIO loop
+    forkKIO $ loop Nothing
     return $ Process mstatus
   where
     cp = (SP.proc (toString exec) $ map toString args)

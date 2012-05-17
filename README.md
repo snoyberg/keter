@@ -42,3 +42,7 @@ Components:
   a new App for each app in the incoming folder. Monitor for file changes in
   the incoming folder, and appropriately start a new app, reload an existing app,
   or delete an existing app. Also provide a web interface based on logger.
+
+## Setup
+
+    sudo apt-get install nginx postgresql

@@ -27,7 +27,6 @@ import qualified System.Random as R
 import Data.Text.Lazy.Builder (toLazyText)
 import qualified Data.Text.Lazy as TL
 import System.Process (readProcess)
-import Data.Default (Default (def))
 
 data Settings = Settings
     { setupDBInfo :: DBInfo -> P.IO ()

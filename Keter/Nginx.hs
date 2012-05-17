@@ -95,7 +95,11 @@ start :: Settings -> KIO (Either SomeException Nginx)
 start Settings{..} = do
     -- Start off by ensuring we can read and write the config file and reload
     eres <- liftIO $ do
-        config0 <- S.readFile $ toString configFile
+        exists <- isFile configFile
+        config0 <-
+            if exists
+                then S.readFile $ toString configFile
+                else return ""
         let tmp = configFile <.> "tmp"
         S.writeFile (toString tmp) config0
         rename tmp configFile

@@ -1,13 +1,13 @@
 Name:                keter
 Version:             0.1
-Synopsis:            Yesod deployment manager
-Description:         Handles deployment of web apps, using Nginx as a reverse proxy to achieve zero downtime deployments.
+Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
+Description:         Handles deployment of web apps, using Nginx as a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
 Homepage:            http://www.yesodweb.com/
 License:             MIT
 License-file:        LICENSE
 Author:              Michael Snoyman
 Maintainer:          michael@snoyman.com
-Category:            Web
+Category:            Web, Yesod
 Build-type:          Simple
 Cabal-version:       >=1.8
 
@@ -42,13 +42,13 @@ Library
                        Keter.Prelude
                        Keter.LogFile
                        Keter.Logger
-  ghc-options:         -Wall -Werror
+  ghc-options:         -Wall
 
 Executable keter
-  Main-is:             ../keter.hs
-  hs-source-dirs:      dist
+  Main-is:             keter.hs
+  hs-source-dirs:      main
   Build-depends:       base, keter
-  ghc-options:         -threaded -Wall -Werror
+  ghc-options:         -threaded -Wall
 
 source-repository head
   type:     git

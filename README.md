@@ -1,5 +1,73 @@
 Deployment system for Yesod (and other Haskell) web apps.
 
+## Setup
+
+Instructions are for an Ubuntu system. Eventually, I hope to provide a PPA for
+this (please contact me if you would like to assist with this). For now, the
+following steps should be sufficient:
+
+First, install Nginx and PostgreSQL
+
+    sudo apt-get install nginx postgresql
+
+Second, build the `keter` binary and place it at `/usr/bin`. At the time of
+writing, a copy of this executable compiled for Ubuntu 12.04 64-bit is
+available at:
+[http://www.yesodweb.com/static/keter.bz2](http://www.yesodweb.com/static/keter.bz2).
+Note that this file may not be available in the future.
+
+Third, set up an Upstart job to start `keter` when your system boots.
+
+```
+# /etc/init/keter.conf
+start on (net-device-up and local-filesystems and runlevel [2345])
+stop on runlevel [016]
+respawn
+
+console none
+
+exec /usr/bin/keter /opt/keter
+```
+
+Finally, start the job for the first time:
+
+    sudo start keter
+
+## Bundles
+
+An application needs to be set up as a keter bundle. This is a GZIPed tarball
+with a `.keter` filename extension and which has one special file:
+`config/keter.yaml`. A sample file is:
+
+```yaml
+exec: ../dist/build/yesodweb/yesodweb
+args:
+    - production
+host: www.yesodweb.com
+```
+
+yesodweb.com uses the following Bash script to create its keter bundle. Going
+forward, this will probably be a command available from the `yesod` executable
+and part of all scaffolded sites:
+
+```bash
+#!/bin/bash -ex
+
+cabal build
+strip dist/build/yesodweb/yesodweb
+rm -rf static/tmp
+tar czfv yesodweb.keter dist/build/yesodweb/yesodweb config static
+```
+
+## Deploying
+
+In order to deploy, you simply copy the keter bundle to `/opt/keter/incoming`.
+To update an app, copy in the new version. The old process will only be
+terminated after the new process has started answering requests. To stop an
+application, delete the file from incoming.
+
+## Technical Details
+
 Components:
 
 * Logger: provides a file descriptor to redirect output to. Takes the name of
@@ -42,7 +110,3 @@ Components:
   a new App for each app in the incoming folder. Monitor for file changes in
   the incoming folder, and appropriately start a new app, reload an existing app,
   or delete an existing app. Also provide a web interface based on logger.
-
-## Setup
-
-    sudo apt-get install nginx postgresql

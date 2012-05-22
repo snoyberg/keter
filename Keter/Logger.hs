@@ -51,6 +51,8 @@ start lfout lferr = do
                 LogFile.close lfout
                 LogFile.close lferr
             Attach (Handles min mout merr) -> do
+                LogFile.addChunk lfout "\n\nAttaching new process\n\n"
+                LogFile.addChunk lferr "\n\nAttaching new process\n\n"
                 hmClose min
                 let go mhandle lf =
                         case mhandle of

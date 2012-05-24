@@ -22,4 +22,5 @@ main = do
         return $ responseLBS status200 [("content-type", "text/plain")] $ L8.pack $ unlines
             [ "Message: " ++ msg
             , "Path: " ++ fp
+            , "Headers: " ++ show (requestHeaders req)
             ]

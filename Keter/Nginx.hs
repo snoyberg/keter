@@ -173,7 +173,7 @@ start Settings{..} = do
         copyByteString "}\n"
     mkConfigEntry (AppEntry port) =
         copyByteString "    location / {\n        proxy_pass http://127.0.0.1:" ++
-        fromShow port ++ copyByteString ";\n    }\n"
+        fromShow port ++ copyByteString ";\n        proxy_set_header X-Real-IP $remote_addr;\n    }\n"
     mkConfigEntry (StaticEntry fp) =
         copyByteString "    root " ++ fromString (toString fp) ++ copyByteString ";\n    expires max;\n"
 

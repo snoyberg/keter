@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
 module Keter.Main
     ( keter
     ) where
@@ -16,19 +17,40 @@ import qualified Keter.Logger as Logger
 import qualified Control.Concurrent.MVar as M
 import qualified Data.Map as Map
 import qualified System.INotify as I
-import Control.Monad (forever)
+import Control.Monad (forever, mzero)
 import qualified Filesystem.Path.CurrentOS as F
+import qualified Filesystem as F
 import Control.Exception (throwIO)
 import qualified Prelude as P
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (getCurrentTime)
 import qualified Data.Text as T
 import Data.Maybe (fromMaybe)
+import Data.Yaml (decodeFile, FromJSON (parseJSON), Value (Object), (.:), (.:?), (.!=))
+import Control.Applicative ((<$>), (<*>))
 
-keter :: P.FilePath -- ^ root directory, with incoming, temp, and etc folders
+data Config = Config
+    { configDir :: F.FilePath
+    , configNginx :: Nginx.Settings
+    }
+
+instance FromJSON Config where
+    parseJSON (Object o) = Config
+        <$> (F.fromText <$> o .: "root")
+        <*> o .:? "nginx" .!= def
+    parseJSON _ = mzero
+
+keter :: P.FilePath -- ^ root directory or config file
       -> P.IO ()
-keter dir' = do
-    nginx <- runThrow $ Nginx.start def
+keter input' = do
+    exists <- F.isFile input
+    Config{..} <-
+        if exists
+            then decodeFile input' >>= maybe (P.error "Invalid config file") return
+            else return $ Config input def
+    let dir = F.directory input F.</> configDir
+
+    nginx <- runThrow $ Nginx.start configNginx
     tf <- runThrow $ TempFolder.setup $ dir </> "temp"
     postgres <- runThrow $ Postgres.load def $ dir </> "etc" </> "postgres.yaml"
     mainlog <- runThrow $ LogFile.start $ dir </> "log" </> "keter"
@@ -110,4 +132,4 @@ keter dir' = do
     getAppname = either id id . toText . basename
     getAppname' = getAppname . F.decodeString
     runThrow f = runKIO P.print f >>= either throwIO return
-    dir = F.decodeString dir'
+    input = F.decodeString input'

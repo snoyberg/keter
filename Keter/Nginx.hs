@@ -29,7 +29,7 @@ import System.Cmd (rawSystem)
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Map as Map
-import Control.Monad (forever)
+import Control.Monad (forever, mzero)
 import qualified Data.ByteString.Lazy as L
 import Blaze.ByteString.Builder (copyByteString, toLazyByteString)
 import Blaze.ByteString.Builder.Char.Utf8 (fromString, fromShow)
@@ -38,6 +38,8 @@ import Data.ByteString.Char8 ()
 import qualified Network
 import qualified Data.ByteString as S
 import System.Exit (ExitCode (ExitSuccess))
+import Data.Yaml (FromJSON (parseJSON), Value (Object), (.:?), (.!=))
+import Control.Applicative ((<$>), (<*>))
 
 -- | A port for an individual app to listen on.
 type Port = Int
@@ -79,6 +81,19 @@ instance Default Settings where
         , startAction = rawSystem' "/etc/init.d/nginx" ["start"]
         , portRange = [4000..4999]
         }
+
+instance FromJSON Settings where
+    parseJSON (Object o) = Settings
+        <$> (fmap fromText <$> o .:? "config") .!= configFile def
+        <*> (runRawSystem (reloadAction def) <$> (o .:? "reload"))
+        <*> (runRawSystem (startAction def) <$> (o .:? "start"))
+        <*> return (portRange def)
+      where
+        runRawSystem :: KIO (Either SomeException ()) -> Maybe [Text] -> KIO (Either SomeException ())
+        runRawSystem _ (Just (command:args)) = rawSystem' (fromText command) args
+        runRawSystem _ (Just []) = fail "Command with empty list"
+        runRawSystem k Nothing = k
+    parseJSON _ = mzero
 
 rawSystem' :: FilePath -> [String] -> KIO (Either SomeException ())
 rawSystem' fp args = do

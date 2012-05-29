@@ -1,0 +1,11 @@
+# Just a sample config file, using Debian/Ubuntu settings
+
+root: myroot
+nginx:
+    start:
+        - /etc/init.d/nginx
+        - start
+    reload:
+        - /etc/init.d/nginx
+        - reload
+    config: /etc/nginx/sites-enabled/keter

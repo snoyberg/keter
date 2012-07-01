@@ -1,5 +1,5 @@
 Name:                keter
-Version:             0.1
+Version:             0.1.0.1
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:         Handles deployment of web apps, using Nginx as a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
 Homepage:            http://www.yesodweb.com/
@@ -28,7 +28,7 @@ Library
                      , time
                      , template-haskell
                      , blaze-builder             >= 0.3           && < 0.4
-                     , yaml                      >= 0.7           && < 0.8
+                     , yaml                      >= 0.7           && < 0.9
                      , unix-compat               >= 0.3           && < 0.4
                      , hinotify                  >= 0.3           && < 0.4
                      , system-filepath           >= 0.4           && < 0.5

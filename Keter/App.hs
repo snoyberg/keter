@@ -14,7 +14,7 @@ import Keter.TempFolder
 import Keter.Postgres
 import Keter.Process
 import Keter.Logger (Logger, detach)
-import Keter.Nginx hiding (start)
+import Keter.PortManager hiding (start)
 import qualified Codec.Archive.Tar as Tar
 import Codec.Compression.GZip (decompress)
 import qualified Filesystem.Path.CurrentOS as F
@@ -66,14 +66,14 @@ unpackBundle tf bundle appname = do
                     liftIO $ rest `onException` removeTree dir
 
 start :: TempFolder
-      -> Nginx
+      -> PortManager
       -> Postgres
       -> Logger
       -> Appname
       -> F.FilePath -- ^ app bundle
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
-start tf nginx postgres logger appname bundle removeFromList = do
+start tf portman postgres logger appname bundle removeFromList = do
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
@@ -119,7 +119,7 @@ start tf nginx postgres logger appname bundle removeFromList = do
                 $logEx e
                 removeFromList
             Right (dir, config) -> do
-                eport <- getPort nginx
+                eport <- getPort portman
                 case eport of
                     Left e -> do
                         $logEx e
@@ -129,11 +129,11 @@ start tf nginx postgres logger appname bundle removeFromList = do
                         b <- testApp port
                         if b
                             then do
-                                addEntry nginx (configHost config) $ AppEntry port
+                                addEntry portman (configHost config) port
                                 loop chan dir process port config
                             else do
                                 removeFromList
-                                releasePort nginx port
+                                releasePort portman port
                                 Keter.Process.terminate process
 
     loop chan dirOld processOld portOld configOld = do
@@ -141,7 +141,7 @@ start tf nginx postgres logger appname bundle removeFromList = do
         case command of
             Terminate -> do
                 removeFromList
-                removeEntry nginx $ configHost configOld
+                removeEntry portman $ configHost configOld
                 log $ TerminatingApp appname
                 terminateOld
                 detach logger
@@ -152,7 +152,7 @@ start tf nginx postgres logger appname bundle removeFromList = do
                         log $ InvalidBundle bundle e
                         loop chan dirOld processOld portOld configOld
                     Right (dir, config) -> do
-                        eport <- getPort nginx
+                        eport <- getPort portman
                         case eport of
                             Left e -> $logEx e
                             Right port -> do
@@ -160,14 +160,14 @@ start tf nginx postgres logger appname bundle removeFromList = do
                                 b <- testApp port
                                 if b
                                     then do
-                                        addEntry nginx (configHost config) $ AppEntry port
+                                        addEntry portman (configHost config) port
                                         when (configHost config /= configHost configOld) $
-                                            removeEntry nginx $ configHost configOld
+                                            removeEntry portman $ configHost configOld
                                         log $ FinishedReloading appname
                                         terminateOld
                                         loop chan dir process port config
                                     else do
-                                        releasePort nginx port
+                                        releasePort portman port
                                         Keter.Process.terminate process
                                         log $ ProcessDidNotStart bundle
                                         loop chan dirOld processOld portOld configOld

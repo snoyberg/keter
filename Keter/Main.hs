@@ -7,14 +7,17 @@ module Keter.Main
     ) where
 
 import Keter.Prelude hiding (getCurrentTime)
-import qualified Keter.Nginx as Nginx
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
 import qualified Keter.Postgres as Postgres
 import qualified Keter.LogFile as LogFile
 import qualified Keter.Logger as Logger
+import qualified Keter.PortManager as PortMan
+import qualified Keter.Proxy as Proxy
 
+import Data.Conduit.Network (ServerSettings (ServerSettings), HostPreference)
 import qualified Control.Concurrent.MVar as M
+import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
 import qualified System.INotify as I
 import Control.Monad (forever, mzero)
@@ -28,16 +31,28 @@ import qualified Data.Text as T
 import Data.Maybe (fromMaybe)
 import Data.Yaml (decodeFile, FromJSON (parseJSON), Value (Object), (.:), (.:?), (.!=))
 import Control.Applicative ((<$>), (<*>))
+import Data.String (fromString)
 
 data Config = Config
     { configDir :: F.FilePath
-    , configNginx :: Nginx.Settings
+    , configPortMan :: PortMan.Settings
+    , configHost :: HostPreference
+    , configPort :: PortMan.Port
     }
+instance Default Config where
+    def = Config
+        { configDir = "."
+        , configPortMan = def
+        , configHost = "*"
+        , configPort = 80
+        }
 
 instance FromJSON Config where
     parseJSON (Object o) = Config
         <$> (F.fromText <$> o .: "root")
-        <*> o .:? "nginx" .!= def
+        <*> o .:? "port-manager" .!= def
+        <*> (fmap fromString <$> o .:? "host") .!= configHost def
+        <*> o .:? "port" .!= configPort def
     parseJSON _ = mzero
 
 keter :: P.FilePath -- ^ root directory or config file
@@ -47,10 +62,10 @@ keter input' = do
     Config{..} <-
         if exists
             then decodeFile input' >>= maybe (P.error "Invalid config file") return
-            else return $ Config input def
+            else return def { configDir = input }
     let dir = F.directory input F.</> configDir
 
-    nginx <- runThrow $ Nginx.start configNginx
+    portman <- runThrow $ PortMan.start configPortMan
     tf <- runThrow $ TempFolder.setup $ dir </> "temp"
     postgres <- runThrow $ Postgres.load def $ dir </> "etc" </> "postgres.yaml"
     mainlog <- runThrow $ LogFile.start $ dir </> "log" </> "keter"
@@ -65,6 +80,11 @@ keter input' = do
                     ]
             runKIOPrint $ LogFile.addChunk mainlog bs
         runKIOPrint = runKIO P.print
+
+    _ <- forkIO $ Proxy.reverseProxy
+            (ServerSettings configPort configHost)
+            (runKIOPrint . PortMan.lookupPort portman)
+            (runKIOPrint $ PortMan.hostList portman)
 
     mappMap <- M.newMVar Map.empty
     let removeApp appname = Keter.Prelude.modifyMVar_ mappMap $ return . Map.delete appname
@@ -95,7 +115,7 @@ keter input' = do
                         let logger = fromMaybe Logger.dummy mlogger
                         (app, rest) <- App.start
                             tf
-                            nginx
+                            portman
                             postgres
                             logger
                             appname

@@ -3,3 +3,7 @@
 root: .
 host: 127.0.0.1
 port: 80
+ssl:
+    host: 127.0.0.1
+    key: key.pem
+    certificate: certificate.pem

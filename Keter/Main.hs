@@ -38,6 +38,7 @@ data Config = Config
     , configPortMan :: PortMan.Settings
     , configHost :: HostPreference
     , configPort :: PortMan.Port
+    , configSsl :: Maybe Proxy.SslConfig
     }
 instance Default Config where
     def = Config
@@ -45,6 +46,7 @@ instance Default Config where
         , configPortMan = def
         , configHost = "*"
         , configPort = 80
+        , configSsl = Nothing
         }
 
 instance FromJSON Config where
@@ -53,6 +55,7 @@ instance FromJSON Config where
         <*> o .:? "port-manager" .!= def
         <*> (fmap fromString <$> o .:? "host") .!= configHost def
         <*> o .:? "port" .!= configPort def
+        <*> o .:? "ssl"
     parseJSON _ = mzero
 
 keter :: P.FilePath -- ^ root directory or config file
@@ -85,6 +88,14 @@ keter input' = do
             (ServerSettings configPort configHost)
             (runKIOPrint . PortMan.lookupPort portman)
             (runKIOPrint $ PortMan.hostList portman)
+    case configSsl of
+        Nothing -> return ()
+        Just ssl -> do
+            _ <- forkIO $ Proxy.reverseProxySsl
+                    (Proxy.setDir dir ssl)
+                    (runKIOPrint . PortMan.lookupPort portman)
+                    (runKIOPrint $ PortMan.hostList portman)
+            return ()
 
     mappMap <- M.newMVar Map.empty
     let removeApp appname = Keter.Prelude.modifyMVar_ mappMap $ return . Map.delete appname

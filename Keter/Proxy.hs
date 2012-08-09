@@ -4,10 +4,13 @@ module Keter.Proxy
     ( reverseProxy
     , PortLookup
     , HostList
+    , reverseProxySsl
+    , setDir
+    , SslConfig
     ) where
 
 import Keter.Prelude ((++))
-import Prelude hiding ((++))
+import Prelude hiding ((++), FilePath)
 import Data.Conduit
 import Data.Conduit.List (peek)
 import Data.Conduit.Network
@@ -22,6 +25,7 @@ import Control.Monad.Trans.Class (lift)
 import qualified Data.ByteString.Lazy as L
 import Blaze.ByteString.Builder (fromByteString, toLazyByteString)
 import Data.Monoid (mconcat)
+import Keter.SSL
 
 -- | Mapping from virtual hostname to port number.
 type PortLookup = ByteString -> IO (Maybe Port)
@@ -31,6 +35,9 @@ type HostList = IO [ByteString]
 reverseProxy :: ServerSettings -> PortLookup -> HostList -> IO ()
 reverseProxy settings x = runTCPServer settings . withClient x
 
+reverseProxySsl :: SslConfig -> PortLookup -> HostList -> IO ()
+reverseProxySsl settings x = runTCPServerSsl settings . withClient x
+
 withClient :: PortLookup
            -> HostList
            -> Source IO ByteString
@@ -38,7 +45,6 @@ withClient :: PortLookup
            -> IO ()
 withClient portLookup hostList fromClient toClient = do
     (rsrc, mvhost) <- fromClient $$+ getVhost
-    putStrLn $ "Received client connection for host: " ++ show mvhost
     mport <- maybe (return Nothing) portLookup mvhost
     case mport of
         Nothing -> lift (fmap toResponse hostList) >>= mapM_ yield $$ toClient

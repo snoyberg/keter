@@ -19,7 +19,7 @@ import qualified Data.ByteString.Char8 as S8
 import Control.Concurrent (forkIO, killThread)
 import Control.Concurrent.MVar
 import Data.Char (isSpace, toLower)
-import Control.Exception (onException)
+import Control.Exception (finally)
 import Keter.PortManager (Port)
 import Control.Monad.Trans.Class (lift)
 import qualified Data.ByteString.Lazy as L
@@ -52,8 +52,8 @@ withClient portLookup hostList fromClient toClient = do
   where
     withServer rsrc fromServer toServer = do
         x <- newEmptyMVar
-        tid1 <- forkIO $ (rsrc $$+- toServer) `onException` putMVar x True
-        tid2 <- forkIO $ (fromServer $$ toClient) `onException` putMVar x False
+        tid1 <- forkIO $ (rsrc $$+- toServer) `finally` putMVar x True
+        tid2 <- forkIO $ (fromServer $$ toClient) `finally` putMVar x False
         y <- takeMVar x
         killThread $ if y then tid2 else tid1
 

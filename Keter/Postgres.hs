@@ -125,8 +125,8 @@ load Settings{..} fp = do
                 Nothing -> do
                     let (dbi', g') = randomDBI g
                     let dbi = dbi'
-                            { dbiName = appname ++ dbiName dbi'
-                            , dbiUser = appname ++ dbiUser dbi'
+                            { dbiName = sanitize appname ++ dbiName dbi'
+                            , dbiUser = sanitize appname ++ dbiUser dbi'
                             }
                     ex <- lift $ liftIO $ setupDBInfo dbi
                     case ex of
@@ -142,3 +142,10 @@ load Settings{..} fp = do
                                     S.put (db', g')
                                     return $ Right dbi
         lift $ f dbi
+
+    sanitize = T.map sanitize'
+    sanitize' c
+        | 'A' <= c && c <= 'Z' = c
+        | 'a' <= c && c <= 'z' = c
+        | '0' <= c && c <= '9' = c
+        | otherwise = '_'

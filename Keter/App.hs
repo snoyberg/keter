@@ -31,6 +31,7 @@ data Config = Config
     , configArgs :: [Text]
     , configHost :: String
     , configPostgres :: Bool
+    , configSsl :: Bool
     }
 
 instance FromJSON Config where
@@ -39,6 +40,7 @@ instance FromJSON Config where
         <*> o .:? "args" .!= []
         <*> o .: "host"
         <*> o .:? "postgres" .!= False
+        <*> o .:? "ssl" .!= False
     parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
@@ -103,7 +105,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                     ]
                 Nothing -> []
         let env = ("PORT", show port)
-                : ("APPROOT", "http://" ++ configHost config)
+                : ("APPROOT", (if configSsl then "https://" else "http://") ++ configHost config)
                 : otherEnv
         run
             ("config" </> configExec config)

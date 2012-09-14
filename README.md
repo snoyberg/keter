@@ -54,6 +54,7 @@ exec: ../dist/build/yesodweb/yesodweb
 args:
     - production
 host: www.yesodweb.com
+ssl: false # true would use https scheme for approot
 ```
 
 A sample Bash script for producing a Keter bundle is:

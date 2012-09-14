@@ -105,7 +105,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                     ]
                 Nothing -> []
         let env = ("PORT", show port)
-                : ("APPROOT", (if configSsl then "https://" else "http://") ++ configHost config)
+                : ("APPROOT", (if configSsl config then "https://" else "http://") ++ configHost config)
                 : otherEnv
         run
             ("config" </> configExec config)

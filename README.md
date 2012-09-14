@@ -6,17 +6,27 @@ Instructions are for an Ubuntu system. Eventually, I hope to provide a PPA for
 this (please contact me if you would like to assist with this). For now, the
 following steps should be sufficient:
 
-First, install Nginx and PostgreSQL
+First, install PostgreSQL
 
-    sudo apt-get install nginx postgresql
+    sudo apt-get install postgresql
 
-Second, build the `keter` binary and place it at `/usr/bin`. At the time of
-writing, a copy of this executable compiled for Ubuntu 12.04 64-bit is
-available at:
-[http://www.yesodweb.com/static/keter.bz2](http://www.yesodweb.com/static/keter.bz2).
-Note that this file may not be available in the future.
+Second, build the `keter` binary and place it at `/usr/bin`.
 
-Third, set up an Upstart job to start `keter` when your system boots.
+Third, create a Keter config file:
+
+```yaml
+# /opt/keter/etc/keter-config.yaml
+root: ..
+# host: host to bind to
+# port: port to listen on
+# ssl:
+#   host:
+#   port:
+#   key:
+#   certificate:
+```
+
+Fourth, set up an Upstart job to start `keter` when your system boots.
 
 ```
 # /etc/init/keter.conf
@@ -26,7 +36,7 @@ respawn
 
 console none
 
-exec /usr/bin/keter /opt/keter
+exec /usr/bin/keter /opt/keter/etc/keter-config.yaml
 ```
 
 Finally, start the job for the first time:
@@ -46,9 +56,7 @@ args:
 host: www.yesodweb.com
 ```
 
-yesodweb.com uses the following Bash script to create its keter bundle. Going
-forward, this will probably be a command available from the `yesod` executable
-and part of all scaffolded sites:
+A sample Bash script for producing a Keter bundle is:
 
 ```bash
 #!/bin/bash -ex
@@ -58,6 +66,9 @@ strip dist/build/yesodweb/yesodweb
 rm -rf static/tmp
 tar czfv yesodweb.keter dist/build/yesodweb/yesodweb config static
 ```
+
+For users of Yesod, The `yesod` executable provides a `keter` command for
+creating the bundle, and the scaffolded site provides a `keter.yaml` file.
 
 ## Deploying
 
@@ -80,10 +91,6 @@ Components:
 
 * Postgres: Ask it for database information for an app. If no information is
   available, it will create a database/user.
-
-* Nginx: Send it commands to add/modify/remove a virtual host. It will write
-  the config file and reload nginx. Also handles management of the pool of open
-  ports to be assigned.
 
 * TempFolder: Wipes out a folder on startup, then assigns random, unique
   folders inside it on request.

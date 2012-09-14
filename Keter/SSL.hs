@@ -55,14 +55,14 @@ instance FromJSON SslConfig where
 
 runTCPServerSsl :: SslConfig -> Application IO -> IO ()
 runTCPServerSsl SslConfig{..} app = do
-    cert <- readCertificate sslCertificate
+    certs <- readCertificates sslCertificate
     key <- readPrivateKey sslKey
     bracket
         (bindPort sslPort sslHost)
         sClose
-        (forever . serve cert key)
+        (forever . serve certs key)
   where
-    serve cert key lsocket = do
+    serve certs key lsocket = do
         (socket, _addr) <- accept lsocket -- FIXME exception safety
         _ <- forkIO $ handle socket
         return ()
@@ -102,7 +102,7 @@ runTCPServerSsl SslConfig{..} app = do
             { TLS.pWantClientCert = False
             , TLS.pAllowedVersions = [TLS.SSL3,TLS.TLS10,TLS.TLS11,TLS.TLS12]
             , TLS.pCiphers         = ciphers
-            , TLS.pCertificates    = [(cert, Just key)]
+            , TLS.pCertificates    = zip certs $ Just key : repeat Nothing
             }
 
 -- taken from stunnel example in tls-extra
@@ -114,12 +114,12 @@ ciphers =
     , TLSExtra.cipher_RC4_128_SHA1
     ]
 
-readCertificate :: FilePath -> IO X509.X509
-readCertificate filepath = do
+readCertificates :: FilePath -> IO [X509.X509]
+readCertificates filepath = do
     certs <- rights . parseCerts . PEM.pemParseBS <$> readFile filepath
     case certs of
         []    -> error "no valid certificate found"
-        (x:_) -> return x
+        (_:_) -> return certs
     where parseCerts (Right pems) = map (X509.decodeCertificate . L.fromChunks . (:[]) . PEM.pemContent)
                                   $ filter (flip elem ["CERTIFICATE", "TRUSTED CERTIFICATE"] . PEM.pemName) pems
           parseCerts (Left err) = error $ "cannot parse PEM file: " ++ err

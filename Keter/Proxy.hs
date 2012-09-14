@@ -12,7 +12,6 @@ module Keter.Proxy
 import Keter.Prelude ((++))
 import Prelude hiding ((++), FilePath)
 import Data.Conduit
-import Data.Conduit.List (peek)
 import Data.Conduit.Network
 import Data.ByteString (ByteString)
 import qualified Data.ByteString.Char8 as S8
@@ -57,9 +56,27 @@ withClient portLookup hostList fromClient toClient = do
         y <- takeMVar x
         killThread $ if y then tid2 else tid1
 
+getHeaders :: Monad m => Sink ByteString m ByteString
+getHeaders =
+    go id
+  where
+    go front =
+        await >>= maybe close push
+      where
+        close = leftover bs >> return bs
+          where
+            bs = front S8.empty
+        push bs'
+            | "\r\n\r\n" `S8.isInfixOf` bs
+              || "\n\n" `S8.isInfixOf` bs
+              || S8.length bs > 1000 = leftover bs >> return bs
+            | otherwise = go $ S8.append bs
+          where
+            bs = front bs'
+
 getVhost :: Monad m => Sink ByteString m (Maybe ByteString)
 getVhost =
-    peek >>= maybe (return Nothing) (return . go . drop 1 . S8.lines)
+    getHeaders >>= return . go . drop 1 . S8.lines
   where
     go [] = Nothing
     go (bs:bss)

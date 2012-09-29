@@ -1,5 +1,5 @@
 Name:                keter
-Version:             0.2.0.2
+Version:             0.2.0.3
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:         Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
 Homepage:            http://www.yesodweb.com/
@@ -58,6 +58,7 @@ Executable keter
   hs-source-dirs:      main
   Build-depends:       base, keter
   ghc-options:         -threaded -Wall
+  other-modules:       Paths_keter
 
 source-repository head
   type:     git

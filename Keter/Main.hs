@@ -38,7 +38,7 @@ data Config = Config
     , configPortMan :: PortMan.Settings
     , configHost :: HostPreference
     , configPort :: PortMan.Port
-    , configSsl :: Maybe Proxy.SslConfig
+    , configSsl :: Maybe Proxy.TLSConfigNoDir
     }
 instance Default Config where
     def = Config

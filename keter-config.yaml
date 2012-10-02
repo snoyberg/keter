@@ -1,9 +1,9 @@
 # Just a sample config file, using Debian/Ubuntu settings
 
 root: .
-host: 127.0.0.1
+host: "*4"
 port: 80
 ssl:
-    host: 127.0.0.1
+    host: "*4"
     key: key.pem
     certificate: certificate.pem

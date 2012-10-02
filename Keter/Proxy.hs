@@ -6,7 +6,8 @@ module Keter.Proxy
     , HostList
     , reverseProxySsl
     , setDir
-    , SslConfig
+    , TLSConfig
+    , TLSConfigNoDir
     ) where
 
 import Keter.Prelude ((++))
@@ -14,17 +15,13 @@ import Prelude hiding ((++), FilePath)
 import Data.Conduit
 import Data.Conduit.Network
 import Data.ByteString (ByteString)
-import qualified Data.ByteString.Char8 as S8
-import Control.Concurrent (forkIO, killThread)
-import Control.Concurrent.MVar
-import Data.Char (isSpace, toLower)
-import Control.Exception (finally)
 import Keter.PortManager (Port)
-import Control.Monad.Trans.Class (lift)
 import qualified Data.ByteString.Lazy as L
 import Blaze.ByteString.Builder (fromByteString, toLazyByteString)
 import Data.Monoid (mconcat)
 import Keter.SSL
+import Network.HTTP.ReverseProxy (rawProxyTo, ProxyDest (ProxyDest))
+import Control.Applicative ((<$>))
 
 -- | Mapping from virtual hostname to port number.
 type PortLookup = ByteString -> IO (Maybe Port)
@@ -34,61 +31,24 @@ type HostList = IO [ByteString]
 reverseProxy :: ServerSettings -> PortLookup -> HostList -> IO ()
 reverseProxy settings x = runTCPServer settings . withClient x
 
-reverseProxySsl :: SslConfig -> PortLookup -> HostList -> IO ()
-reverseProxySsl settings x = runTCPServerSsl settings . withClient x
+reverseProxySsl :: TLSConfig -> PortLookup -> HostList -> IO ()
+reverseProxySsl settings x = runTCPServerTLS settings . withClient x
 
 withClient :: PortLookup
            -> HostList
-           -> Source IO ByteString
-           -> Sink ByteString IO ()
-           -> IO ()
-withClient portLookup hostList fromClient toClient = do
-    (rsrc, mvhost) <- fromClient $$+ getVhost
-    mport <- maybe (return Nothing) portLookup mvhost
-    case mport of
-        Nothing -> lift (fmap toResponse hostList) >>= mapM_ yield $$ toClient
-        Just port -> runTCPClient (ClientSettings port "127.0.0.1") (withServer rsrc)
+           -> Application IO
+withClient portLookup hostList =
+    rawProxyTo getDest
   where
-    withServer rsrc fromServer toServer = do
-        x <- newEmptyMVar
-        tid1 <- forkIO $ (rsrc $$+- toServer) `finally` putMVar x True
-        tid2 <- forkIO $ (fromServer $$ toClient) `finally` putMVar x False
-        y <- takeMVar x
-        killThread $ if y then tid2 else tid1
+    getDest headers = do
+        mport <- maybe (return Nothing) portLookup $ lookup "host" headers
+        case mport of
+            Nothing -> Left . toResponse <$> hostList
+            Just port -> return $ Right $ ProxyDest "127.0.0.1" port
 
-getHeaders :: Monad m => Sink ByteString m ByteString
-getHeaders =
-    go id
-  where
-    go front =
-        await >>= maybe close push
-      where
-        close = leftover bs >> return bs
-          where
-            bs = front S8.empty
-        push bs'
-            | "\r\n\r\n" `S8.isInfixOf` bs
-              || "\n\n" `S8.isInfixOf` bs
-              || S8.length bs > 1000 = leftover bs >> return bs
-            | otherwise = go $ S8.append bs
-          where
-            bs = front bs'
-
-getVhost :: Monad m => Sink ByteString m (Maybe ByteString)
-getVhost =
-    getHeaders >>= return . go . drop 1 . S8.lines
-  where
-    go [] = Nothing
-    go (bs:bss)
-        | S8.map toLower k == "host" = Just v
-        | otherwise = go bss
-      where
-        (k, v') = S8.break (== ':') bs
-        v = S8.takeWhile (not . isSpace) $ S8.dropWhile isSpace $ S8.drop 1 v'
-
-toResponse :: [ByteString] -> [ByteString]
+toResponse :: Monad m => [ByteString] -> Source m ByteString
 toResponse hosts =
-    L.toChunks $ toLazyByteString $ front ++ mconcat (map go hosts) ++ end
+    mapM_ yield $ L.toChunks $ toLazyByteString $ front ++ mconcat (map go hosts) ++ end
   where
     front = fromByteString "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You may access the following sites:</p><ul>"
     end = fromByteString "</ul></body></html>"

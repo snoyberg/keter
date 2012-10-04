@@ -84,6 +84,7 @@ module Keter.Prelude
     , modifyMVar_
     , swapMVar
     , takeMVar
+    , tryTakeMVar
     , putMVar
       -- * IORef
     , I.IORef
@@ -246,6 +247,9 @@ swapMVar m = liftIO_ . M.swapMVar m
 
 takeMVar :: M.MVar a -> KIO a
 takeMVar = liftIO_ . M.takeMVar
+
+tryTakeMVar :: M.MVar a -> KIO (P.Maybe a)
+tryTakeMVar = liftIO_ . M.tryTakeMVar
 
 putMVar :: M.MVar a -> a -> KIO ()
 putMVar m = liftIO_ . M.putMVar m

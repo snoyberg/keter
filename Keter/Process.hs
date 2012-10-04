@@ -7,11 +7,16 @@ module Keter.Process
     ) where
 
 import Keter.Prelude
-import Keter.Logger
-import qualified System.Process as SP
+import Keter.Logger (Logger, attach, LogPipes (..), mkLogPipe)
 import Data.Time (diffUTCTime)
+import Data.Conduit.Process.Unix (forkExecuteFile, waitForProcess, killProcess)
+import System.Posix.Types (ProcessID)
+import Prelude (error)
+import Filesystem.Path.CurrentOS (encode)
+import Data.Text.Encoding (encodeUtf8)
+import Data.Conduit (($$))
 
-data Status = NeedsRestart | NoRestart | Running SP.ProcessHandle
+data Status = NeedsRestart | NoRestart | Running ProcessID
 
 -- | Run the given command, restarting if the process dies.
 run :: FilePath -- ^ executable
@@ -33,27 +38,30 @@ run exec dir args env logger = do
                                 log $ ProcessWaiting exec
                                 threadDelay $ 5 * 1000 * 1000
                             _ -> return ()
-                        res <- liftIO $ SP.createProcess cp
+                        (pout, sout) <- mkLogPipe
+                        (perr, serr) <- mkLogPipe
+                        res <- liftIO $ forkExecuteFile
+                            (encode exec)
+                            False
+                            (map encodeUtf8 args)
+                            (Just $ map (encodeUtf8 *** encodeUtf8) env)
+                            (Just $ encode dir)
+                            (Just $ return ())
+                            (Just sout)
+                            (Just serr)
                         case res of
                             Left e -> do
+                                void $ liftIO $ return () $$ sout
+                                void $ liftIO $ return () $$ serr
                                 $logEx e
                                 return (NeedsRestart, return ())
-                            Right (hin, hout, herr, ph) -> do
-                                attach logger $ Handles hin hout herr
+                            Right pid -> do
+                                attach logger $ LogPipes pout perr
                                 log $ ProcessCreated exec
-                                return (Running ph, liftIO (SP.waitForProcess ph) >> loop (Just now))
+                                return (Running pid, liftIO (waitForProcess pid) >> loop (Just now))
             next
     forkKIO $ loop Nothing
     return $ Process mstatus
-  where
-    cp = (SP.proc (toString exec) $ map toString args)
-        { SP.cwd = Just $ toString dir
-        , SP.env = Just $ map (toString *** toString) env
-        , SP.std_in = SP.CreatePipe
-        , SP.std_out = SP.CreatePipe
-        , SP.std_err = SP.CreatePipe
-        , SP.close_fds = True
-        }
 
 -- | Abstract type containing information on a process which will be restarted.
 newtype Process = Process (MVar Status)
@@ -63,5 +71,5 @@ terminate :: Process -> KIO ()
 terminate (Process mstatus) = do
     status <- swapMVar mstatus NoRestart
     case status of
-        Running ph -> void $ liftIO $ SP.terminateProcess ph
+        Running pid -> void $ liftIO $ killProcess pid
         _ -> return ()

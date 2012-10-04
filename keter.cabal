@@ -37,6 +37,8 @@ Library
                      , network-conduit           >= 0.6           && < 0.7
                      , network-conduit-tls       >= 0.5           && < 0.6
                      , http-reverse-proxy        >= 0.1           && < 0.2
+                     , unix-process-conduit      >= 0.1           && < 0.2
+                     , unix                      >= 2.5           && < 2.6
   Exposed-Modules:     Keter.Process
                        Keter.Postgres
                        Keter.TempFolder

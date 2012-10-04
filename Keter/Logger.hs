@@ -6,27 +6,56 @@ module Keter.Logger
     , start
     , attach
     , detach
-    , Handles (..)
+    , LogPipes (..)
+    , LogPipe
+    , mkLogPipe
     , dummy
     ) where
 
 import Keter.Prelude
-import System.IO (Handle, hClose)
 import qualified Prelude as P
 import qualified Keter.LogFile as LogFile
 import Control.Concurrent (killThread)
 import qualified Data.ByteString as S
-import Control.Exception (fromException, AsyncException (ThreadKilled))
+import Data.Conduit (Sink, await)
+import qualified Control.Concurrent.MVar as M
+import Control.Monad.Trans.Class (lift)
 
-data Handles = Handles
-    { stdIn :: Maybe Handle
-    , stdOut :: Maybe Handle
-    , stdErr :: Maybe Handle
+data LogPipes = LogPipes
+    { stdOut :: LogPipe
+    , stdErr :: LogPipe
     }
+
+data LogPipe = LogPipe
+    { readLogPipe :: KIO (Maybe S.ByteString)
+    , closeLogPipe :: KIO ()
+    }
+
+mkLogPipe :: KIO (LogPipe, Sink S.ByteString P.IO ())
+mkLogPipe = do
+    toSink <- newEmptyMVar
+    fromSink <- newEmptyMVar
+    let pipe = LogPipe
+            { readLogPipe = do
+                putMVar toSink True
+                takeMVar fromSink
+            , closeLogPipe = do
+                _ <- tryTakeMVar toSink
+                putMVar toSink False
+            }
+        sink = do
+            toCont <- lift $ M.takeMVar toSink
+            if toCont
+                then do
+                    mbs <- await
+                    lift $ M.putMVar fromSink mbs
+                    maybe (return ()) (P.const sink) mbs
+                else return ()
+    return (pipe, sink)
 
 newtype Logger = Logger (Command -> KIO ())
 
-data Command = Attach Handles | Detach
+data Command = Attach LogPipes | Detach
 
 start :: LogFile.LogFile -- ^ stdout
       -> LogFile.LogFile -- ^ stderr
@@ -50,52 +79,38 @@ start lfout lferr = do
             Detach -> do
                 LogFile.close lfout
                 LogFile.close lferr
-            Attach (Handles min mout merr) -> do
+            Attach (LogPipes out err) -> do
                 LogFile.addChunk lfout "\n\nAttaching new process\n\n"
                 LogFile.addChunk lferr "\n\nAttaching new process\n\n"
-                hmClose min
-                let go mhandle lf =
-                        case mhandle of
-                            Nothing -> return Nothing
-                            Just handle -> do
-                                etid <- forkKIO' $ listener handle lf
-                                case etid of
-                                    Left e -> do
-                                        $logEx e
-                                        hmClose mhandle
-                                        return Nothing
-                                    Right tid -> return $ Just tid
-                newout <- go mout lfout
-                newerr <- go merr lferr
+                let go logpipe lf = do
+                        etid <- forkKIO' $ listener logpipe lf
+                        case etid of
+                            Left e -> do
+                                $logEx e
+                                closeLogPipe logpipe
+                                return Nothing
+                            Right tid -> return $ Just tid
+                newout <- go out lfout
+                newerr <- go err lferr
                 loop chan newout newerr
 
-hmClose :: Maybe Handle -> KIO ()
-hmClose Nothing = return ()
-hmClose (Just h) = liftIO (hClose h) >>= either $logEx return
-
-listener :: Handle -> LogFile.LogFile -> KIO ()
+listener :: LogPipe -> LogFile.LogFile -> KIO ()
 listener out lf =
     loop
   where
     loop = do
-        ebs <- liftIO $ S.hGetSome out 4096
-        case ebs of
-            Left e -> do
-                case fromException e of
-                    Just ThreadKilled -> return ()
-                    _ -> $logEx e
-                hmClose $ Just out
-            Right bs
-                | S.null bs -> hmClose (Just out)
-                | otherwise -> do
-                    LogFile.addChunk lf bs
-                    listener out lf
+        mbs <- readLogPipe out
+        case mbs of
+            Nothing -> return ()
+            Just bs -> do
+                LogFile.addChunk lf bs
+                loop
 
-attach :: Logger -> Handles -> KIO ()
+attach :: Logger -> LogPipes -> KIO ()
 attach (Logger f) h = f (Attach h)
 
 detach :: Logger -> KIO ()
 detach (Logger f) = f Detach
 
 dummy :: Logger
-dummy = P.error "Logger.dummy"
+dummy = Logger $ P.const $ return ()

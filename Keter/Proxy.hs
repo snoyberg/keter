@@ -28,7 +28,7 @@ type PortLookup = ByteString -> IO (Maybe Port)
 
 type HostList = IO [ByteString]
 
-reverseProxy :: ServerSettings -> PortLookup -> HostList -> IO ()
+reverseProxy :: ServerSettings IO -> PortLookup -> HostList -> IO ()
 reverseProxy settings x = runTCPServer settings . withClient x
 
 reverseProxySsl :: TLSConfig -> PortLookup -> HostList -> IO ()
@@ -43,8 +43,11 @@ withClient portLookup hostList =
     getDest headers = do
         mport <- maybe (return Nothing) portLookup $ lookup "host" headers
         case mport of
-            Nothing -> Left . toResponse <$> hostList
+            Nothing -> Left . srcToApp . toResponse <$> hostList
             Just port -> return $ Right $ ProxyDest "127.0.0.1" port
+
+srcToApp :: Monad m => Source m ByteString -> Application m
+srcToApp src appdata = src $$ appSink appdata
 
 toResponse :: Monad m => [ByteString] -> Source m ByteString
 toResponse hosts =

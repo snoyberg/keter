@@ -15,7 +15,7 @@ import qualified Keter.Logger as Logger
 import qualified Keter.PortManager as PortMan
 import qualified Keter.Proxy as Proxy
 
-import Data.Conduit.Network (ServerSettings (ServerSettings), HostPreference)
+import Data.Conduit.Network (serverSettings, HostPreference)
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
@@ -85,7 +85,7 @@ keter input' = do
         runKIOPrint = runKIO P.print
 
     _ <- forkIO $ Proxy.reverseProxy
-            (ServerSettings configPort configHost)
+            (serverSettings configPort configHost)
             (runKIOPrint . PortMan.lookupPort portman)
             (runKIOPrint $ PortMan.hostList portman)
     case configSsl of

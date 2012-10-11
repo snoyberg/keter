@@ -35,10 +35,10 @@ Library
                      , system-fileio             >= 0.3           && < 0.4
                      , conduit                   >= 0.5           && < 0.6
                      , network-conduit           >= 0.6           && < 0.7
-                     , network-conduit-tls       >= 0.5           && < 0.6
+                     , network-conduit-tls       >= 0.6           && < 0.7
                      , http-reverse-proxy        >= 0.1           && < 0.2
                      , unix-process-conduit      >= 0.1           && < 0.2
-                     , unix                      >= 2.5           && < 2.6
+                     , unix                      >= 2.5           && < 2.7
   Exposed-Modules:     Keter.Process
                        Keter.Postgres
                        Keter.TempFolder

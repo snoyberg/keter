@@ -23,7 +23,7 @@ setDir dir (TLSConfigNoDir tls) = tls
 newtype TLSConfigNoDir = TLSConfigNoDir TLSConfig
 
 instance FromJSON TLSConfigNoDir where
-    parseJSON (Object o) = fmap TLSConfigNoDir $ TLSConfig
+    parseJSON (Object o) = fmap TLSConfigNoDir $ tlsConfig
         <$> (fmap fromString <$> o .:? "host") .!= "*"
         <*> o .:? "port" .!= 443
         <*> (fromString <$> o .: "certificate")

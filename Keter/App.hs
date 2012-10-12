@@ -31,6 +31,8 @@ import System.IO (hClose)
 import qualified Data.ByteString.Lazy as L
 import Data.Conduit (($$), yield, runResourceT)
 import Data.Conduit.Binary (sinkFile)
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 data Config = Config
     { configExec :: F.FilePath
@@ -38,6 +40,7 @@ data Config = Config
     , configHost :: String
     , configPostgres :: Bool
     , configSsl :: Bool
+    , configExtraHosts :: Set String
     }
 
 instance FromJSON Config where
@@ -47,6 +50,7 @@ instance FromJSON Config where
         <*> o .: "host"
         <*> o .:? "postgres" .!= False
         <*> o .:? "ssl" .!= False
+        <*> o .:? "extra-hosts" .!= Set.empty
     parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
@@ -151,6 +155,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                         if b
                             then do
                                 addEntry portman (configHost config) port
+                                mapM_ (flip (addEntry portman) port) $ Set.toList $ configExtraHosts config
                                 loop chan dir process port config
                             else do
                                 removeFromList
@@ -163,6 +168,7 @@ start tf portman postgres logger appname bundle removeFromList = do
             Terminate -> do
                 removeFromList
                 removeEntry portman $ configHost configOld
+                mapM_ (removeEntry portman) $ Set.toList $ configExtraHosts configOld
                 log $ TerminatingApp appname
                 terminateOld
                 detach logger
@@ -182,6 +188,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                                 if b
                                     then do
                                         addEntry portman (configHost config) port
+                                        mapM_ (flip (addEntry portman) port) $ Set.toList $ configExtraHosts config
                                         when (configHost config /= configHost configOld) $
                                             removeEntry portman $ configHost configOld
                                         log $ FinishedReloading appname

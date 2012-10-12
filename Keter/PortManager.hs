@@ -42,9 +42,9 @@ type Host = String
 
 data Command = GetPort (Either SomeException Port -> KIO ())
              | ReleasePort Port
-             | AddEntry Host Port
+             | AddEntry Host (Either Port FilePath)
              | RemoveEntry Host
-             | LookupPort S.ByteString (Maybe Port -> KIO ())
+             | LookupPort S.ByteString (Maybe (Either Port FilePath) -> KIO ())
              | HostList ([S.ByteString] -> KIO ())
 
 -- | An abstract type which can accept commands and sends them to a background
@@ -122,7 +122,7 @@ start Settings{..} = do
 data NState = NState
     { nsAvail :: [Port]
     , nsRecycled :: [Port]
-    , nsEntries :: Map.Map S.ByteString Port
+    , nsEntries :: Map.Map S.ByteString (Either Port FilePath)
     }
 
 -- | Gets an unassigned port number.
@@ -143,14 +143,14 @@ releasePort (PortManager f) p = f $ ReleasePort p
 -- nginx. Will overwrite any existing configuration for the given host. The
 -- second point is important: it is how we achieve zero downtime transitions
 -- between an old and new version of an app.
-addEntry :: PortManager -> Host -> Port -> KIO ()
+addEntry :: PortManager -> Host -> Either Port FilePath -> KIO ()
 addEntry (PortManager f) h p = f $ AddEntry h p
 
 -- | Remove an entry from the configuration and reload nginx.
 removeEntry :: PortManager -> Host -> KIO ()
 removeEntry (PortManager f) h = f $ RemoveEntry h
 
-lookupPort :: PortManager -> S.ByteString -> KIO (Maybe Port)
+lookupPort :: PortManager -> S.ByteString -> KIO (Maybe (Either Port FilePath))
 lookupPort (PortManager f) h = do
     x <- newEmptyMVar
     f $ LookupPort h $ \p -> putMVar x p

@@ -4,3 +4,7 @@ args:
 host: tealc-mint
 extra-hosts:
     - pong
+static-hosts:
+    foobar: ..
+    unsafe1: ../../
+    unsafe2: /home

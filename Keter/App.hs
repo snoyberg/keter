@@ -33,6 +33,8 @@ import Data.Conduit (($$), yield, runResourceT)
 import Data.Conduit.Binary (sinkFile)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import Data.Map (Map)
+import qualified Data.Map as Map
 
 data Config = Config
     { configExec :: F.FilePath
@@ -41,6 +43,7 @@ data Config = Config
     , configPostgres :: Bool
     , configSsl :: Bool
     , configExtraHosts :: Set String
+    , configStaticHosts :: Map String FilePath
     }
 
 instance FromJSON Config where
@@ -51,6 +54,7 @@ instance FromJSON Config where
         <*> o .:? "postgres" .!= False
         <*> o .:? "ssl" .!= False
         <*> o .:? "extra-hosts" .!= Set.empty
+        <*> (Map.map F.fromText <$> (o .:? "static-hosts" .!= Map.empty))
     parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
@@ -74,8 +78,21 @@ unpackBundle tf bundle appname = do
                             unpackTar dir $ Tar.read $ decompress lbs
                             let configFP = dir F.</> "config" F.</> "keter.yaml"
                             Just config <- decodeFile $ F.encodeString configFP
-                            return (dir, config)
+                            return (dir, config
+                                { configStaticHosts = Map.mapMaybe (fixStaticHost dir)
+                                                    $ configStaticHosts config
+                                })
                     liftIO $ rest `onException` removeTree dir
+
+-- | Ensures that the given path does not escape the containing folder and sets
+-- the pathname based on config file location.
+fixStaticHost :: FilePath -> FilePath -> Maybe FilePath
+fixStaticHost dir fp0 =
+    case (F.stripPrefix (F.collapse dir F.</> "") fp, F.relative fp0) of
+        (Just _, True) -> Just fp
+        _ -> Nothing
+  where
+    fp = F.collapse $ dir F.</> "config" F.</> fp0
 
 unpackTar :: FilePath -> Tar.Entries Tar.FormatError -> IO ()
 unpackTar dir =
@@ -154,8 +171,9 @@ start tf portman postgres logger appname bundle removeFromList = do
                         b <- testApp port
                         if b
                             then do
-                                addEntry portman (configHost config) port
-                                mapM_ (flip (addEntry portman) port) $ Set.toList $ configExtraHosts config
+                                addEntry portman (configHost config) $ Left port
+                                mapM_ (flip (addEntry portman) $ Left port) $ Set.toList $ configExtraHosts config
+                                mapM_ (\(host, fp) -> addEntry portman host (Right fp)) $ Map.toList $ configStaticHosts config
                                 loop chan dir process port config
                             else do
                                 removeFromList
@@ -169,6 +187,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                 removeFromList
                 removeEntry portman $ configHost configOld
                 mapM_ (removeEntry portman) $ Set.toList $ configExtraHosts configOld
+                mapM_ (removeEntry portman) $ Map.keys $ configStaticHosts configOld
                 log $ TerminatingApp appname
                 terminateOld
                 detach logger
@@ -187,8 +206,9 @@ start tf portman postgres logger appname bundle removeFromList = do
                                 b <- testApp port
                                 if b
                                     then do
-                                        addEntry portman (configHost config) port
-                                        mapM_ (flip (addEntry portman) port) $ Set.toList $ configExtraHosts config
+                                        addEntry portman (configHost config) $ Left port
+                                        mapM_ (flip (addEntry portman) $ Left port) $ Set.toList $ configExtraHosts config
+                                        mapM_ (\(host, fp) -> addEntry portman host (Right fp)) $ Map.toList $ configStaticHosts config
                                         when (configHost config /= configHost configOld) $
                                             removeEntry portman $ configHost configOld
                                         log $ FinishedReloading appname

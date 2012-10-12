@@ -71,6 +71,11 @@ tar czfv yesodweb.keter dist/build/yesodweb/yesodweb config static
 For users of Yesod, The `yesod` executable provides a `keter` command for
 creating the bundle, and the scaffolded site provides a `keter.yaml` file.
 
+__TODO__: Keter now supports multiple hosts and static file hosting. The
+support is experimental, and the config file may change. If it's sometime after
+October 2012 and you're still reading this text, please file an issue that the
+docs need to be updated.
+
 ## Deploying
 
 In order to deploy, you simply copy the keter bundle to `/opt/keter/incoming`.

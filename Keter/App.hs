@@ -9,6 +9,7 @@ module Keter.App
     , Keter.App.terminate
     ) where
 
+import Prelude (IO)
 import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
@@ -16,6 +17,8 @@ import Keter.Process
 import Keter.Logger (Logger, detach)
 import Keter.PortManager hiding (start)
 import qualified Codec.Archive.Tar as Tar
+import qualified Codec.Archive.Tar.Check as Tar
+import qualified Codec.Archive.Tar.Entry as Tar
 import Codec.Compression.GZip (decompress)
 import qualified Filesystem.Path.CurrentOS as F
 import Data.Yaml
@@ -23,8 +26,11 @@ import Control.Applicative ((<$>), (<*>))
 import System.PosixCompat.Files
 import qualified Network
 import Data.Maybe (fromMaybe)
-import Control.Exception (onException)
+import Control.Exception (onException, throwIO)
 import System.IO (hClose)
+import qualified Data.ByteString.Lazy as L
+import Data.Conduit (($$), yield, runResourceT)
+import Data.Conduit.Binary (sinkFile)
 
 data Config = Config
     { configExec :: F.FilePath
@@ -61,11 +67,28 @@ unpackBundle tf bundle appname = do
                 Right dir -> do
                     log $ UnpackingBundle bundle dir
                     let rest = do
-                            Tar.unpack (F.encodeString dir) $ Tar.read $ decompress lbs
+                            unpackTar dir $ Tar.read $ decompress lbs
                             let configFP = dir F.</> "config" F.</> "keter.yaml"
                             Just config <- decodeFile $ F.encodeString configFP
                             return (dir, config)
                     liftIO $ rest `onException` removeTree dir
+
+unpackTar :: FilePath -> Tar.Entries Tar.FormatError -> IO ()
+unpackTar dir =
+    loop . Tar.checkSecurity
+  where
+    loop Tar.Done = return ()
+    loop (Tar.Fail e) = either throwIO throwIO e
+    loop (Tar.Next e es) = go e >> loop es
+
+    go e = do
+        let fp = dir </> decodeString (Tar.entryPath e)
+        case Tar.entryContent e of
+            Tar.NormalFile lbs _ -> do
+                createTree $ F.directory fp
+                runResourceT $ mapM_ yield (L.toChunks lbs) $$ sinkFile (F.encodeString fp)
+                setFileMode (F.encodeString fp) $ Tar.entryPermissions e
+            _ -> return ()
 
 start :: TempFolder
       -> PortManager
@@ -80,10 +103,6 @@ start tf portman postgres logger appname bundle removeFromList = do
     return (App $ writeChan chan, rest chan)
   where
     runApp port dir config = do
-        res1 <- liftIO $ setFileMode (toString $ dir </> "config" </> configExec config) ownerExecuteMode
-        case res1 of
-            Left e -> $logEx e
-            Right () -> return ()
         otherEnv <- do
             mdbi <-
                 if configPostgres config

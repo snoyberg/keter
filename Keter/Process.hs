@@ -51,9 +51,9 @@ run exec dir args env logger = do
                             (Just serr)
                         case res of
                             Left e -> do
+                                $logEx e
                                 void $ liftIO $ return () $$ sout
                                 void $ liftIO $ return () $$ serr
-                                $logEx e
                                 return (NeedsRestart, return ())
                             Right pid -> do
                                 attach logger $ LogPipes pout perr

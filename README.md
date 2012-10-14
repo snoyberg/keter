@@ -55,6 +55,15 @@ args:
     - production
 host: www.yesodweb.com
 ssl: false # true would use https scheme for approot
+
+# Additional hosts your app will listen on, without affecting approot.
+extra-hosts:
+    - www1.yesodweb.com
+
+# Static file hosts. Keter handles the serving for you.
+static-hosts:
+    - host: static.yesodweb.com
+      root: ../static # relative to config file, just like the executable
 ```
 
 A sample Bash script for producing a Keter bundle is:
@@ -70,11 +79,6 @@ tar czfv yesodweb.keter dist/build/yesodweb/yesodweb config static
 
 For users of Yesod, The `yesod` executable provides a `keter` command for
 creating the bundle, and the scaffolded site provides a `keter.yaml` file.
-
-__TODO__: Keter now supports multiple hosts and static file hosting. The
-support is experimental, and the config file may change. If it's sometime after
-October 2012 and you're still reading this text, please file an issue that the
-docs need to be updated.
 
 ## Deploying
 

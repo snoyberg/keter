@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
 module Keter.App
     ( App
     , start
@@ -9,7 +10,7 @@ module Keter.App
     , Keter.App.terminate
     ) where
 
-import Prelude (IO)
+import Prelude (IO, Eq, Ord)
 import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
@@ -25,7 +26,7 @@ import Data.Yaml
 import Control.Applicative ((<$>), (<*>))
 import System.PosixCompat.Files
 import qualified Network
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, mapMaybe)
 import Control.Exception (onException, throwIO)
 import System.IO (hClose)
 import qualified Data.ByteString.Lazy as L
@@ -33,8 +34,6 @@ import Data.Conduit (($$), yield, runResourceT)
 import Data.Conduit.Binary (sinkFile)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import Data.Map (Map)
-import qualified Data.Map as Map
 
 data Config = Config
     { configExec :: F.FilePath
@@ -43,7 +42,7 @@ data Config = Config
     , configPostgres :: Bool
     , configSsl :: Bool
     , configExtraHosts :: Set String
-    , configStaticHosts :: Map String FilePath
+    , configStaticHosts :: Set StaticHost
     }
 
 instance FromJSON Config where
@@ -54,7 +53,19 @@ instance FromJSON Config where
         <*> o .:? "postgres" .!= False
         <*> o .:? "ssl" .!= False
         <*> o .:? "extra-hosts" .!= Set.empty
-        <*> (Map.map F.fromText <$> (o .:? "static-hosts" .!= Map.empty))
+        <*> o .:? "static-hosts" .!= Set.empty
+    parseJSON _ = fail "Wanted an object"
+
+data StaticHost = StaticHost
+    { shHost :: String
+    , shRoot :: FilePath
+    }
+    deriving (Eq, Ord)
+
+instance FromJSON StaticHost where
+    parseJSON (Object o) = StaticHost
+        <$> o .: "host"
+        <*> (F.fromText <$> o .: "root")
     parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
@@ -79,19 +90,22 @@ unpackBundle tf bundle appname = do
                             let configFP = dir F.</> "config" F.</> "keter.yaml"
                             Just config <- decodeFile $ F.encodeString configFP
                             return (dir, config
-                                { configStaticHosts = Map.mapMaybe (fixStaticHost dir)
+                                { configStaticHosts = Set.fromList
+                                                    $ mapMaybe (fixStaticHost dir)
+                                                    $ Set.toList
                                                     $ configStaticHosts config
                                 })
                     liftIO $ rest `onException` removeTree dir
 
 -- | Ensures that the given path does not escape the containing folder and sets
 -- the pathname based on config file location.
-fixStaticHost :: FilePath -> FilePath -> Maybe FilePath
-fixStaticHost dir fp0 =
+fixStaticHost :: FilePath -> StaticHost -> Maybe StaticHost
+fixStaticHost dir sh =
     case (F.stripPrefix (F.collapse dir F.</> "") fp, F.relative fp0) of
-        (Just _, True) -> Just fp
+        (Just _, True) -> Just sh { shRoot = fp }
         _ -> Nothing
   where
+    fp0 = shRoot sh
     fp = F.collapse $ dir F.</> "config" F.</> fp0
 
 unpackTar :: FilePath -> Tar.Entries Tar.FormatError -> IO ()
@@ -173,7 +187,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                             then do
                                 addEntry portman (configHost config) $ Left port
                                 mapM_ (flip (addEntry portman) $ Left port) $ Set.toList $ configExtraHosts config
-                                mapM_ (\(host, fp) -> addEntry portman host (Right fp)) $ Map.toList $ configStaticHosts config
+                                mapM_ (\StaticHost{..} -> addEntry portman shHost (Right shRoot)) $ Set.toList $ configStaticHosts config
                                 loop chan dir process port config
                             else do
                                 removeFromList
@@ -187,7 +201,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                 removeFromList
                 removeEntry portman $ configHost configOld
                 mapM_ (removeEntry portman) $ Set.toList $ configExtraHosts configOld
-                mapM_ (removeEntry portman) $ Map.keys $ configStaticHosts configOld
+                mapM_ (removeEntry portman) $ map shHost $ Set.toList $ configStaticHosts configOld
                 log $ TerminatingApp appname
                 terminateOld
                 detach logger
@@ -208,7 +222,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                                     then do
                                         addEntry portman (configHost config) $ Left port
                                         mapM_ (flip (addEntry portman) $ Left port) $ Set.toList $ configExtraHosts config
-                                        mapM_ (\(host, fp) -> addEntry portman host (Right fp)) $ Map.toList $ configStaticHosts config
+                                        mapM_ (\StaticHost{..} -> addEntry portman shHost (Right shRoot)) $ Set.toList $ configStaticHosts config
                                         when (configHost config /= configHost configOld) $
                                             removeEntry portman $ configHost configOld
                                         log $ FinishedReloading appname

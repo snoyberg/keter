@@ -5,6 +5,9 @@ host: tealc-mint
 extra-hosts:
     - pong
 static-hosts:
-    foobar: ..
-    unsafe1: ../../
-    unsafe2: /home
+    - host: foobar
+      root: ..
+    - host: unsafe1
+      root: ../../
+    - host: unsafe2
+      root: /home

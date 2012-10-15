@@ -24,16 +24,18 @@ import Codec.Compression.GZip (decompress)
 import qualified Filesystem.Path.CurrentOS as F
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>))
-import System.PosixCompat.Files
 import qualified Network
 import Data.Maybe (fromMaybe, mapMaybe)
-import Control.Exception (onException, throwIO)
+import Control.Exception (onException, throwIO, bracket)
 import System.IO (hClose)
 import qualified Data.ByteString.Lazy as L
-import Data.Conduit (($$), yield, runResourceT)
-import Data.Conduit.Binary (sinkFile)
+import Data.Conduit (($$), yield)
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Data.Conduit.List as CL
+import System.Posix.IO.ByteString (fdWriteBuf, closeFd, FdOption (CloseOnExec), setFdOption, createFile)
+import Foreign.Ptr (castPtr)
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 
 data Config = Config
     { configExec :: F.FilePath
@@ -121,8 +123,16 @@ unpackTar dir =
         case Tar.entryContent e of
             Tar.NormalFile lbs _ -> do
                 createTree $ F.directory fp
-                runResourceT $ mapM_ yield (L.toChunks lbs) $$ sinkFile (F.encodeString fp)
-                setFileMode (F.encodeString fp) $ Tar.entryPermissions e
+                let write fd bs = unsafeUseAsCStringLen bs $ \(ptr, len) -> do
+                        _ <- fdWriteBuf fd (castPtr ptr) (fromIntegral len)
+                        return ()
+                bracket
+                    (do
+                        fd <- createFile (F.encode fp) $ Tar.entryPermissions e
+                        setFdOption fd CloseOnExec True
+                        return fd)
+                    closeFd
+                    (\fd -> mapM_ yield (L.toChunks lbs) $$ CL.mapM_ (write fd))
             _ -> return ()
 
 start :: TempFolder

@@ -9,15 +9,15 @@ module Keter.Process
 import Keter.Prelude
 import Keter.Logger (Logger, attach, LogPipes (..), mkLogPipe)
 import Data.Time (diffUTCTime)
-import Data.Conduit.Process.Unix (forkExecuteFile, waitForProcess, killProcess)
-import System.Posix.Types (ProcessID)
+import Data.Conduit.Process.Unix (forkExecuteFile, waitForProcess, killProcess, terminateProcess)
+import System.Process (ProcessHandle)
 import Prelude (error)
 import Filesystem.Path.CurrentOS (encode)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Conduit (($$))
 import Control.Exception (onException)
 
-data Status = NeedsRestart | NoRestart | Running ProcessID
+data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
 -- | Run the given command, restarting if the process dies.
 run :: FilePath -- ^ executable
@@ -43,7 +43,6 @@ run exec dir args env logger = do
                         (perr, serr) <- mkLogPipe
                         res <- liftIO $ forkExecuteFile
                             (encode exec)
-                            False
                             (map encodeUtf8 args)
                             (Just $ map (encodeUtf8 *** encodeUtf8) env)
                             (Just $ encode dir)
@@ -74,5 +73,8 @@ terminate :: Process -> KIO ()
 terminate (Process mstatus) = do
     status <- swapMVar mstatus NoRestart
     case status of
-        Running pid -> void $ liftIO $ killProcess pid
+        Running pid -> do
+            void $ liftIO $ terminateProcess pid
+            threadDelay 1000000
+            void $ liftIO $ killProcess pid
         _ -> return ()

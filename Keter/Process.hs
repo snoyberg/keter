@@ -15,6 +15,7 @@ import Prelude (error)
 import Filesystem.Path.CurrentOS (encode)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Conduit (($$))
+import Control.Exception (onException)
 
 data Status = NeedsRestart | NoRestart | Running ProcessID
 
@@ -58,7 +59,9 @@ run exec dir args env logger = do
                             Right pid -> do
                                 attach logger $ LogPipes pout perr
                                 log $ ProcessCreated exec
-                                return (Running pid, liftIO (waitForProcess pid) >> loop (Just now))
+                                return (Running pid, do
+                                    liftIO $ waitForProcess pid `onException` killProcess pid
+                                    loop (Just now))
             next
     forkKIO $ loop Nothing
     return $ Process mstatus

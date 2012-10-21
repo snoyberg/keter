@@ -90,7 +90,11 @@ unpackBundle tf bundle appname = do
                     let rest = do
                             unpackTar dir $ Tar.read $ decompress lbs
                             let configFP = dir F.</> "config" F.</> "keter.yaml"
-                            Just config <- decodeFile $ F.encodeString configFP
+                            mconfig <- decodeFile $ F.encodeString configFP
+                            config <-
+                                case mconfig of
+                                    Just config -> return config
+                                    Nothing -> throwIO InvalidConfigFile
                             return (dir, config
                                 { configStaticHosts = Set.fromList
                                                     $ mapMaybe (fixStaticHost dir)

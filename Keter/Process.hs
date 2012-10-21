@@ -59,7 +59,7 @@ run exec dir args env logger = do
                                 attach logger $ LogPipes pout perr
                                 log $ ProcessCreated exec
                                 return (Running pid, do
-                                    liftIO $ waitForProcess pid `onException` killProcess pid
+                                    _ <- liftIO $ waitForProcess pid `onException` killProcess pid
                                     loop (Just now))
             next
     forkKIO $ loop Nothing

@@ -288,6 +288,7 @@ instance FromText Blaze.Builder where
 data KeterException = CannotParsePostgres F.FilePath
                     | ExitCodeFailure F.FilePath ExitCode
                     | NoPortsAvailable
+                    | InvalidConfigFile
     deriving (P.Show, Typeable)
 instance E.Exception KeterException
 

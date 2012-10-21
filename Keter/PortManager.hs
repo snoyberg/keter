@@ -8,6 +8,7 @@ module Keter.PortManager
       Port
     , Host
     , PortManager
+    , PortEntry (..)
       -- ** Settings
     , Settings
     , portRange
@@ -42,9 +43,9 @@ type Host = String
 
 data Command = GetPort (Either SomeException Port -> KIO ())
              | ReleasePort Port
-             | AddEntry Host (Either Port FilePath)
+             | AddEntry Host PortEntry
              | RemoveEntry Host
-             | LookupPort S.ByteString (Maybe (Either Port FilePath) -> KIO ())
+             | LookupPort S.ByteString (Maybe PortEntry -> KIO ())
              | HostList ([S.ByteString] -> KIO ())
 
 -- | An abstract type which can accept commands and sends them to a background
@@ -122,7 +123,7 @@ start Settings{..} = do
 data NState = NState
     { nsAvail :: [Port]
     , nsRecycled :: [Port]
-    , nsEntries :: Map.Map S.ByteString (Either Port FilePath)
+    , nsEntries :: Map.Map S.ByteString PortEntry
     }
 
 -- | Gets an unassigned port number.
@@ -143,14 +144,16 @@ releasePort (PortManager f) p = f $ ReleasePort p
 -- nginx. Will overwrite any existing configuration for the given host. The
 -- second point is important: it is how we achieve zero downtime transitions
 -- between an old and new version of an app.
-addEntry :: PortManager -> Host -> Either Port FilePath -> KIO ()
+addEntry :: PortManager -> Host -> PortEntry -> KIO ()
 addEntry (PortManager f) h p = f $ AddEntry h p
+
+data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString
 
 -- | Remove an entry from the configuration and reload nginx.
 removeEntry :: PortManager -> Host -> KIO ()
 removeEntry (PortManager f) h = f $ RemoveEntry h
 
-lookupPort :: PortManager -> S.ByteString -> KIO (Maybe (Either Port FilePath))
+lookupPort :: PortManager -> S.ByteString -> KIO (Maybe PortEntry)
 lookupPort (PortManager f) h = do
     x <- newEmptyMVar
     f $ LookupPort h $ \p -> putMVar x p

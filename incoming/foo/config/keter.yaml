@@ -4,6 +4,7 @@ args:
 host: tealc-mint
 extra-hosts:
     - pong
+    - www.mysite.com
 static-hosts:
     - host: foobar
       root: ..
@@ -11,3 +12,6 @@ static-hosts:
       root: ../../
     - host: unsafe2
       root: /home
+redirects:
+    - from: mysite.com
+      to: www.mysite.com

@@ -64,6 +64,11 @@ extra-hosts:
 static-hosts:
     - host: static.yesodweb.com
       root: ../static # relative to config file, just like the executable
+
+# Host name redirects.
+redirects:
+    - from: yesodweb.com
+      to: www.yesodweb.com
 ```
 
 A sample Bash script for producing a Keter bundle is:

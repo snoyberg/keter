@@ -10,12 +10,13 @@ module Keter.Proxy
     , TLSConfigNoDir
     ) where
 
-import Keter.Prelude ((++), FilePath)
+import Keter.Prelude ((++))
 import Prelude hiding ((++), FilePath)
 import Data.Conduit
 import Data.Conduit.Network
 import Data.ByteString (ByteString)
-import Keter.PortManager (Port)
+import Keter.PortManager (PortEntry (..))
+import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import Blaze.ByteString.Builder (fromByteString, toLazyByteString)
 import Data.Monoid (mconcat)
@@ -23,9 +24,11 @@ import Keter.SSL
 import Network.HTTP.ReverseProxy (rawProxyTo, ProxyDest (ProxyDest), waiToRaw)
 import Control.Applicative ((<$>))
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
+import qualified Network.Wai as Wai
+import Network.HTTP.Types (status301)
 
 -- | Mapping from virtual hostname to port number.
-type PortLookup = ByteString -> IO (Maybe (Either Port FilePath))
+type PortLookup = ByteString -> IO (Maybe PortEntry)
 
 type HostList = IO [ByteString]
 
@@ -45,8 +48,22 @@ withClient portLookup hostList =
         mport <- maybe (return Nothing) portLookup $ lookup "host" headers
         case mport of
             Nothing -> Left . srcToApp . toResponse <$> hostList
-            Just (Left port) -> return $ Right $ ProxyDest "127.0.0.1" port
-            Just (Right root) -> return $ Left $ waiToRaw $ staticApp $ defaultFileServerSettings root
+            Just (PEPort port) -> return $ Right $ ProxyDest "127.0.0.1" port
+            Just (PEStatic root) -> return $ Left $ waiToRaw $ staticApp $ defaultFileServerSettings root
+            Just (PERedirect host) -> return $ Left $ waiToRaw $ redirectApp host
+
+redirectApp :: ByteString -> Wai.Application
+redirectApp host req = return $ Wai.responseLBS
+    status301
+    [("Location", dest)]
+    (L.fromChunks [dest])
+  where
+    dest = S.concat
+        [ "http://"
+        , host
+        , Wai.rawPathInfo req
+        , Wai.rawQueryString req
+        ]
 
 srcToApp :: Monad m => Source m ByteString -> Application m
 srcToApp src appdata = src $$ appSink appdata

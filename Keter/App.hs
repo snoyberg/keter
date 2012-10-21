@@ -36,6 +36,7 @@ import qualified Data.Conduit.List as CL
 import System.Posix.IO.ByteString (fdWriteBuf, closeFd, FdOption (CloseOnExec), setFdOption, createFile)
 import Foreign.Ptr (castPtr)
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
+import Data.Text.Encoding (encodeUtf8)
 
 data Config = Config
     { configExec :: F.FilePath
@@ -45,6 +46,7 @@ data Config = Config
     , configSsl :: Bool
     , configExtraHosts :: Set String
     , configStaticHosts :: Set StaticHost
+    , configRedirects :: Set Redirect
     }
 
 instance FromJSON Config where
@@ -56,6 +58,7 @@ instance FromJSON Config where
         <*> o .:? "ssl" .!= False
         <*> o .:? "extra-hosts" .!= Set.empty
         <*> o .:? "static-hosts" .!= Set.empty
+        <*> o .:? "redirects" .!= Set.empty
     parseJSON _ = fail "Wanted an object"
 
 data StaticHost = StaticHost
@@ -68,6 +71,18 @@ instance FromJSON StaticHost where
     parseJSON (Object o) = StaticHost
         <$> o .: "host"
         <*> (F.fromText <$> o .: "root")
+    parseJSON _ = fail "Wanted an object"
+
+data Redirect = Redirect
+    { redFrom :: Text
+    , redTo :: Text
+    }
+    deriving (Eq, Ord)
+
+instance FromJSON Redirect where
+    parseJSON (Object o) = Redirect
+        <$> o .: "from"
+        <*> o .: "to"
     parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
@@ -199,9 +214,10 @@ start tf portman postgres logger appname bundle removeFromList = do
                         b <- testApp port
                         if b
                             then do
-                                addEntry portman (configHost config) $ Left port
-                                mapM_ (flip (addEntry portman) $ Left port) $ Set.toList $ configExtraHosts config
-                                mapM_ (\StaticHost{..} -> addEntry portman shHost (Right shRoot)) $ Set.toList $ configStaticHosts config
+                                addEntry portman (configHost config) $ PEPort port
+                                mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts config
+                                mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
+                                mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
                                 loop chan dir process port config
                             else do
                                 removeFromList
@@ -216,6 +232,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                 removeEntry portman $ configHost configOld
                 mapM_ (removeEntry portman) $ Set.toList $ configExtraHosts configOld
                 mapM_ (removeEntry portman) $ map shHost $ Set.toList $ configStaticHosts configOld
+                mapM_ (removeEntry portman) $ map redFrom $ Set.toList $ configRedirects configOld
                 log $ TerminatingApp appname
                 terminateOld
                 detach logger
@@ -234,9 +251,10 @@ start tf portman postgres logger appname bundle removeFromList = do
                                 b <- testApp port
                                 if b
                                     then do
-                                        addEntry portman (configHost config) $ Left port
-                                        mapM_ (flip (addEntry portman) $ Left port) $ Set.toList $ configExtraHosts config
-                                        mapM_ (\StaticHost{..} -> addEntry portman shHost (Right shRoot)) $ Set.toList $ configStaticHosts config
+                                        addEntry portman (configHost config) $ PEPort port
+                                        mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts config
+                                        mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
+                                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
                                         when (configHost config /= configHost configOld) $
                                             removeEntry portman $ configHost configOld
                                         log $ FinishedReloading appname

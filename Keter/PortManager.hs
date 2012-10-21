@@ -18,7 +18,6 @@ module Keter.PortManager
     , addEntry
     , removeEntry
     , lookupPort
-    , hostList
       -- * Initialize
     , start
     ) where
@@ -46,7 +45,6 @@ data Command = GetPort (Either SomeException Port -> KIO ())
              | AddEntry Host PortEntry
              | RemoveEntry Host
              | LookupPort S.ByteString (Maybe PortEntry -> KIO ())
-             | HostList ([S.ByteString] -> KIO ())
 
 -- | An abstract type which can accept commands and sends them to a background
 -- nginx thread.
@@ -110,9 +108,6 @@ start Settings{..} = do
             LookupPort h f -> do
                 NState {..} <- S.get
                 lift $ f $ Map.lookup h nsEntries
-            HostList f -> do
-                NState {..} <- S.get
-                lift $ f $ Map.keys nsEntries
     return $ Right $ PortManager $ writeChan chan
   where
     change f = do
@@ -157,10 +152,4 @@ lookupPort :: PortManager -> S.ByteString -> KIO (Maybe PortEntry)
 lookupPort (PortManager f) h = do
     x <- newEmptyMVar
     f $ LookupPort h $ \p -> putMVar x p
-    takeMVar x
-
-hostList :: PortManager -> KIO [S.ByteString]
-hostList (PortManager f) = do
-    x <- newEmptyMVar
-    f $ HostList $ \p -> putMVar x p
     takeMVar x

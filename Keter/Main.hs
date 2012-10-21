@@ -87,14 +87,12 @@ keter input' = do
     _ <- forkIO $ Proxy.reverseProxy
             (serverSettings configPort configHost)
             (runKIOPrint . PortMan.lookupPort portman)
-            (runKIOPrint $ PortMan.hostList portman)
     case configSsl of
         Nothing -> return ()
         Just ssl -> do
             _ <- forkIO $ Proxy.reverseProxySsl
                     (Proxy.setDir dir ssl)
                     (runKIOPrint . PortMan.lookupPort portman)
-                    (runKIOPrint $ PortMan.hostList portman)
             return ()
 
     mappMap <- M.newMVar Map.empty

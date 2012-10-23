@@ -10,7 +10,7 @@ First, install PostgreSQL
 
     sudo apt-get install postgresql
 
-Second, build the `keter` binary and place it at `/usr/bin`.
+Second, build the `keter` binary and place it at `/opt/keter/bin`.
 
 Third, create a Keter config file:
 
@@ -36,7 +36,7 @@ respawn
 
 console none
 
-exec /usr/bin/keter /opt/keter/etc/keter-config.yaml
+exec /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
 ```
 
 Finally, start the job for the first time:

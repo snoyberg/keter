@@ -1,5 +1,16 @@
 Deployment system for Yesod (and other Haskell) web apps.
 
+## Quick Start
+
+Do get Keter up-and-running quickly on an Ubuntu system, run:
+
+    wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
+
+(Note: you may need to run the above command twice, if the shell exits after
+`apt-get` but before running the rest of its instructions.) This will download
+and build Keter from source and get it running with a
+default configuration.
+
 ## Setup
 
 Instructions are for an Ubuntu system. Eventually, I hope to provide a PPA for

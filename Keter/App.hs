@@ -10,7 +10,7 @@ module Keter.App
     , Keter.App.terminate
     ) where
 
-import Prelude (IO, Eq, Ord)
+import Prelude (IO, Eq, Ord, fst, snd)
 import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
@@ -37,6 +37,8 @@ import System.Posix.IO.ByteString (fdWriteBuf, closeFd, FdOption (CloseOnExec), 
 import Foreign.Ptr (castPtr)
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Data.Text.Encoding (encodeUtf8)
+import System.Posix.Types (UserID, GroupID)
+import System.Posix.Files.ByteString (setOwnerAndGroup, setFdOwnerAndGroup)
 
 data Config = Config
     { configExec :: F.FilePath
@@ -89,10 +91,11 @@ data Command = Reload | Terminate
 newtype App = App (Command -> KIO ())
 
 unpackBundle :: TempFolder
+             -> Maybe (UserID, GroupID)
              -> F.FilePath
              -> Appname
              -> KIO (Either SomeException (FilePath, Config))
-unpackBundle tf bundle appname = do
+unpackBundle tf muid bundle appname = do
     elbs <- readFileLBS bundle
     case elbs of
         Left e -> return $ Left e
@@ -103,7 +106,7 @@ unpackBundle tf bundle appname = do
                 Right dir -> do
                     log $ UnpackingBundle bundle dir
                     let rest = do
-                            unpackTar dir $ Tar.read $ decompress lbs
+                            unpackTar muid dir $ Tar.read $ decompress lbs
                             let configFP = dir F.</> "config" F.</> "keter.yaml"
                             mconfig <- decodeFile $ F.encodeString configFP
                             config <-
@@ -129,8 +132,9 @@ fixStaticHost dir sh =
     fp0 = shRoot sh
     fp = F.collapse $ dir F.</> "config" F.</> fp0
 
-unpackTar :: FilePath -> Tar.Entries Tar.FormatError -> IO ()
-unpackTar dir =
+unpackTar :: Maybe (UserID, GroupID)
+          -> FilePath -> Tar.Entries Tar.FormatError -> IO ()
+unpackTar muid dir =
     loop . Tar.checkSecurity
   where
     loop Tar.Done = return ()
@@ -142,6 +146,9 @@ unpackTar dir =
         case Tar.entryContent e of
             Tar.NormalFile lbs _ -> do
                 createTree $ F.directory fp
+                case muid of
+                    Nothing -> return ()
+                    Just (uid, gid) -> setOwnerAndGroup (F.encode $ F.directory fp) uid gid
                 let write fd bs = unsafeUseAsCStringLen bs $ \(ptr, len) -> do
                         _ <- fdWriteBuf fd (castPtr ptr) (fromIntegral len)
                         return ()
@@ -149,12 +156,16 @@ unpackTar dir =
                     (do
                         fd <- createFile (F.encode fp) $ Tar.entryPermissions e
                         setFdOption fd CloseOnExec True
+                        case muid of
+                            Nothing -> return ()
+                            Just (uid, gid) -> setFdOwnerAndGroup fd uid gid
                         return fd)
                     closeFd
                     (\fd -> mapM_ yield (L.toChunks lbs) $$ CL.mapM_ (write fd))
             _ -> return ()
 
 start :: TempFolder
+      -> Maybe (Text, (UserID, GroupID))
       -> PortManager
       -> Postgres
       -> Logger
@@ -162,7 +173,7 @@ start :: TempFolder
       -> F.FilePath -- ^ app bundle
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
-start tf portman postgres logger appname bundle removeFromList = do
+start tf muid portman postgres logger appname bundle removeFromList = do
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
@@ -191,6 +202,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                 : ("APPROOT", (if configSsl config then "https://" else "http://") ++ configHost config)
                 : otherEnv
         run
+            (fst <$> muid)
             ("config" </> configExec config)
             dir
             (configArgs config)
@@ -198,7 +210,7 @@ start tf portman postgres logger appname bundle removeFromList = do
             logger
 
     rest chan = forkKIO $ do
-        mres <- unpackBundle tf bundle appname
+        mres <- unpackBundle tf (snd <$> muid) bundle appname
         case mres of
             Left e -> do
                 $logEx e
@@ -237,7 +249,7 @@ start tf portman postgres logger appname bundle removeFromList = do
                 terminateOld
                 detach logger
             Reload -> do
-                mres <- unpackBundle tf bundle appname
+                mres <- unpackBundle tf (snd <$> muid) bundle appname
                 case mres of
                     Left e -> do
                         log $ InvalidBundle bundle e

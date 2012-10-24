@@ -3,6 +3,7 @@
 root: .
 host: "*4"
 port: 80
+setuid: ubuntu
 ssl:
     host: "*4"
     key: key.pem

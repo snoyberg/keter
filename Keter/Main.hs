@@ -2,6 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Keter.Main
     ( keter
     ) where
@@ -23,7 +24,7 @@ import qualified System.INotify as I
 import Control.Monad (forever, mzero)
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
-import Control.Exception (throwIO)
+import Control.Exception (throwIO, try)
 import qualified Prelude as P
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (getCurrentTime)
@@ -32,6 +33,8 @@ import Data.Maybe (fromMaybe)
 import Data.Yaml (decodeFile, FromJSON (parseJSON), Value (Object), (.:), (.:?), (.!=))
 import Control.Applicative ((<$>), (<*>))
 import Data.String (fromString)
+import System.Posix.User (userID, userGroupID, getUserEntryForName, getUserEntryForID, userName)
+import qualified Data.Text.Read
 
 data Config = Config
     { configDir :: F.FilePath
@@ -39,6 +42,7 @@ data Config = Config
     , configHost :: HostPreference
     , configPort :: PortMan.Port
     , configSsl :: Maybe Proxy.TLSConfigNoDir
+    , configSetuid :: Maybe Text
     }
 instance Default Config where
     def = Config
@@ -47,6 +51,7 @@ instance Default Config where
         , configHost = "*"
         , configPort = 80
         , configSsl = Nothing
+        , configSetuid = Nothing
         }
 
 instance FromJSON Config where
@@ -56,6 +61,7 @@ instance FromJSON Config where
         <*> (fmap fromString <$> o .:? "host") .!= configHost def
         <*> o .:? "port" .!= configPort def
         <*> o .:? "ssl"
+        <*> o .:? "setuid"
     parseJSON _ = mzero
 
 keter :: P.FilePath -- ^ root directory or config file
@@ -67,6 +73,18 @@ keter input' = do
             then decodeFile input' >>= maybe (P.error "Invalid config file") return
             else return def { configDir = input }
     let dir = F.directory input F.</> configDir
+
+    muid <-
+        case configSetuid of
+            Nothing -> return Nothing
+            Just t -> do
+                x <- try $
+                    case Data.Text.Read.decimal t of
+                        Right (i, "") -> getUserEntryForID i
+                        _ -> getUserEntryForName $ T.unpack t
+                case x of
+                    Left (_ :: SomeException) -> P.error $ T.unpack $ "Invalid user ID: " ++ t
+                    Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
     portman <- runThrow $ PortMan.start configPortMan
     tf <- runThrow $ TempFolder.setup $ dir </> "temp"
@@ -124,6 +142,7 @@ keter input' = do
                         let logger = fromMaybe Logger.dummy mlogger
                         (app, rest) <- App.start
                             tf
+                            muid
                             portman
                             postgres
                             logger

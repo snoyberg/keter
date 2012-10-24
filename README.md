@@ -27,6 +27,7 @@ Third, create a Keter config file:
 root: ..
 # host: host to bind to
 # port: port to listen on
+# setuid: myname
 # ssl:
 #   host:
 #   port:

@@ -1,5 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 module Keter.Process
     ( run
     , terminate
@@ -20,13 +21,14 @@ import Control.Exception (onException)
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
 -- | Run the given command, restarting if the process dies.
-run :: FilePath -- ^ executable
+run :: Maybe Text -- ^ setuid
+    -> FilePath -- ^ executable
     -> FilePath -- ^ working directory
     -> [String] -- ^ command line parameter
     -> [(String, String)] -- ^ environment
     -> Logger
     -> KIO Process
-run exec dir args env logger = do
+run msetuid exec dir args env logger = do
     mstatus <- newMVar NeedsRestart
     let loop mlast = do
             next <- modifyMVar mstatus $ \status ->
@@ -41,9 +43,15 @@ run exec dir args env logger = do
                             _ -> return ()
                         (pout, sout) <- mkLogPipe
                         (perr, serr) <- mkLogPipe
+                        let cmd0 = encode exec
+                            args0 = map encodeUtf8 args
+                            (cmd, args') =
+                                case msetuid of
+                                    Nothing -> (cmd0, args0)
+                                    Just setuid -> ("sudo", "-E" : "-u" : encodeUtf8 setuid : "--" : cmd0 : args0)
                         res <- liftIO $ forkExecuteFile
-                            (encode exec)
-                            (map encodeUtf8 args)
+                            cmd
+                            args'
                             (Just $ map (encodeUtf8 *** encodeUtf8) env)
                             (Just $ encode dir)
                             (Just $ return ())

@@ -10,7 +10,15 @@ First, install PostgreSQL
 
     sudo apt-get install postgresql
 
-Second, build the `keter` binary and place it at `/opt/keter/bin`.
+Second, build the `keter` binary and place it at `/opt/keter/bin`. To do so,
+you'll need to install the Haskell Platform, and can then build with `cabal`.
+This would look something like:
+
+    sudo apt-get install haskell-platform
+    cabal update
+    cabal install keter
+    sudo mkdir -p /opt/keter/bin
+    sudo cp ~/.cabal/bin/keter /opt/keter/bin
 
 Third, create a Keter config file:
 
@@ -42,6 +50,12 @@ exec /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
 Finally, start the job for the first time:
 
     sudo start keter
+
+Optionally, you may wish to change the owner on the `/opt/keter/incoming`
+folder to your user account, so that you can deploy without `sudo`ing.
+
+    sudo mkdir -p /opt/keter/incoming
+    sudo chown $USER /opt/keter/incoming
 
 ## Bundles
 

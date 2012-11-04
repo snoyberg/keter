@@ -10,6 +10,7 @@ module Keter.Proxy
     ) where
 
 import Prelude hiding ((++), FilePath)
+import Keter.Prelude ((++))
 import Data.Conduit
 import Data.Conduit.Network
 import Data.ByteString (ByteString)
@@ -37,12 +38,14 @@ withClient portLookup =
     rawProxyTo getDest
   where
     getDest headers = do
-        mport <- maybe (return Nothing) portLookup $ lookup "host" headers
+        mport <- maybe (return Nothing) portLookup mhost
         case mport of
-            Nothing -> return $ Left $ srcToApp $ toResponse []
+            Nothing -> return $ Left $ srcToApp $ toResponse mhost
             Just (PEPort port) -> return $ Right $ ProxyDest "127.0.0.1" port
             Just (PEStatic root) -> return $ Left $ waiToRaw $ staticApp $ defaultFileServerSettings root
             Just (PERedirect host) -> return $ Left $ waiToRaw $ redirectApp host
+      where
+        mhost = lookup "host" headers
 
 redirectApp :: ByteString -> Wai.Application
 redirectApp host req = return $ Wai.responseLBS
@@ -60,6 +63,8 @@ redirectApp host req = return $ Wai.responseLBS
 srcToApp :: Monad m => Source m ByteString -> Application m
 srcToApp src appdata = src $$ appSink appdata
 
-toResponse :: Monad m => [ByteString] -> Source m ByteString
-toResponse hosts =
-    yield "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided is not recognized.</p></body></html>"
+toResponse :: Monad m => Maybe ByteString -> Source m ByteString
+toResponse Nothing =
+    yield "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
+toResponse (Just host) =
+    yield $ "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>" ++ host ++ "</code>, is not recognized.</p></body></html>"

@@ -59,7 +59,12 @@ extern int launch_process_tracker(void) {
     else if (child == 0) {
         unsigned int buffer[2];
         struct node *n = 0, *n2;
+
         close(pipes[1]);
+
+        // Prevent monitoring programs like Upstart from killing this
+        // new process along with the parent
+        setpgid(0, 0);
 
         while (read(pipes[0], buffer, sizeof(unsigned int) * 2) > 0) {
             if (buffer[1]) {

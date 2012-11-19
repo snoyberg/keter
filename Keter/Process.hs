@@ -8,6 +8,7 @@ module Keter.Process
     ) where
 
 import Keter.Prelude
+import Keter.ProcessTracker
 import Keter.Logger (Logger, attach, LogPipes (..), mkLogPipe)
 import Data.Time (diffUTCTime)
 import Data.Conduit.Process.Unix (forkExecuteFile, waitForProcess, killProcess, terminateProcess)
@@ -21,14 +22,15 @@ import Control.Exception (onException)
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
 -- | Run the given command, restarting if the process dies.
-run :: Maybe Text -- ^ setuid
+run :: ProcessTracker
+    -> Maybe Text -- ^ setuid
     -> FilePath -- ^ executable
     -> FilePath -- ^ working directory
     -> [String] -- ^ command line parameter
     -> [(String, String)] -- ^ environment
     -> Logger
     -> KIO Process
-run msetuid exec dir args env logger = do
+run processTracker msetuid exec dir args env logger = do
     mstatus <- newMVar NeedsRestart
     let loop mlast = do
             next <- modifyMVar mstatus $ \status ->
@@ -67,7 +69,10 @@ run msetuid exec dir args env logger = do
                                 attach logger $ LogPipes pout perr
                                 log $ ProcessCreated exec
                                 return (Running pid, do
-                                    _ <- liftIO $ waitForProcess pid `onException` killProcess pid
+                                    _ <- liftIO $ do
+                                        unregister <- trackProcess processTracker pid
+                                        _ <- waitForProcess pid `onException` killProcess pid
+                                        unregister
                                     loop (Just now))
             next
     forkKIO $ loop Nothing

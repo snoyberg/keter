@@ -10,6 +10,7 @@ module Keter.Main
 import Keter.Prelude hiding (getCurrentTime)
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
+import qualified Keter.ProcessTracker as ProcessTracker
 import qualified Keter.Postgres as Postgres
 import qualified Keter.LogFile as LogFile
 import qualified Keter.Logger as Logger
@@ -86,6 +87,7 @@ keter input' = do
                     Left (_ :: SomeException) -> P.error $ T.unpack $ "Invalid user ID: " ++ t
                     Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
+    processTracker <- ProcessTracker.initProcessTracker
     portman <- runThrow $ PortMan.start configPortMan
     tf <- runThrow $ TempFolder.setup $ dir </> "temp"
     postgres <- runThrow $ Postgres.load def $ dir </> "etc" </> "postgres.yaml"
@@ -143,6 +145,7 @@ keter input' = do
                         (app, rest) <- App.start
                             tf
                             muid
+                            processTracker
                             portman
                             postgres
                             logger

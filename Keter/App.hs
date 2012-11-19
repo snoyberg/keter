@@ -15,6 +15,7 @@ import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
 import Keter.Process
+import Keter.ProcessTracker (ProcessTracker)
 import Keter.Logger (Logger, detach)
 import Keter.PortManager hiding (start)
 import qualified Codec.Archive.Tar as Tar
@@ -166,6 +167,7 @@ unpackTar muid dir =
 
 start :: TempFolder
       -> Maybe (Text, (UserID, GroupID))
+      -> ProcessTracker
       -> PortManager
       -> Postgres
       -> Logger
@@ -173,7 +175,7 @@ start :: TempFolder
       -> F.FilePath -- ^ app bundle
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
-start tf muid portman postgres logger appname bundle removeFromList = do
+start tf muid processTracker portman postgres logger appname bundle removeFromList = do
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
@@ -202,6 +204,7 @@ start tf muid portman postgres logger appname bundle removeFromList = do
                 : ("APPROOT", (if configSsl config then "https://" else "http://") ++ configHost config)
                 : otherEnv
         run
+            processTracker
             (fst <$> muid)
             ("config" </> configExec config)
             dir

@@ -23,6 +23,7 @@ import qualified Codec.Archive.Tar.Check as Tar
 import qualified Codec.Archive.Tar.Entry as Tar
 import Codec.Compression.GZip (decompress)
 import qualified Filesystem.Path.CurrentOS as F
+import qualified Filesystem as F
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>))
 import qualified Network
@@ -40,6 +41,7 @@ import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
 import System.Posix.Files.ByteString (setOwnerAndGroup, setFdOwnerAndGroup)
+import Control.Monad (unless)
 
 data Config = Config
     { configExec :: F.FilePath
@@ -101,7 +103,7 @@ unpackBundle tf muid bundle appname = do
     case elbs of
         Left e -> return $ Left e
         Right lbs -> do
-            edir <- getFolder tf appname
+            edir <- getFolder muid tf appname
             case edir of
                 Left e -> return $ Left e
                 Right dir -> do
@@ -133,6 +135,19 @@ fixStaticHost dir sh =
     fp0 = shRoot sh
     fp = F.collapse $ dir F.</> "config" F.</> fp0
 
+-- | Create a directory tree, setting the uid and gid of all newly created
+-- folders.
+createTreeUID :: UserID -> GroupID -> FilePath -> IO ()
+createTreeUID uid gid =
+    go
+  where
+    go fp = do
+        exists <- F.isDirectory fp
+        unless exists $ do
+            go $ F.parent fp
+            F.createDirectory False fp
+            setOwnerAndGroup (F.encode fp) uid gid
+
 unpackTar :: Maybe (UserID, GroupID)
           -> FilePath -> Tar.Entries Tar.FormatError -> IO ()
 unpackTar muid dir =
@@ -146,10 +161,9 @@ unpackTar muid dir =
         let fp = dir </> decodeString (Tar.entryPath e)
         case Tar.entryContent e of
             Tar.NormalFile lbs _ -> do
-                createTree $ F.directory fp
                 case muid of
-                    Nothing -> return ()
-                    Just (uid, gid) -> setOwnerAndGroup (F.encode $ F.directory fp) uid gid
+                    Nothing -> createTree $ F.directory fp
+                    Just (uid, gid) -> createTreeUID uid gid $ F.directory fp
                 let write fd bs = unsafeUseAsCStringLen bs $ \(ptr, len) -> do
                         _ <- fdWriteBuf fd (castPtr ptr) (fromIntegral len)
                         return ()

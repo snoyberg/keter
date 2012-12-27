@@ -12,6 +12,9 @@ import Keter.Prelude
 import Data.Word (Word)
 import Keter.Postgres (Appname)
 import qualified Data.IORef as I
+import System.Posix.Files.ByteString (setOwnerAndGroup)
+import System.Posix.Types (UserID, GroupID)
+import qualified Filesystem.Path.CurrentOS as F
 
 data TempFolder = TempFolder
     { tfRoot :: FilePath
@@ -26,8 +29,13 @@ setup fp = liftIO $ do
     c <- I.newIORef minBound
     return $ TempFolder fp c
 
-getFolder :: TempFolder -> Appname -> KIO (Either SomeException FilePath)
-getFolder TempFolder {..} appname = do
+getFolder :: Maybe (UserID, GroupID) -> TempFolder -> Appname -> KIO (Either SomeException FilePath)
+getFolder muid TempFolder {..} appname = do
     !i <- atomicModifyIORef tfCounter $ \i -> (succ i, i)
     let fp = tfRoot </> fromText (appname ++ "-" ++ show i)
-    liftIO (createTree fp >> return fp)
+    liftIO $ do
+        createTree fp
+        case muid of
+            Nothing -> return ()
+            Just (uid, gid) -> setOwnerAndGroup (F.encode fp) uid gid
+        return fp

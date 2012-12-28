@@ -40,4 +40,4 @@ sudo mv /tmp/keter.conf /etc/init
 sudo start keter
 
 sudo mkdir -p /opt/keter/incoming
-sudo chown $USER /opt/keter/incoming
+sudo chown "$USER" /opt/keter/incoming

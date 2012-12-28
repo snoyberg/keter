@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/bin/bash
+set -o errexit -o nounset -o xtrace
 
 sudo apt-get install postgresql haskell-platform
 

@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/bin/bash
+set -o errexit -o nounset -o xtrace
 
 sudo apt-get install postgresql haskell-platform
 
@@ -39,4 +40,4 @@ sudo mv /tmp/keter.conf /etc/init
 sudo start keter
 
 sudo mkdir -p /opt/keter/incoming
-sudo chown $USER /opt/keter/incoming
+sudo chown "$USER" /opt/keter/incoming

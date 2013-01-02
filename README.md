@@ -79,7 +79,7 @@ with a `.keter` filename extension and which has one special file:
 exec: ../dist/build/yesodweb/yesodweb
 args:
     - production
-host: www.yesodweb.com
+host: www.yesodweb.com # can replace with "*" to be the default app
 ssl: false # true would use https scheme for approot
 
 # Additional hosts your app will listen on, without affecting approot.

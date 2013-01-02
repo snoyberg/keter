@@ -26,7 +26,7 @@ import Keter.Prelude
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Map as Map
-import Control.Monad (forever, mzero)
+import Control.Monad (forever, mzero, mplus)
 import Data.ByteString.Char8 ()
 import qualified Network
 import qualified Data.ByteString as S
@@ -44,6 +44,8 @@ data Command = GetPort (Either SomeException Port -> KIO ())
              | ReleasePort Port
              | AddEntry Host PortEntry
              | RemoveEntry Host
+             | AddDefaultEntry PortEntry
+             | RemoveDefaultEntry
              | LookupPort S.ByteString (Maybe PortEntry -> KIO ())
 
 -- | An abstract type which can accept commands and sends them to a background
@@ -72,7 +74,7 @@ instance FromJSON Settings where
 start :: Settings -> KIO (Either SomeException PortManager)
 start Settings{..} = do
     chan <- newChan
-    forkKIO $ flip S.evalStateT (NState portRange [] Map.empty) $ forever $ do
+    forkKIO $ flip S.evalStateT freshState $ forever $ do
         command <- lift $ readChan chan
         case command of
             GetPort f -> do
@@ -105,20 +107,24 @@ start Settings{..} = do
                 S.modify $ \ns -> ns { nsRecycled = p : nsRecycled ns }
             AddEntry h e -> change $ Map.insert (encodeUtf8 h) e
             RemoveEntry h -> change $ Map.delete $ encodeUtf8 h
+            AddDefaultEntry e -> S.modify $ \ns -> ns { nsDefault = Just e }
+            RemoveDefaultEntry -> S.modify $ \ns -> ns { nsDefault = Nothing }
             LookupPort h f -> do
                 NState {..} <- S.get
-                lift $ f $ Map.lookup h nsEntries
+                lift $ f $ mplus (Map.lookup h nsEntries) nsDefault
     return $ Right $ PortManager $ writeChan chan
   where
     change f = do
         ns <- S.get
         let entries = f $ nsEntries ns
         S.put $ ns { nsEntries = entries }
+    freshState = NState portRange [] Map.empty Nothing
 
 data NState = NState
     { nsAvail :: [Port]
     , nsRecycled :: [Port]
     , nsEntries :: Map.Map S.ByteString PortEntry
+    , nsDefault :: Maybe PortEntry
     }
 
 -- | Gets an unassigned port number.
@@ -140,13 +146,17 @@ releasePort (PortManager f) p = f $ ReleasePort p
 -- second point is important: it is how we achieve zero downtime transitions
 -- between an old and new version of an app.
 addEntry :: PortManager -> Host -> PortEntry -> KIO ()
-addEntry (PortManager f) h p = f $ AddEntry h p
+addEntry (PortManager f) h p = f $ case h of
+    "*" -> AddDefaultEntry p
+    _   -> AddEntry h p
 
 data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString
 
 -- | Remove an entry from the configuration and reload nginx.
 removeEntry :: PortManager -> Host -> KIO ()
-removeEntry (PortManager f) h = f $ RemoveEntry h
+removeEntry (PortManager f) h = f $ case h of
+    "*" -> RemoveDefaultEntry
+    _   -> RemoveEntry h
 
 lookupPort :: PortManager -> S.ByteString -> KIO (Maybe PortEntry)
 lookupPort (PortManager f) h = do

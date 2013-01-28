@@ -25,7 +25,7 @@ import Codec.Compression.GZip (decompress)
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
 import Data.Yaml
-import Control.Applicative ((<$>), (<*>))
+import Control.Applicative ((<$>), (<*>), (<|>), pure)
 import qualified Network
 import Data.Maybe (fromMaybe, mapMaybe)
 import Control.Exception (onException, throwIO, bracket)
@@ -43,25 +43,34 @@ import System.Posix.Types (UserID, GroupID)
 import System.Posix.Files.ByteString (setOwnerAndGroup, setFdOwnerAndGroup)
 import Control.Monad (unless)
 
-data Config = Config
+data AppConfig = AppConfig
     { configExec :: F.FilePath
     , configArgs :: [Text]
-    , configHost :: String
+    , configHost :: Text
     , configPostgres :: Bool
     , configSsl :: Bool
     , configExtraHosts :: Set String
-    , configStaticHosts :: Set StaticHost
-    , configRedirects :: Set Redirect
     }
 
-instance FromJSON Config where
-    parseJSON (Object o) = Config
+instance FromJSON AppConfig where
+    parseJSON (Object o) = AppConfig
         <$> (F.fromText <$> o .: "exec")
         <*> o .:? "args" .!= []
         <*> o .: "host"
         <*> o .:? "postgres" .!= False
         <*> o .:? "ssl" .!= False
         <*> o .:? "extra-hosts" .!= Set.empty
+    parseJSON _ = fail "Wanted an object"
+
+data Config = Config
+    { configApp :: Maybe AppConfig
+    , configStaticHosts :: Set StaticHost
+    , configRedirects :: Set Redirect
+    }
+
+instance FromJSON Config where
+    parseJSON (Object o) = Config
+        <$> ((Just <$> parseJSON (Object o)) <|> pure Nothing)
         <*> o .:? "static-hosts" .!= Set.empty
         <*> o .:? "redirects" .!= Set.empty
     parseJSON _ = fail "Wanted an object"
@@ -233,33 +242,43 @@ start tf muid processTracker portman postgres logger appname bundle removeFromLi
                 $logEx e
                 removeFromList
             Right (dir, config) -> do
-                eport <- getPort portman
-                case eport of
-                    Left e -> do
-                        $logEx e
-                        removeFromList
-                    Right port -> do
-                        process <- runApp port dir config
-                        b <- testApp port
-                        if b
-                            then do
-                                addEntry portman (configHost config) $ PEPort port
-                                mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts config
-                                mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
-                                mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
-                                loop chan dir process port config
-                            else do
+                let common = do
+                        mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
+                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
+                case configApp config of
+                    Nothing -> do
+                        common
+                        loop chan dir config Nothing
+                    Just appconfig -> do
+                        eport <- getPort portman
+                        case eport of
+                            Left e -> do
+                                $logEx e
                                 removeFromList
-                                releasePort portman port
-                                Keter.Process.terminate process
+                            Right port -> do
+                                process <- runApp port dir appconfig
+                                b <- testApp port
+                                if b
+                                    then do
+                                        addEntry portman (configHost appconfig) $ PEPort port
+                                        mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts appconfig
+                                        common
+                                        loop chan dir config $ Just (process, port)
+                                    else do
+                                        removeFromList
+                                        releasePort portman port
+                                        Keter.Process.terminate process
 
-    loop chan dirOld processOld portOld configOld = do
+    loop chan dirOld configOld mprocPortOld = do
         command <- readChan chan
         case command of
             Terminate -> do
                 removeFromList
-                removeEntry portman $ configHost configOld
-                mapM_ (removeEntry portman) $ Set.toList $ configExtraHosts configOld
+                case configApp configOld of
+                    Nothing -> return ()
+                    Just appconfig -> do
+                        removeEntry portman $ configHost appconfig
+                        mapM_ (removeEntry portman) $ Set.toList $ configExtraHosts appconfig
                 mapM_ (removeEntry portman) $ map shHost $ Set.toList $ configStaticHosts configOld
                 mapM_ (removeEntry portman) $ map redFrom $ Set.toList $ configRedirects configOld
                 log $ TerminatingApp appname
@@ -270,35 +289,46 @@ start tf muid processTracker portman postgres logger appname bundle removeFromLi
                 case mres of
                     Left e -> do
                         log $ InvalidBundle bundle e
-                        loop chan dirOld processOld portOld configOld
+                        loop chan dirOld configOld mprocPortOld
                     Right (dir, config) -> do
                         eport <- getPort portman
                         case eport of
                             Left e -> $logEx e
                             Right port -> do
-                                process <- runApp port dir config
-                                b <- testApp port
-                                if b
-                                    then do
-                                        addEntry portman (configHost config) $ PEPort port
-                                        mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts config
+                                let common = do
                                         mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
                                         mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
-                                        when (configHost config /= configHost configOld) $
-                                            removeEntry portman $ configHost configOld
-                                        log $ FinishedReloading appname
-                                        terminateOld
-                                        loop chan dir process port config
-                                    else do
-                                        releasePort portman port
-                                        Keter.Process.terminate process
-                                        log $ ProcessDidNotStart bundle
-                                        loop chan dirOld processOld portOld configOld
+                                case configApp config of
+                                    Nothing -> do
+                                        common
+                                        loop chan dir config Nothing
+                                    Just appconfig -> do
+                                        process <- runApp port dir appconfig
+                                        b <- testApp port
+                                        if b
+                                            then do
+                                                addEntry portman (configHost appconfig) $ PEPort port
+                                                mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts appconfig
+                                                common
+                                                case configApp configOld of
+                                                    Just appconfigOld | configHost appconfig /= configHost appconfigOld ->
+                                                        removeEntry portman $ configHost appconfigOld
+                                                    _ -> return ()
+                                                log $ FinishedReloading appname
+                                                terminateOld
+                                                loop chan dir config $ Just (process, port)
+                                            else do
+                                                releasePort portman port
+                                                Keter.Process.terminate process
+                                                log $ ProcessDidNotStart bundle
+                                                loop chan dirOld configOld mprocPortOld
       where
         terminateOld = forkKIO $ do
             threadDelay $ 20 * 1000 * 1000
             log $ TerminatingOldProcess appname
-            Keter.Process.terminate processOld
+            case mprocPortOld of
+                Nothing -> return ()
+                Just (processOld, _) -> Keter.Process.terminate processOld
             threadDelay $ 60 * 1000 * 1000
             log $ RemovingOldFolder dirOld
             res <- liftIO $ removeTree dirOld

@@ -1,7 +1,11 @@
 #!/bin/bash
 set -o errexit -o nounset -o xtrace
 
-sudo apt-get install postgresql haskell-platform
+# Quick start:
+# wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
+
+sudo apt-get update
+sudo apt-get install postgresql haskell-platform -y
 
 cabal update
 cabal install keter

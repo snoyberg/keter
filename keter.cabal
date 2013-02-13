@@ -28,9 +28,9 @@ Library
                      , data-default
                      , filepath
                      , zlib
-                     , tar
                      , network
                      , time
+                     , tar                       >= 0.4
                      , template-haskell
                      , blaze-builder             >= 0.3           && < 0.4
                      , yaml                      >= 0.7           && < 0.9

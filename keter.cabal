@@ -1,5 +1,5 @@
 Name:                keter
-Version:             0.3.5.1
+Version:             0.3.5.2
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
@@ -38,9 +38,9 @@ Library
                      , hinotify                  >= 0.3           && < 0.4
                      , system-filepath           >= 0.4           && < 0.5
                      , system-fileio             >= 0.3           && < 0.4
-                     , conduit                   >= 0.5           && < 0.6
-                     , network-conduit           >= 0.6           && < 0.7
-                     , network-conduit-tls       >= 0.6           && < 0.7
+                     , conduit                   >= 0.5
+                     , network-conduit           >= 0.6
+                     , network-conduit-tls       >= 0.6
                      , http-reverse-proxy        >= 0.1.0.2       && < 0.2
                      , unix-process-conduit      >= 0.2           && < 0.3
                      , unix                      >= 2.5           && < 2.7

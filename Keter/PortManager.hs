@@ -150,7 +150,7 @@ addEntry (PortManager f) h p = f $ case h of
     "*" -> AddDefaultEntry p
     _   -> AddEntry h p
 
-data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString
+data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy Text Port
 
 -- | Remove an entry from the configuration and reload nginx.
 removeEntry :: PortManager -> Host -> KIO ()

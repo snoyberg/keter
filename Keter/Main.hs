@@ -36,6 +36,8 @@ import Control.Applicative ((<$>), (<*>))
 import Data.String (fromString)
 import System.Posix.User (userID, userGroupID, getUserEntryForName, getUserEntryForID, userName)
 import qualified Data.Text.Read
+import Data.Set (Set)
+import qualified Data.Set as Set
 
 data Config = Config
     { configDir :: F.FilePath
@@ -44,7 +46,9 @@ data Config = Config
     , configPort :: PortMan.Port
     , configSsl :: Maybe Proxy.TLSConfigNoDir
     , configSetuid :: Maybe Text
+    , configReverseProxy :: Set ReverseProxy
     }
+
 instance Default Config where
     def = Config
         { configDir = "."
@@ -53,6 +57,7 @@ instance Default Config where
         , configPort = 80
         , configSsl = Nothing
         , configSetuid = Nothing
+        , configReverseProxy = Set.empty
         }
 
 instance FromJSON Config where
@@ -63,7 +68,21 @@ instance FromJSON Config where
         <*> o .:? "port" .!= configPort def
         <*> o .:? "ssl"
         <*> o .:? "setuid"
+        <*> o .:? "reverse-proxy" .!= Set.empty
     parseJSON _ = mzero
+
+data ReverseProxy = ReverseProxy
+    { reversedHost :: Text
+    , reversedPort :: Int
+    , reversingHost :: Text
+    } deriving (P.Eq, P.Ord)
+
+instance FromJSON ReverseProxy where
+       parseJSON (Object o) = ReverseProxy
+           <$> o .: "reversed-host"
+           <*> o .: "reversed-port"
+           <*> o .: "reversing-host"
+       parseJSON _ = fail "Wanted an object"
 
 keter :: P.FilePath -- ^ root directory or config file
       -> P.IO ()
@@ -168,6 +187,10 @@ keter input' = do
     bundles <- fmap (filter isKeter) $ listDirectory incoming
     runKIO' $ mapM_ addApp bundles
 
+    let staticReverse r =
+          PortMan.addEntry portman (reversingHost r) $ PortMan.PEReverseProxy (reversedHost r) (reversedPort r)
+    runKIO' $ mapM_ staticReverse (Set.toList configReverseProxy)
+    
     let events = [I.MoveIn, I.MoveOut, I.Delete, I.CloseWrite]
     i <- I.initINotify
     _ <- I.addWatch i events (toString incoming) $ \e -> do

@@ -44,6 +44,10 @@ root: ..
 #   port:
 #   key:
 #   certificate:
+# reverse-proxy:
+#  - reversed-host: some-internal-site
+#    reversed-port: 80
+#    reversing-host: internal.example.com
 ```
 
 Fourth, set up an Upstart job to start `keter` when your system boots.

@@ -11,3 +11,5 @@ temp/
 test/app
 incoming/foo/hello
 log/
+.cabal-sandbox/
+cabal.sandbox.config

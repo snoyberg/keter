@@ -48,11 +48,20 @@ root: ..
 #  - reversed-host: some-internal-site
 #    reversed-port: 80
 #    reversing-host: internal.example.com
-#    ssl: whether the reversed host uses SSL
-#    rewrite-response: # can rewrite headers from reverse proxied hosts
+#    ssl: whether the reversed host uses SSL (defaults to False)
+#    # response headers can be rewritten as follows:
+#    rewrite-response:
 #      - header: Location
-#        from: ^http://example.example.com
-#        to: https://example.example.com
+#        from: ^http://internal-service.example.com
+#        to: https://service.example.com
+#    # request headers can be rewritten as well, though less likely
+#    # to be used.
+#    rewrite-request:
+#      - header: X-SomeApplicationHeader
+#        from: ^https://internal-service.example.com
+#        to: http://service.example.com
+# # Header rewriting supports POSIX regular expressions in the "from" and
+# # supports referencing matched groups in the "to" with "\1", "\2", ...
 ```
 
 Fourth, set up an Upstart job to start `keter` when your system boots.

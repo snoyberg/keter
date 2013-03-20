@@ -8,3 +8,15 @@ ssl:
     host: "*4"
     key: key.pem
     certificate: certificate.pem
+# Keter can act as a reverse proxy for other servers in your network
+# so that it can replace a front-end nginx or apache server. Example:
+# reverse-proxy:
+#   - reversed-host: internal-service          # hostname of internal server
+#     reversed-port: 8080                      # port to access
+#     ssl: False                               # whether to use SSL to access internal server
+#     reversing-host: service.example.com      # Keter will reverse proxy requests for this host to your server
+#     # Keter also supports rewriting headers. See the README.md for more information.
+#     rewrite-response:
+#       - header: Location
+#         from: ^http://internal-service.example.com
+#         to: https://service.example.com    

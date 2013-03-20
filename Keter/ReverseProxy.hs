@@ -162,8 +162,5 @@ simpleReverseProxy (RPEntry (ReverseProxyConfig h p _ ssl respRules reqRules) mg
         (map (rewriteHeader respRuleMap) (responseHeaders response))
         (mapOutput (Chunk . fromByteString) body)
   where
-    -- We must implicitly rewrite the Host header of the request.
-    -- reqRules = RewriteRule "Host" (oh <> "(:\\d+)?") (h <> ":" <> showText p)
-    --            `Set.insert` req'
     reqRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) $ Set.toList reqRules
     respRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) $ Set.toList respRules

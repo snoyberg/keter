@@ -22,7 +22,7 @@ import Network.HTTP.ReverseProxy (rawProxyTo, ProxyDest (ProxyDest), waiToRaw)
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
 import qualified Network.Wai as Wai
 import Network.HTTP.Types (status301)
-import Data.Text.Encoding (encodeUtf8)
+import qualified Keter.ReverseProxy as ReverseProxy
 
 -- | Mapping from virtual hostname to port number.
 type PortLookup = ByteString -> IO (Maybe PortEntry)
@@ -45,7 +45,7 @@ withClient portLookup =
             Just (PEPort port) -> return $ Right $ ProxyDest "127.0.0.1" port
             Just (PEStatic root) -> return $ Left $ waiToRaw $ staticApp $ defaultFileServerSettings root
             Just (PERedirect host) -> return $ Left $ waiToRaw $ redirectApp host
-            Just (PEReverseProxy host port) -> return $ Right $ ProxyDest (encodeUtf8 host) port
+            Just (PEReverseProxy rpentry) -> return $ Left $ waiToRaw $ ReverseProxy.simpleReverseProxy rpentry
       where
         mhost = lookup "host" headers
 

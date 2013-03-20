@@ -16,6 +16,7 @@ import qualified Keter.LogFile as LogFile
 import qualified Keter.Logger as Logger
 import qualified Keter.PortManager as PortMan
 import qualified Keter.Proxy as Proxy
+import qualified Keter.ReverseProxy as ReverseProxy
 
 import Data.Conduit.Network (serverSettings, HostPreference)
 import qualified Control.Concurrent.MVar as M
@@ -38,6 +39,7 @@ import System.Posix.User (userID, userGroupID, getUserEntryForName, getUserEntry
 import qualified Data.Text.Read
 import Data.Set (Set)
 import qualified Data.Set as Set
+import qualified Network.HTTP.Conduit as HTTP (newManager)
 
 data Config = Config
     { configDir :: F.FilePath
@@ -46,7 +48,7 @@ data Config = Config
     , configPort :: PortMan.Port
     , configSsl :: Maybe Proxy.TLSConfigNoDir
     , configSetuid :: Maybe Text
-    , configReverseProxy :: Set ReverseProxy
+    , configReverseProxy :: Set ReverseProxy.ReverseProxyConfig
     }
 
 instance Default Config where
@@ -70,19 +72,6 @@ instance FromJSON Config where
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
     parseJSON _ = mzero
-
-data ReverseProxy = ReverseProxy
-    { reversedHost :: Text
-    , reversedPort :: Int
-    , reversingHost :: Text
-    } deriving (P.Eq, P.Ord)
-
-instance FromJSON ReverseProxy where
-       parseJSON (Object o) = ReverseProxy
-           <$> o .: "reversed-host"
-           <*> o .: "reversed-port"
-           <*> o .: "reversing-host"
-       parseJSON _ = fail "Wanted an object"
 
 keter :: P.FilePath -- ^ root directory or config file
       -> P.IO ()
@@ -187,8 +176,11 @@ keter input' = do
     bundles <- fmap (filter isKeter) $ listDirectory incoming
     runKIO' $ mapM_ addApp bundles
 
-    let staticReverse r =
-          PortMan.addEntry portman (reversingHost r) $ PortMan.PEReverseProxy (reversedHost r) (reversedPort r)
+    let staticReverse r = do
+          initMgr <- liftIO $ HTTP.newManager def
+          case initMgr of
+            Left e -> log $ ExceptionThrown "Failed to instantiate manager for reverse proxy." e
+            Right mgr -> PortMan.addEntry portman (ReverseProxy.reversingHost r) $ PortMan.PEReverseProxy $ ReverseProxy.RPEntry r mgr 
     runKIO' $ mapM_ staticReverse (Set.toList configReverseProxy)
     
     let events = [I.MoveIn, I.MoveOut, I.Delete, I.CloseWrite]

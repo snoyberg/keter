@@ -48,6 +48,11 @@ root: ..
 #  - reversed-host: some-internal-site
 #    reversed-port: 80
 #    reversing-host: internal.example.com
+#    ssl: whether the reversed host uses SSL
+#    rewrite-response: # can rewrite headers from reverse proxied hosts
+#      - header: Location
+#        from: ^http://example.example.com
+#        to: https://example.example.com
 ```
 
 Fourth, set up an Upstart job to start `keter` when your system boots.

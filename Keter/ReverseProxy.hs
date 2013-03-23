@@ -151,13 +151,12 @@ hasLegacyMessageLength headers =
 handleLegacyMessage :: Status -> ResponseHeaders -> ResumableSource (ResourceT IO) S.ByteString -> ResourceT IO Wai.Response
 handleLegacyMessage status headers body = do
   liftIO $ print "Pre consume"
-  content <- body $$+- (CL.consume >>= return)
+  content <- body $$+- (CL.isolate 100 =$ CL.consume >>= return)
   liftIO $ print "Post consume"
-  liftIO $ print $ map decodeUtf8 content
   return $
     case content of
       [] -> Wai.ResponseBuilder status headers flush
-      (x:_)  -> Wai.ResponseBuilder status headers (fromByteString x)
+      (x:_)  -> Wai.ResponseBuilder status headers (foldl1 (<>) $ map fromByteString content)
 
 -- Simply map the output of the HTTP-Conduit to a response without unwrapping the base ResourceT.
 mapResponse :: Status -> ResponseHeaders -> (Source (ResourceT IO) S.ByteString, (ResourceT IO) ()) -> Wai.Response

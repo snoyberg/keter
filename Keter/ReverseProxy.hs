@@ -36,11 +36,13 @@ import Data.Char (isDigit)
 
 -- Reverse proxy apparatus
 import Data.Conduit
+import qualified Data.Conduit.List as CL
 import Data.Conduit.Internal (ResumableSource (..))
 
 import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
 import Network.HTTP.Types
+import Control.Monad.IO.Class
 
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text
@@ -147,14 +149,17 @@ hasLegacyMessageLength headers =
 
 -- Pull the first message, throw away and close the connection, and return what was pulled in a single response.
 handleLegacyMessage :: Status -> ResponseHeaders -> ResumableSource (ResourceT IO) S.ByteString -> ResourceT IO Wai.Response
-handleLegacyMessage status headers (ResumableSource body finalizer) = do
-  (rest, maybeContent) <- body $$+ await
-  rest $$+- return ()
+handleLegacyMessage status headers body = do
+  liftIO $ print "Pre consume"
+  content <- body $$+- (CL.consume >>= return)
+  liftIO $ print "Post consume"
+  liftIO $ print $ map decodeUtf8 content
   return $
-    case maybeContent of
-      Nothing -> Wai.ResponseBuilder noContent204 [] (flush)
-      Just content -> Wai.ResponseBuilder status headers (fromByteString content)
+    case content of
+      [] -> Wai.ResponseBuilder status headers flush
+      (x:_)  -> Wai.ResponseBuilder status headers (fromByteString x)
 
+-- Simply map the output of the HTTP-Conduit to a response without unwrapping the base ResourceT.
 mapResponse :: Status -> ResponseHeaders -> (Source (ResourceT IO) S.ByteString, (ResourceT IO) ()) -> Wai.Response
 mapResponse status headers (body, _) =
     Wai.ResponseSource status headers $ mapOutput (Chunk . fromByteString) body

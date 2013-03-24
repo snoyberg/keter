@@ -151,12 +151,16 @@ hasLegacyMessageLength headers =
 handleLegacyMessage :: Status -> ResponseHeaders -> ResumableSource (ResourceT IO) S.ByteString -> ResourceT IO Wai.Response
 handleLegacyMessage status headers body = do
   liftIO $ print "Pre consume"
-  content <- body $$+- (CL.isolate 100 =$ CL.consume >>= return)
+  content <- body $$+- (CL.mapM (liftIO . go) =$ CL.isolate 100 =$ CL.consume)
   liftIO $ print "Post consume"
   return $
     case content of
       [] -> Wai.ResponseBuilder status headers flush
       (x:_)  -> Wai.ResponseBuilder status headers (foldl1 (<>) $ map fromByteString content)
+  where
+    go s = do
+      putStrLn $ "Received chunk of size: " ++ show (S.length s)
+      return s
 
 -- Simply map the output of the HTTP-Conduit to a response without unwrapping the base ResourceT.
 mapResponse :: Status -> ResponseHeaders -> (Source (ResourceT IO) S.ByteString, (ResourceT IO) ()) -> Wai.Response
@@ -169,7 +173,7 @@ simpleReverseProxy (RPEntry (ReverseProxyConfig h p _ ssl respRules reqRules) mg
     let proxiedRequest = def
           { method = Wai.requestMethod request
           , secure = ssl
-          , host   = encodeUtf8 $ h
+          , host   = encodeUtf8 h
           , port   = p
           , path   = Wai.rawPathInfo request
           , queryString = Wai.rawQueryString request
@@ -183,12 +187,12 @@ simpleReverseProxy (RPEntry (ReverseProxyConfig h p _ ssl respRules reqRules) mg
           }
     response <- http proxiedRequest mgr
     let status = responseStatus response
-        respHeaders = (filterHeaders $ map (rewriteHeader respRuleMap) (responseHeaders response))
+        respHeaders = filterHeaders $ map (rewriteHeader respRuleMap) (responseHeaders response)
     -- hasLegacyMessageLength checks the response headers before stripping out
     -- transfer encoding, content length fields
-    case hasLegacyMessageLength (responseHeaders response) of
-      True -> handleLegacyMessage status respHeaders (responseBody response)
-      False -> mapResponse status respHeaders <$> (unwrapResumable $ responseBody response)
+    if hasLegacyMessageLength (responseHeaders response)
+      then handleLegacyMessage status respHeaders (responseBody response)
+      else mapResponse status respHeaders <$> unwrapResumable (responseBody response)
   where
     reqRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) $ Set.toList reqRules
     respRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) $ Set.toList respRules
@@ -197,4 +201,3 @@ simpleReverseProxy (RPEntry (ReverseProxyConfig h p _ ssl respRules reqRules) mg
     useHeader ("Host", _)              = False
     useHeader _                        = True
     filterHeaders = filter useHeader
-

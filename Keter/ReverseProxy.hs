@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Keter.ReverseProxy 
+module Keter.ReverseProxy
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
   , RPEntry (..)
@@ -22,7 +22,7 @@ import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.CaseInsensitive as CI
 
-import Blaze.ByteString.Builder (flush, fromByteString)
+import Blaze.ByteString.Builder (fromByteString)
 
 -- Configuration files
 import Data.Yaml (FromJSON (..), Value (Object), (.:), (.:?), (.!=))
@@ -36,13 +36,10 @@ import Data.Char (isDigit)
 
 -- Reverse proxy apparatus
 import Data.Conduit
-import qualified Data.Conduit.List as CL
-import Data.Conduit.Internal (ResumableSource (..))
 
 import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
 import Network.HTTP.Types
-import Control.Monad.IO.Class
 
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text
@@ -103,7 +100,7 @@ rewrite (before, match, after) input replacement =
     parseSubstitute :: Parser Text
     parseSubstitute =
           (endOfInput >> "")
-      <|> do 
+      <|> do
           { _ <- string "\\\\"
           ; rest <- parseSubstitute
           ; return $ "\\" <> rest
@@ -126,6 +123,9 @@ rewriteHeader rules header@(name, value) =
     Nothing -> header
     Just  r -> (name, regexRewrite r value)
 
+rewriteHeaders :: Map HeaderName RewriteRule -> [Header] -> [Header]
+rewriteHeaders ruleMap = map (rewriteHeader ruleMap)
+
 regexRewrite :: RewriteRule -> S.ByteString -> S.ByteString
 regexRewrite (RewriteRule _ regex' replacement) input =
   case matchOnceText regex strInput of
@@ -138,66 +138,49 @@ regexRewrite (RewriteRule _ regex' replacement) input =
     strInput = T.unpack . decodeUtf8 $ input
     strReplacement = T.unpack replacement
 
--- RFC 4.4 Message Length - the server closed the connection
-hasLegacyMessageLength :: ResponseHeaders -> Bool
-hasLegacyMessageLength headers =
-  let connection = lookup "Connection" headers
-      headerNames = map fst headers in
-    (connection `elem` [Just "Close",Just "close"])
-    && "Transfer-Encoding" `notElem` headerNames
-    && "Content-Length" `notElem` headerNames
-
--- Pull the first message, throw away and close the connection, and return what was pulled in a single response.
-handleLegacyMessage :: Status -> ResponseHeaders -> ResumableSource (ResourceT IO) S.ByteString -> ResourceT IO Wai.Response
-handleLegacyMessage status headers body = do
-  liftIO $ print "Pre consume"
-  content <- body $$+- (CL.mapM (liftIO . go) =$ CL.isolate 100 =$ CL.consume)
-  liftIO $ print "Post consume"
-  return $
-    case content of
-      [] -> Wai.ResponseBuilder status headers flush
-      (x:_)  -> Wai.ResponseBuilder status headers (foldl1 (<>) $ map fromByteString content)
+filterHeaders :: [Header] -> [Header]
+filterHeaders = filter useHeader
   where
-    go s = do
-      putStrLn $ "Received chunk of size: " ++ show (S.length s)
-      return s
-
--- Simply map the output of the HTTP-Conduit to a response without unwrapping the base ResourceT.
-mapResponse :: Status -> ResponseHeaders -> (Source (ResourceT IO) S.ByteString, (ResourceT IO) ()) -> Wai.Response
-mapResponse status headers (body, _) =
-    Wai.ResponseSource status headers $ mapOutput (Chunk . fromByteString) body
-
-simpleReverseProxy :: RPEntry -> Wai.Application
-simpleReverseProxy (RPEntry (ReverseProxyConfig h p _ ssl respRules reqRules) mgr) request =
-  do
-    let proxiedRequest = def
-          { method = Wai.requestMethod request
-          , secure = ssl
-          , host   = encodeUtf8 h
-          , port   = p
-          , path   = Wai.rawPathInfo request
-          , queryString = Wai.rawQueryString request
-          , requestHeaders = filterHeaders $ map (rewriteHeader reqRuleMap) (Wai.requestHeaders request)
-          , requestBody = RequestBodySourceChunked (mapOutput fromByteString $ Wai.requestBody request)
-          , decompress = const False
-          , redirectCount = 0
-          , checkStatus = \_ _ _ -> Nothing
-          --, responseTimeout = 5000 -- current default (as of 2013-03-18)
-          , cookieJar = Nothing
-          }
-    response <- http proxiedRequest mgr
-    let status = responseStatus response
-        respHeaders = filterHeaders $ map (rewriteHeader respRuleMap) (responseHeaders response)
-    -- hasLegacyMessageLength checks the response headers before stripping out
-    -- transfer encoding, content length fields
-    if hasLegacyMessageLength (responseHeaders response)
-      then handleLegacyMessage status respHeaders (responseBody response)
-      else mapResponse status respHeaders <$> unwrapResumable (responseBody response)
-  where
-    reqRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) $ Set.toList reqRules
-    respRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) $ Set.toList respRules
     useHeader ("Transfer-Encoding", _) = False
     useHeader ("Content-Length", _)    = False
     useHeader ("Host", _)              = False
     useHeader _                        = True
-    filterHeaders = filter useHeader
+
+mkRuleMap :: Set RewriteRule -> Map HeaderName RewriteRule
+mkRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) . Set.toList
+
+mkRequest :: ReverseProxyConfig -> Wai.Request -> Request (ResourceT IO)
+mkRequest rpConfig request =
+  def { method = Wai.requestMethod request
+      , secure = reverseUseSSL rpConfig
+      , host   = encodeUtf8 $ reversedHost rpConfig
+      , port   = reversedPort rpConfig
+      , path   = Wai.rawPathInfo request
+      , queryString = Wai.rawQueryString request
+      , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
+      , requestBody =
+          case Wai.requestBodyLength request of
+            Wai.ChunkedBody   -> RequestBodySourceChunked (mapOutput fromByteString $ Wai.requestBody request)
+            Wai.KnownLength n -> RequestBodySource (fromIntegral n) (mapOutput fromByteString $ Wai.requestBody request)
+      , decompress = const False
+      , redirectCount = 0
+      , checkStatus = \_ _ _ -> Nothing
+      --, responseTimeout = 5000 -- current default (as of 2013-03-18)
+      , cookieJar = Nothing
+      }
+  where
+    reqRuleMap = mkRuleMap $ rewriteRequestRules rpConfig
+
+simpleReverseProxy :: RPEntry -> Wai.Application
+simpleReverseProxy (RPEntry { config = rpConfig, httpManager = mgr }) request =
+  do
+    let proxiedRequest = mkRequest rpConfig request
+    response <- http proxiedRequest mgr
+    (body, _) <- unwrapResumable $ responseBody response
+    return $
+      Wai.ResponseSource
+        (responseStatus response)
+        (rewriteHeaders respRuleMap $ responseHeaders response)
+        (mapOutput (Chunk . fromByteString) body)
+  where
+    respRuleMap = mkRuleMap $ rewriteResponseRules rpConfig

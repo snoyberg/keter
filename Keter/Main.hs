@@ -16,6 +16,7 @@ import qualified Keter.LogFile as LogFile
 import qualified Keter.Logger as Logger
 import qualified Keter.PortManager as PortMan
 import qualified Keter.Proxy as Proxy
+import qualified Keter.ReverseProxy as ReverseProxy
 
 import Data.Conduit.Network (serverSettings, HostPreference)
 import qualified Control.Concurrent.MVar as M
@@ -36,6 +37,9 @@ import Control.Applicative ((<$>), (<*>))
 import Data.String (fromString)
 import System.Posix.User (userID, userGroupID, getUserEntryForName, getUserEntryForID, userName)
 import qualified Data.Text.Read
+import Data.Set (Set)
+import qualified Data.Set as Set
+import qualified Network.HTTP.Conduit as HTTP (newManager)
 
 data Config = Config
     { configDir :: F.FilePath
@@ -44,7 +48,9 @@ data Config = Config
     , configPort :: PortMan.Port
     , configSsl :: Maybe Proxy.TLSConfigNoDir
     , configSetuid :: Maybe Text
+    , configReverseProxy :: Set ReverseProxy.ReverseProxyConfig
     }
+
 instance Default Config where
     def = Config
         { configDir = "."
@@ -53,6 +59,7 @@ instance Default Config where
         , configPort = 80
         , configSsl = Nothing
         , configSetuid = Nothing
+        , configReverseProxy = Set.empty
         }
 
 instance FromJSON Config where
@@ -63,6 +70,7 @@ instance FromJSON Config where
         <*> o .:? "port" .!= configPort def
         <*> o .:? "ssl"
         <*> o .:? "setuid"
+        <*> o .:? "reverse-proxy" .!= Set.empty
     parseJSON _ = mzero
 
 keter :: P.FilePath -- ^ root directory or config file
@@ -168,6 +176,13 @@ keter input' = do
     bundles <- fmap (filter isKeter) $ listDirectory incoming
     runKIO' $ mapM_ addApp bundles
 
+    let staticReverse r = do
+          initMgr <- liftIO $ HTTP.newManager def
+          case initMgr of
+            Left e -> log $ ExceptionThrown "Failed to instantiate manager for reverse proxy." e
+            Right mgr -> PortMan.addEntry portman (ReverseProxy.reversingHost r) $ PortMan.PEReverseProxy $ ReverseProxy.RPEntry r mgr 
+    runKIO' $ mapM_ staticReverse (Set.toList configReverseProxy)
+    
     let events = [I.MoveIn, I.MoveOut, I.Delete, I.CloseWrite]
     i <- I.initINotify
     _ <- I.addWatch i events (toString incoming) $ \e -> do

@@ -33,6 +33,7 @@ import qualified Data.ByteString as S
 import Data.Text.Encoding (encodeUtf8)
 import Data.Yaml (FromJSON (parseJSON), Value (Object))
 import Control.Applicative ((<$>))
+import qualified Keter.ReverseProxy as ReverseProxy (RPEntry)
 
 -- | A port for an individual app to listen on.
 type Port = Int
@@ -150,7 +151,7 @@ addEntry (PortManager f) h p = f $ case h of
     "*" -> AddDefaultEntry p
     _   -> AddEntry h p
 
-data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString
+data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy ReverseProxy.RPEntry
 
 -- | Remove an entry from the configuration and reload nginx.
 removeEntry :: PortManager -> Host -> KIO ()

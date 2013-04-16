@@ -41,11 +41,15 @@ import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
 import Network.HTTP.Types
 
+import qualified Data.Conduit.List as CL
+import Control.Monad.IO.Class (liftIO, MonadIO (..))
+
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text
     , reversedPort :: Int
     , reversingHost :: Text
     , reverseUseSSL :: Bool
+    , reverseTimeout :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
     , rewriteRequestRules :: Set RewriteRule
     } deriving (Eq, Ord)
@@ -55,7 +59,8 @@ instance FromJSON ReverseProxyConfig where
         <$> o .: "reversed-host"
         <*> o .: "reversed-port"
         <*> o .: "reversing-host"
-        <*> o .: "ssl" .!= False
+        <*> o .:? "ssl" .!= False
+        <*> o .:? "timeout" .!= Nothing
         <*> o .:? "rewrite-response" .!= Set.empty
         <*> o .:? "rewrite-request" .!= Set.empty
     parseJSON _ = fail "Wanted an object"
@@ -66,6 +71,7 @@ instance Default ReverseProxyConfig where
         , reversedPort = 80
         , reversingHost = ""
         , reverseUseSSL = False
+        , reverseTimeout = Nothing
         , rewriteResponseRules = Set.empty
         , rewriteRequestRules = Set.empty
         }
@@ -165,7 +171,7 @@ mkRequest rpConfig request =
       , decompress = const False
       , redirectCount = 0
       , checkStatus = \_ _ _ -> Nothing
-      --, responseTimeout = 5000 -- current default (as of 2013-03-18)
+      , responseTimeout = reverseTimeout rpConfig
       , cookieJar = Nothing
       }
   where

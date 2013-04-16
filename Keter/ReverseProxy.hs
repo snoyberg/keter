@@ -41,9 +41,6 @@ import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
 import Network.HTTP.Types
 
-import qualified Data.Conduit.List as CL
-import Control.Monad.IO.Class (liftIO, MonadIO (..))
-
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text
     , reversedPort :: Int

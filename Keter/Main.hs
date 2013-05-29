@@ -17,13 +17,15 @@ import qualified Keter.Logger as Logger
 import qualified Keter.PortManager as PortMan
 import qualified Keter.Proxy as Proxy
 import qualified Keter.ReverseProxy as ReverseProxy
+import System.Posix.Files (modificationTime, getFileStatus)
+import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
 
 import Data.Conduit.Network (serverSettings, HostPreference)
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
 import qualified System.INotify as I
-import Control.Monad (forever, mzero)
+import Control.Monad (forever, mzero, forM)
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
 import Control.Exception (throwIO, try)
@@ -31,7 +33,7 @@ import qualified Prelude as P
 import Data.Text.Encoding (encodeUtf8)
 import Data.Time (getCurrentTime)
 import qualified Data.Text as T
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import Data.Yaml (decodeFile, FromJSON (parseJSON), Value (Object), (.:), (.:?), (.!=))
 import Control.Applicative ((<$>), (<*>))
 import Data.String (fromString)
@@ -129,9 +131,11 @@ keter input' = do
             let appname = getAppname bundle
             rest <- modifyMVar mappMap $ \appMap ->
                 case Map.lookup appname appMap of
-                    Just app -> do
+                    Just (app, _time) -> do
                         App.reload app
-                        return (appMap, return ())
+                        etime <- liftIO $ modificationTime <$> getFileStatus (F.encodeString bundle)
+                        let time = either (P.const 0) id etime
+                        return (Map.insert appname (app, time) appMap, return ())
                     Nothing -> do
                         mlogger <- do
                             let dirout = dir </> "log" </> fromText ("app-" ++ appname)
@@ -160,21 +164,24 @@ keter input' = do
                             appname
                             bundle
                             (removeApp appname)
-                        let appMap' = Map.insert appname app appMap
+                        etime <- liftIO $ modificationTime <$> getFileStatus (F.encodeString bundle)
+                        let time = either (P.const 0) id etime
+                        let appMap' = Map.insert appname (app, time) appMap
                         return (appMap', rest)
             rest
         terminateApp appname = do
+            -- FIXME why not remove it from the map?
             appMap <- M.readMVar mappMap
             case Map.lookup appname appMap of
                 Nothing -> return ()
-                Just app -> runKIO' $ App.terminate app
+                Just (app, _) -> runKIO' $ App.terminate app
 
     let incoming = dir </> "incoming"
         isKeter fp = hasExtension fp "keter"
         isKeter' = isKeter . F.decodeString
     createTree incoming
-    bundles <- fmap (filter isKeter) $ listDirectory incoming
-    runKIO' $ mapM_ addApp bundles
+    bundles0 <- fmap (filter isKeter) $ listDirectory incoming
+    runKIO' $ mapM_ addApp bundles0
 
     let staticReverse r = do
           initMgr <- liftIO $ HTTP.newManager def
@@ -192,6 +199,26 @@ keter input' = do
             I.Closed _ (Just fp) _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
             I.MovedIn _ fp _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
             _ -> runKIO' $ log $ ReceivedInotifyEvent $ show e
+
+    -- Install HUP handler for cases when inotify cannot be used.
+    _ <- flip (installHandler sigHUP) Nothing $ Catch $ do
+        actions <- M.withMVar mappMap $ \appMap -> do
+            bundles <- fmap (filter isKeter) $ F.listDirectory incoming
+            newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
+                time <- modificationTime <$> getFileStatus (F.encodeString bundle)
+                return (getAppname' $ F.encodeString bundle, (bundle, time))
+
+            let apps = Set.toList $ Set.fromList (Map.keys newMap)
+                        `Set.union` Set.fromList (Map.keys appMap)
+            fmap catMaybes $ forM apps $ \appname -> return $
+                case (Map.lookup appname appMap, Map.lookup appname newMap) of
+                    (Nothing, Nothing) -> Nothing -- should never happen
+                    (Just _, Nothing) -> Just $ terminateApp appname
+                    (Nothing, Just (bundle, _)) -> Just $ runKIO' $ addApp bundle
+                    (Just (_, oldTime), Just (bundle, newTime))
+                        | newTime /= oldTime -> Just $ runKIO' $ addApp bundle
+                        | otherwise -> Nothing
+        P.sequence_ actions
 
     runKIO' $ forever $ threadDelay $ 60 * 1000 * 1000
   where

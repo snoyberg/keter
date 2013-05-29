@@ -1,10 +1,12 @@
 Name:                keter
-Version:             0.3.6.1
+Version:             0.3.7
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
     .
     Release history:
+    .
+    [0.3.7] Sending a HUP signal reloads the list of deployed apps. This is useful for circumstances where inotify does not work correctly, such as on file systems which do not support it.
     .
     [0.3.5] You can now create Keter bundles without any applications. These can contain static hosts and redirects.
 Homepage:            http://www.yesodweb.com/

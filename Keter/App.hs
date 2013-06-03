@@ -35,12 +35,12 @@ import Data.Conduit (($$), yield)
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Data.Conduit.List as CL
-import System.Posix.IO.ByteString (fdWriteBuf, closeFd, FdOption (CloseOnExec), setFdOption, createFile)
+import System.Posix.IO (fdWriteBuf, closeFd, FdOption (CloseOnExec), setFdOption, createFile)
 import Foreign.Ptr (castPtr)
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
-import System.Posix.Files.ByteString (setOwnerAndGroup, setFdOwnerAndGroup)
+import System.Posix.Files (setOwnerAndGroup, setFdOwnerAndGroup)
 import Control.Monad (unless)
 
 data AppConfig = AppConfig
@@ -155,7 +155,7 @@ createTreeUID uid gid =
         unless exists $ do
             go $ F.parent fp
             F.createDirectory False fp
-            setOwnerAndGroup (F.encode fp) uid gid
+            setOwnerAndGroup (F.encodeString fp) uid gid
 
 unpackTar :: Maybe (UserID, GroupID)
           -> FilePath -> Tar.Entries Tar.FormatError -> IO ()
@@ -178,7 +178,7 @@ unpackTar muid dir =
                         return ()
                 bracket
                     (do
-                        fd <- createFile (F.encode fp) $ Tar.entryPermissions e
+                        fd <- createFile (F.encodeString fp) $ Tar.entryPermissions e
                         setFdOption fd CloseOnExec True
                         case muid of
                             Nothing -> return ()

@@ -20,3 +20,4 @@ ssl:
 #       - header: Location
 #         from: ^http://internal-service.example.com
 #         to: https://service.example.com    
+ip-from-header: true

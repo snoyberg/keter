@@ -53,6 +53,7 @@ data Config = Config
     , configSsl :: Maybe Proxy.TLSConfigNoDir
     , configSetuid :: Maybe Text
     , configReverseProxy :: Set ReverseProxy.ReverseProxyConfig
+    , configIpFromHeader :: Bool
     }
 
 instance Default Config where
@@ -64,6 +65,7 @@ instance Default Config where
         , configSsl = Nothing
         , configSetuid = Nothing
         , configReverseProxy = Set.empty
+        , configIpFromHeader = False
         }
 
 instance FromJSON Config where
@@ -75,6 +77,7 @@ instance FromJSON Config where
         <*> o .:? "ssl"
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
+        <*> o .:? "ip-from-header" .!= False
     parseJSON _ = mzero
 
 keter :: P.FilePath -- ^ root directory or config file
@@ -118,6 +121,7 @@ keter input' = do
 
     manager <- HTTP.newManager def
     _ <- forkIO $ Proxy.reverseProxy
+            configIpFromHeader
             manager
             Warp.defaultSettings
                 { Warp.settingsPort = configPort
@@ -128,6 +132,7 @@ keter input' = do
         Nothing -> return ()
         Just (Proxy.setDir dir -> (s, ts)) -> do
             _ <- forkIO $ Proxy.reverseProxySsl
+                    configIpFromHeader
                     manager
                     ts
                     s

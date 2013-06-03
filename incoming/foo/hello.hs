@@ -7,6 +7,8 @@ import Network.HTTP.Types
 import System.Directory
 import Control.Monad.IO.Class
 import System.IO
+import Network.Wai.Middleware.RequestLogger
+import Data.Default
 
 main :: IO ()
 main = do
@@ -14,7 +16,10 @@ main = do
     [msg] <- getArgs
     portS <- getEnv "PORT"
     let port = read portS
-    run port $ \req -> do
+    logger <- mkRequestLogger def
+        { outputFormat = Apache FromHeader
+        }
+    run port $ logger $ \req -> do
         liftIO $ putStrLn $ "Received a request at: " ++ show (pathInfo req)
         liftIO $ hFlush stdout
         liftIO $ hPutStrLn stderr $ "Testing standard error"

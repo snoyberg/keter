@@ -24,7 +24,7 @@ import Data.Conduit.Network (serverSettings, HostPreference)
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
-import qualified System.INotify as I
+import qualified System.FSNotify as FSN
 import Control.Monad (forever, mzero, forM)
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
@@ -190,15 +190,17 @@ keter input' = do
             Right mgr -> PortMan.addEntry portman (ReverseProxy.reversingHost r) $ PortMan.PEReverseProxy $ ReverseProxy.RPEntry r mgr 
     runKIO' $ mapM_ staticReverse (Set.toList configReverseProxy)
     
-    let events = [I.MoveIn, I.MoveOut, I.Delete, I.CloseWrite]
-    i <- I.initINotify
-    _ <- I.addWatch i events (toString incoming) $ \e -> do
-        case e of
-            I.Deleted _ fp -> when (isKeter' fp) $ terminateApp $ getAppname' fp
-            I.MovedOut _ fp _ -> when (isKeter' fp) $ terminateApp $ getAppname' fp
-            I.Closed _ (Just fp) _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
-            I.MovedIn _ fp _ -> when (isKeter' fp) $ runKIO' $ addApp $ incoming </> F.decodeString fp
-            _ -> runKIO' $ log $ ReceivedInotifyEvent $ show e
+    -- File system watching
+    wm <- FSN.startManager
+    FSN.watchDir wm incoming (P.const True) $ \e ->
+        let e' =
+                case e of
+                    FSN.Removed fp _ -> Left fp
+                    FSN.Added fp _ -> Right fp
+                    FSN.Modified fp _ -> Right fp
+         in case e' of
+            Left fp -> when (isKeter fp) $ terminateApp $ getAppname fp
+            Right fp -> when (isKeter fp) $ runKIO' $ addApp $ incoming </> fp
 
     -- Install HUP handler for cases when inotify cannot be used.
     _ <- flip (installHandler sigHUP) Nothing $ Catch $ do

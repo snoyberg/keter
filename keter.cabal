@@ -37,7 +37,7 @@ Library
                      , blaze-builder             >= 0.3           && < 0.4
                      , yaml                      >= 0.7           && < 0.9
                      , unix-compat               >= 0.3           && < 0.5
-                     , hinotify                  >= 0.3           && < 0.4
+                     , fsnotify                  >= 0.0.11
                      , system-filepath           >= 0.4           && < 0.5
                      , system-fileio             >= 0.3           && < 0.4
                      , conduit                   >= 0.5

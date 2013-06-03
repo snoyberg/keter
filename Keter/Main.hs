@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ViewPatterns      #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
@@ -42,6 +43,7 @@ import qualified Data.Text.Read
 import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Network.HTTP.Conduit as HTTP (newManager)
+import qualified Network.Wai.Handler.Warp as Warp
 
 data Config = Config
     { configDir :: F.FilePath
@@ -114,14 +116,21 @@ keter input' = do
             runKIOPrint $ LogFile.addChunk mainlog bs
         runKIOPrint = runKIO P.print
 
+    manager <- HTTP.newManager def
     _ <- forkIO $ Proxy.reverseProxy
-            (serverSettings configPort configHost)
+            manager
+            Warp.defaultSettings
+                { Warp.settingsPort = configPort
+                , Warp.settingsHost = configHost
+                }
             (runKIOPrint . PortMan.lookupPort portman)
     case configSsl of
         Nothing -> return ()
-        Just ssl -> do
+        Just (Proxy.setDir dir -> (s, ts)) -> do
             _ <- forkIO $ Proxy.reverseProxySsl
-                    (Proxy.setDir dir ssl)
+                    manager
+                    ts
+                    s
                     (runKIOPrint . PortMan.lookupPort portman)
             return ()
 
@@ -184,10 +193,9 @@ keter input' = do
     runKIO' $ mapM_ addApp bundles0
 
     let staticReverse r = do
-          initMgr <- liftIO $ HTTP.newManager def
-          case initMgr of
-            Left e -> log $ ExceptionThrown "Failed to instantiate manager for reverse proxy." e
-            Right mgr -> PortMan.addEntry portman (ReverseProxy.reversingHost r) $ PortMan.PEReverseProxy $ ReverseProxy.RPEntry r mgr 
+            PortMan.addEntry portman (ReverseProxy.reversingHost r)
+                $ PortMan.PEReverseProxy
+                $ ReverseProxy.RPEntry r manager
     runKIO' $ mapM_ staticReverse (Set.toList configReverseProxy)
     
     -- File system watching

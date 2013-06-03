@@ -5,52 +5,55 @@ module Keter.Proxy
     , PortLookup
     , reverseProxySsl
     , setDir
-    , TLSConfig
     , TLSConfigNoDir
     ) where
 
 import Prelude hiding ((++), FilePath)
-import Keter.Prelude ((++))
-import Data.Conduit
-import Data.Conduit.Network
+import Control.Monad.IO.Class (liftIO)
 import Data.ByteString (ByteString)
 import Keter.PortManager (PortEntry (..))
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import Keter.SSL
-import Network.HTTP.ReverseProxy (rawProxyTo, ProxyDest (ProxyDest), waiToRaw)
+import Network.HTTP.ReverseProxy (waiProxyTo, ProxyDest (ProxyDest), defaultOnExc, WaiProxyResponse (..))
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
 import qualified Network.Wai as Wai
-import Network.HTTP.Types (status301)
+import Network.HTTP.Types (status301, status200)
 import qualified Keter.ReverseProxy as ReverseProxy
+import Network.HTTP.Conduit (Manager)
+import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai.Handler.WarpTLS as WarpTLS
+import Blaze.ByteString.Builder (copyByteString)
+import Data.Monoid (mappend)
 
 -- | Mapping from virtual hostname to port number.
 type PortLookup = ByteString -> IO (Maybe PortEntry)
 
-reverseProxy :: ServerSettings IO -> PortLookup -> IO ()
-reverseProxy settings = runTCPServer settings . withClient
+reverseProxy :: Manager -> Warp.Settings -> PortLookup -> IO ()
+reverseProxy manager settings = Warp.runSettings settings . withClient manager
 
-reverseProxySsl :: TLSConfig -> PortLookup -> IO ()
-reverseProxySsl settings = runTCPServerTLS settings . withClient
+reverseProxySsl :: Manager -> WarpTLS.TLSSettings -> Warp.Settings -> PortLookup -> IO ()
+reverseProxySsl manager tsettings settings = WarpTLS.runTLS tsettings settings . withClient manager
 
-withClient :: PortLookup
-           -> Application IO
-withClient portLookup =
-    rawProxyTo getDest
+withClient :: Manager
+           -> PortLookup
+           -> Wai.Application
+withClient manager portLookup =
+    waiProxyTo getDest defaultOnExc manager
   where
-    getDest headers = do
-        mport <- maybe (return Nothing) portLookup mhost
+    getDest req = do
+        mport <- liftIO $ maybe (return Nothing) portLookup mhost
         case mport of
-            Nothing -> return $ Left $ srcToApp $ toResponse mhost
-            Just (PEPort port) -> return $ Right $ ProxyDest "127.0.0.1" port
-            Just (PEStatic root) -> return $ Left $ waiToRaw $ staticApp $ defaultFileServerSettings root
-            Just (PERedirect host) -> return $ Left $ waiToRaw $ redirectApp host
-            Just (PEReverseProxy rpentry) -> return $ Left $ waiToRaw $ ReverseProxy.simpleReverseProxy rpentry
+            Nothing -> return $ WPRResponse $ toResponse mhost
+            Just (PEPort port) -> return $ WPRProxyDest $ ProxyDest "127.0.0.1" port
+            Just (PEStatic root) -> fmap WPRResponse $ staticApp (defaultFileServerSettings root) req
+            Just (PERedirect host) -> return $ WPRResponse $ redirectApp host req
+            Just (PEReverseProxy rpentry) -> fmap WPRResponse $ ReverseProxy.simpleReverseProxy rpentry req
       where
-        mhost = lookup "host" headers
+        mhost = lookup "host" $ Wai.requestHeaders req
 
-redirectApp :: ByteString -> Wai.Application
-redirectApp host req = return $ Wai.responseLBS
+redirectApp :: ByteString -> Wai.Request -> Wai.Response
+redirectApp host req = Wai.responseLBS
     status301
     [("Location", dest)]
     (L.fromChunks [dest])
@@ -62,11 +65,13 @@ redirectApp host req = return $ Wai.responseLBS
         , Wai.rawQueryString req
         ]
 
-srcToApp :: Monad m => Source m ByteString -> Application m
-srcToApp src appdata = src $$ appSink appdata
-
-toResponse :: Monad m => Maybe ByteString -> Source m ByteString
-toResponse Nothing =
-    yield "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
-toResponse (Just host) =
-    yield $ "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>" ++ host ++ "</code>, is not recognized.</p></body></html>"
+toResponse :: Maybe ByteString -> Wai.Response
+toResponse mhost = Wai.ResponseBuilder
+    status200
+    [("Content-Type", "text/html; charset=utf-8")]
+    $ case mhost of
+        Nothing -> copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
+        Just host ->
+            copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
+            `mappend` copyByteString host
+            `mappend` copyByteString "</code>, is not recognized.</p></body></html>"

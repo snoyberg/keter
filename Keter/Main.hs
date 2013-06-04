@@ -21,7 +21,7 @@ import qualified Keter.ReverseProxy as ReverseProxy
 import System.Posix.Files (modificationTime, getFileStatus)
 import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
 
-import Data.Conduit.Network (serverSettings, HostPreference)
+import Data.Conduit.Network (HostPreference)
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map

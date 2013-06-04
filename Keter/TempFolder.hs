@@ -12,7 +12,7 @@ import Keter.Prelude
 import Data.Word (Word)
 import Keter.Postgres (Appname)
 import qualified Data.IORef as I
-import System.Posix.Files.ByteString (setOwnerAndGroup)
+import System.Posix.Files (setOwnerAndGroup)
 import System.Posix.Types (UserID, GroupID)
 import qualified Filesystem.Path.CurrentOS as F
 
@@ -37,5 +37,5 @@ getFolder muid TempFolder {..} appname = do
         createTree fp
         case muid of
             Nothing -> return ()
-            Just (uid, gid) -> setOwnerAndGroup (F.encode fp) uid gid
+            Just (uid, gid) -> setOwnerAndGroup (F.encodeString fp) uid gid
         return fp

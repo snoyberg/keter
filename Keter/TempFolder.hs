@@ -14,7 +14,6 @@ import Keter.Postgres (Appname)
 import qualified Data.IORef as I
 import System.Posix.Files.ByteString (setOwnerAndGroup)
 import System.Posix.Types (UserID, GroupID)
-import qualified Filesystem.Path.CurrentOS as F
 
 data TempFolder = TempFolder
     { tfRoot :: FilePath
@@ -37,5 +36,5 @@ getFolder muid TempFolder {..} appname = do
         createTree fp
         case muid of
             Nothing -> return ()
-            Just (uid, gid) -> setOwnerAndGroup (F.encode fp) uid gid
+            Just (uid, gid) -> setOwnerAndGroup (encodePath fp) uid gid
         return fp

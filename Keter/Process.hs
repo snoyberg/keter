@@ -14,7 +14,6 @@ import Data.Time (diffUTCTime)
 import Data.Conduit.Process.Unix (forkExecuteFile, waitForProcess, killProcess, terminateProcess)
 import System.Process (ProcessHandle)
 import Prelude (error)
-import Filesystem.Path.CurrentOS (toText)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Conduit (($$))
 import Control.Exception (onException)
@@ -45,7 +44,7 @@ run processTracker msetuid exec dir args env logger = do
                             _ -> return ()
                         (pout, sout) <- mkLogPipe
                         (perr, serr) <- mkLogPipe
-                        let cmd0 = encodeUtf8 $ either id id $ toText exec
+                        let cmd0 = encodePath exec
                             args0 = map encodeUtf8 args
                             (cmd, args') =
                                 case msetuid of
@@ -55,7 +54,7 @@ run processTracker msetuid exec dir args env logger = do
                             cmd
                             args'
                             (Just $ map (encodeUtf8 *** encodeUtf8) env)
-                            (Just $ encodeUtf8 $ either id id $ toText dir)
+                            (Just $ encodePath dir)
                             (Just $ return ())
                             (Just sout)
                             (Just serr)

@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE DeriveDataTypeable #-}
@@ -76,6 +77,7 @@ module Keter.Prelude
     , F.hasExtension
     , F.listDirectory
     , F.decodeString
+    , encodePath
       -- * MVar
     , M.MVar
     , newMVar
@@ -99,6 +101,10 @@ module Keter.Prelude
 
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
+#if defined(CABAL_OS_WINDOWS) || defined(CABAL_OS_DARWIN)
+import qualified Data.ByteString as B
+import qualified Data.Text.Encoding as T
+#endif
 import qualified Data.Text as T
 import qualified Prelude as P
 import qualified Control.Arrow as A
@@ -312,3 +318,11 @@ threadDelay = liftIO_ . Control.Concurrent.threadDelay
 
 getCurrentTime :: KIO Data.Time.UTCTime
 getCurrentTime = liftIO_ Data.Time.getCurrentTime
+
+#if defined(CABAL_OS_WINDOWS) || defined(CABAL_OS_DARWIN)
+encodePath :: F.FilePath -> B.ByteString
+encodePath = T.encodeUtf8 . F.encode
+#else
+encodePath :: F.FilePath -> T.Text
+encodePath = F.encode
+#endif

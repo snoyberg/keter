@@ -59,6 +59,8 @@ Library
                      , mtl
                      , warp
                      , warp-tls
+  if os(darwin)
+    cpp-options:       -DCABAL_OS_DARWIN
   Exposed-Modules:     Keter.Process
                        Keter.ProcessTracker
                        Keter.Postgres

@@ -21,7 +21,7 @@ import qualified Keter.ReverseProxy as ReverseProxy
 import System.Posix.Files (modificationTime, getFileStatus)
 import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
 
-import Data.Conduit.Network (serverSettings, HostPreference)
+import Data.Conduit.Network (HostPreference)
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
@@ -192,7 +192,6 @@ keter input' = do
 
     let incoming = dir </> "incoming"
         isKeter fp = hasExtension fp "keter"
-        isKeter' = isKeter . F.decodeString
     createTree incoming
     bundles0 <- fmap (filter isKeter) $ listDirectory incoming
     runKIO' $ mapM_ addApp bundles0

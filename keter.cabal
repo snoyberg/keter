@@ -70,7 +70,6 @@ Library
                        Keter.Logger
                        Keter.Proxy
                        Keter.PortManager
-                       Keter.SSL
                        Keter.ReverseProxy
                        Data.Yaml.FilePath
   ghc-options:         -Wall

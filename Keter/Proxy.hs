@@ -13,7 +13,6 @@ import Data.ByteString (ByteString)
 import Keter.PortManager (PortEntry (..))
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
-import Keter.SSL
 import Network.HTTP.ReverseProxy (waiProxyToSettings, wpsSetIpHeader, SetIpHeader (..), ProxyDest (ProxyDest), WaiProxyResponse (..))
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
 import qualified Network.Wai as Wai
@@ -25,6 +24,30 @@ import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import Blaze.ByteString.Builder (copyByteString)
 import Data.Monoid (mappend)
 import Data.Default
+import Data.Yaml.FilePath
+import Data.Yaml ((.:?), (.!=))
+import Data.Aeson (withObject)
+import Control.Applicative ((<$>))
+import Filesystem.Path.CurrentOS (encodeString)
+import Data.String (fromString)
+
+data TLSConfig = TLSConfig !Warp.Settings !WarpTLS.TLSSettings
+
+instance ParseYamlFile TLSConfig where
+    parseYamlFile basedir = withObject "TLSConfig" $ \o -> do
+        cert <- getFilePath basedir o "certificate"
+        key <- getFilePath basedir o "key"
+        host <- (fmap fromString <$> o .:? "host") .!= "*"
+        port <- o .:? "port" .!= 443
+        return $! TLSConfig
+            Warp.defaultSettings
+                { Warp.settingsHost = host
+                , Warp.settingsPort = port
+                }
+            WarpTLS.defaultTlsSettings
+                { WarpTLS.certFile = encodeString cert
+                , WarpTLS.keyFile = encodeString key
+                }
 
 -- | Mapping from virtual hostname to port number.
 type PortLookup = ByteString -> IO (Maybe PortEntry)

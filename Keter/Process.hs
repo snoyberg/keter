@@ -66,7 +66,9 @@ run processTracker msetuid exec dir args env logger = do
                                 attach logger $ LogPipes pout perr
                                 log $ ProcessCreated exec
                                 return (Running pid, do
-                                    void $ liftIO $ trackProcess processTracker pid
+                                    void $ liftIO $ do
+                                        void $ trackProcess processTracker pid
+                                        void $ waitForProcess pid
                                     loop (Just now))
             next
     forkKIO $ loop Nothing

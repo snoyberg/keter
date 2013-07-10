@@ -9,7 +9,7 @@ module Keter.Main
     ) where
 
 import Keter.Prelude hiding (getCurrentTime)
-import qualified Keter.TempFolder as TempFolder
+import qualified Codec.Archive.TempTarball as TempFolder
 import qualified Keter.App as App
 import Keter.Types
 import qualified Keter.PortManager as PortMan

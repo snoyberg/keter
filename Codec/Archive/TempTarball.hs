@@ -1,11 +1,10 @@
 {-# LANGUAGE BangPatterns      #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 -- | Handles allocation of temporary directories and unpacking of bundles into
 -- them. Sets owner and group of all created files and directories as
 -- necessary.
-module Keter.TempFolder
+module Codec.Archive.TempTarball
     ( TempFolder
     , setup
     , unpackTempTar
@@ -16,17 +15,17 @@ import qualified Codec.Archive.Tar.Check   as Tar
 import qualified Codec.Archive.Tar.Entry   as Tar
 import           Codec.Compression.GZip    (decompress)
 import           Control.Exception         (bracket, bracketOnError, throwIO)
-import           Control.Monad             (unless)
+import           Control.Monad             (unless, when)
 import qualified Data.ByteString.Lazy      as L
 import           Data.ByteString.Unsafe    (unsafeUseAsCStringLen)
 import qualified Data.IORef                as I
+import           Data.Monoid               ((<>))
+import           Data.Text                 (Text, pack)
 import           Data.Word                 (Word)
 import qualified Filesystem                as F
+import           Filesystem.Path.CurrentOS ((</>))
 import qualified Filesystem.Path.CurrentOS as F
 import           Foreign.Ptr               (castPtr)
-import           Keter.Prelude
-import           Keter.Types               (Appname)
-import           Prelude                   (IO)
 import           System.Posix.Files        (setFdOwnerAndGroup,
                                             setOwnerAndGroup)
 import           System.Posix.IO           (FdOption (CloseOnExec), closeFd,
@@ -34,23 +33,26 @@ import           System.Posix.IO           (FdOption (CloseOnExec), closeFd,
 import           System.Posix.Types        (GroupID, UserID)
 
 data TempFolder = TempFolder
-    { tfRoot    :: FilePath
-    , tfCounter :: IORef Word
+    { tfRoot    :: F.FilePath
+    , tfCounter :: I.IORef Word
     }
 
-setup :: FilePath -> IO TempFolder
+setup :: F.FilePath -> IO TempFolder
 setup fp = do
-    e <- isDirectory fp
-    when e $ removeTree fp
-    createTree fp
+    e <- F.isDirectory fp
+    when e $ F.removeTree fp
+    F.createTree fp
     c <- I.newIORef minBound
     return $ TempFolder fp c
 
-getFolder :: Maybe (UserID, GroupID) -> TempFolder -> Appname -> IO FilePath
+getFolder :: Maybe (UserID, GroupID)
+          -> TempFolder
+          -> Text -- ^ prefix for folder name
+          -> IO F.FilePath
 getFolder muid TempFolder {..} appname = do
     !i <- I.atomicModifyIORef tfCounter $ \i -> (succ i, i)
-    let fp = tfRoot </> fromText (appname ++ "-" ++ show i)
-    createTree fp
+    let fp = tfRoot </> F.fromText (appname <> "-" <> pack (show i))
+    F.createTree fp
     case muid of
         Nothing -> return ()
         Just (uid, gid) -> setOwnerAndGroup (F.encodeString fp) uid gid
@@ -58,18 +60,20 @@ getFolder muid TempFolder {..} appname = do
 
 unpackTempTar :: Maybe (UserID, GroupID)
               -> TempFolder
-              -> FilePath -- ^ bundle
-              -> Appname
+              -> F.FilePath -- ^ bundle
+              -> Text -- ^ prefix for folder name
               -> (F.FilePath -> IO a)
               -> IO a
 unpackTempTar muid tf bundle appname withDir = do
     lbs <- L.readFile $ F.encodeString bundle
-    bracketOnError (getFolder muid tf appname) removeTree $ \dir -> do
+    bracketOnError (getFolder muid tf appname) F.removeTree $ \dir -> do
         unpackTar muid dir $ Tar.read $ decompress lbs
         withDir dir
 
 unpackTar :: Maybe (UserID, GroupID)
-          -> FilePath -> Tar.Entries Tar.FormatError -> IO ()
+          -> F.FilePath
+          -> Tar.Entries Tar.FormatError
+          -> IO ()
 unpackTar muid dir =
     loop . Tar.checkSecurity
   where
@@ -78,11 +82,11 @@ unpackTar muid dir =
     loop (Tar.Next e es) = go e >> loop es
 
     go e = do
-        let fp = dir </> decodeString (Tar.entryPath e)
+        let fp = dir </> F.decodeString (Tar.entryPath e)
         case Tar.entryContent e of
             Tar.NormalFile lbs _ -> do
                 case muid of
-                    Nothing -> createTree $ F.directory fp
+                    Nothing -> F.createTree $ F.directory fp
                     Just (uid, gid) -> createTreeUID uid gid $ F.directory fp
                 let write fd bs = unsafeUseAsCStringLen bs $ \(ptr, len) -> do
                         _ <- fdWriteBuf fd (castPtr ptr) (fromIntegral len)
@@ -101,7 +105,7 @@ unpackTar muid dir =
 
 -- | Create a directory tree, setting the uid and gid of all newly created
 -- folders.
-createTreeUID :: UserID -> GroupID -> FilePath -> IO ()
+createTreeUID :: UserID -> GroupID -> F.FilePath -> IO ()
 createTreeUID uid gid =
     go
   where

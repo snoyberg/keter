@@ -12,7 +12,7 @@ module Keter.App
 
 import Prelude (IO, Eq, Ord, fst, snd, concat, mapM)
 import Keter.Prelude
-import Keter.TempFolder
+import Codec.Archive.TempTarball
 import Keter.Process
 import Keter.Types
 import Keter.PortManager hiding (start)

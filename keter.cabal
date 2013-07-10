@@ -63,7 +63,6 @@ Library
                      , unordered-containers
   Exposed-Modules:     Keter.Process
                        Keter.Plugin.Postgres
-                       Keter.TempFolder
                        Keter.Types
                        Keter.App
                        Keter.Main
@@ -72,6 +71,7 @@ Library
                        Keter.PortManager
                        Keter.ReverseProxy
                        Data.Yaml.FilePath
+                       Codec.Archive.TempTarball
   ghc-options:         -Wall
 
 Executable keter

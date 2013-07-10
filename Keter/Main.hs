@@ -20,12 +20,14 @@ import qualified Keter.ReverseProxy as ReverseProxy
 import System.Posix.Files (modificationTime, getFileStatus)
 import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
 
+import Data.Yaml.FilePath
+import Data.Aeson (withObject)
 import Data.Conduit.Network (HostPreference)
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
 import qualified System.FSNotify as FSN
-import Control.Monad (forever, mzero, forM)
+import Control.Monad (forever, forM)
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
 import Control.Exception (throwIO, try)
@@ -34,7 +36,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Time (getCurrentTime)
 import qualified Data.Text as T
 import Data.Maybe (fromMaybe, catMaybes)
-import Data.Yaml (decodeFile, FromJSON (parseJSON), Value (Object), (.:), (.:?), (.!=))
+import Data.Yaml ((.:?), (.!=))
 import Control.Applicative ((<$>), (<*>))
 import Data.String (fromString)
 import System.Posix.User (userID, userGroupID, getUserEntryForName, getUserEntryForID, userName)
@@ -50,7 +52,7 @@ data Config = Config
     , configPortMan :: PortMan.Settings
     , configHost :: HostPreference
     , configPort :: PortMan.Port
-    , configSsl :: Maybe Proxy.TLSConfigNoDir
+    , configSsl :: Maybe Proxy.TLSConfig
     , configSetuid :: Maybe Text
     , configReverseProxy :: Set ReverseProxy.ReverseProxyConfig
     , configIpFromHeader :: Bool
@@ -68,27 +70,27 @@ instance Default Config where
         , configIpFromHeader = False
         }
 
-instance FromJSON Config where
-    parseJSON (Object o) = Config
-        <$> (F.fromText <$> o .: "root")
+instance ParseYamlFile Config where
+    parseYamlFile basedir = withObject "Config" $ \o -> Config
+        <$> (getFilePath basedir o "root")
         <*> o .:? "port-manager" .!= def
         <*> (fmap fromString <$> o .:? "host") .!= configHost def
         <*> o .:? "port" .!= configPort def
-        <*> o .:? "ssl"
+        <*> (o .:? "ssl" >>= maybe (return Nothing) (fmap Just . parseYamlFile basedir))
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
         <*> o .:? "ip-from-header" .!= False
-    parseJSON _ = mzero
 
 keter :: P.FilePath -- ^ root directory or config file
       -> P.IO ()
-keter input' = do
+keter (F.decodeString -> input) = do
     exists <- F.isFile input
     Config{..} <-
         if exists
-            then decodeFile input' >>= maybe (P.error "Invalid config file") return
+            then decodeFileRelative input >>= either
+                    (\e -> P.error $ "Invalid config file: " ++ P.show e)
+                    return
             else return def { configDir = input }
-    let dir = F.directory input F.</> configDir
 
     muid <-
         case configSetuid of
@@ -104,9 +106,9 @@ keter input' = do
 
     processTracker <- initProcessTracker
     portman <- runThrow $ PortMan.start configPortMan
-    tf <- runThrow $ TempFolder.setup $ dir </> "temp"
-    postgres <- runThrow $ Postgres.load def $ dir </> "etc" </> "postgres.yaml"
-    mainlog <- runThrow $ LogFile.start $ dir </> "log" </> "keter"
+    tf <- runThrow $ TempFolder.setup $ configDir </> "temp"
+    postgres <- runThrow $ Postgres.load def $ configDir </> "etc" </> "postgres.yaml"
+    mainlog <- runThrow $ LogFile.start $ configDir </> "log" </> "keter"
 
     let runKIO' = runKIO $ \ml -> do
             now <- getCurrentTime
@@ -130,7 +132,7 @@ keter input' = do
             (runKIOPrint . PortMan.lookupPort portman)
     case configSsl of
         Nothing -> return ()
-        Just (Proxy.setDir dir -> (s, ts)) -> do
+        Just (Proxy.TLSConfig s ts) -> do
             _ <- forkIO $ Proxy.reverseProxySsl
                     configIpFromHeader
                     manager
@@ -152,7 +154,7 @@ keter input' = do
                         return (Map.insert appname (app, time) appMap, return ())
                     Nothing -> do
                         mlogger <- do
-                            let dirout = dir </> "log" </> fromText ("app-" ++ appname)
+                            let dirout = configDir </> "log" </> fromText ("app-" ++ appname)
                                 direrr = dirout </> "err"
                             elfout <- LogFile.start dirout
                             case elfout of
@@ -190,7 +192,7 @@ keter input' = do
                 Nothing -> return ()
                 Just (app, _) -> runKIO' $ App.terminate app
 
-    let incoming = dir </> "incoming"
+    let incoming = configDir </> "incoming"
         isKeter fp = hasExtension fp "keter"
     createTree incoming
     bundles0 <- fmap (filter isKeter) $ listDirectory incoming
@@ -239,4 +241,3 @@ keter input' = do
     getAppname = either id id . toText . basename
     getAppname' = getAppname . F.decodeString
     runThrow f = runKIO P.print f >>= either throwIO return
-    input = F.decodeString input'

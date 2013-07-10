@@ -4,8 +4,7 @@ module Keter.Proxy
     ( reverseProxy
     , PortLookup
     , reverseProxySsl
-    , setDir
-    , TLSConfigNoDir
+    , TLSConfig (..)
     ) where
 
 import Prelude hiding ((++), FilePath)

@@ -1,44 +1,32 @@
 {-# LANGUAGE OverloadedStrings #-}
 module Keter.SSL
-    ( TLSConfigNoDir
-    , setDir
+    ( TLSConfig (..)
     ) where
 
 import Prelude hiding (FilePath)
-import Data.Yaml (FromJSON (parseJSON), (.:), (.:?), (.!=), Value (Object))
+import Data.Yaml ((.:), (.:?), (.!=))
+import Data.Aeson (withObject)
 import Control.Applicative ((<$>))
-import Control.Monad (mzero)
 import Data.String (fromString)
-import System.FilePath ((</>))
-import Filesystem.Path.CurrentOS (FilePath, encodeString)
+import Filesystem.Path.CurrentOS (encodeString)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
+import Data.Yaml.FilePath
 
-setDir :: FilePath -> TLSConfigNoDir -> (Warp.Settings, WarpTLS.TLSSettings)
-setDir dir' (TLSConfigNoDir s ts') =
-    (s, ts)
-  where
-    dir = encodeString dir'
-    ts = ts'
-        { WarpTLS.certFile = dir </> WarpTLS.certFile ts'
-        , WarpTLS.keyFile = dir </> WarpTLS.keyFile ts'
-        }
+data TLSConfig = TLSConfig !Warp.Settings !WarpTLS.TLSSettings
 
-data TLSConfigNoDir = TLSConfigNoDir !Warp.Settings !WarpTLS.TLSSettings
-
-instance FromJSON TLSConfigNoDir where
-    parseJSON (Object o) = do
-        cert <- o .: "certificate"
-        key <- o .: "key"
+instance ParseYamlFile TLSConfig where
+    parseYamlFile basedir = withObject "TLSConfig" $ \o -> do
+        cert <- getFilePath basedir o "certificate"
+        key <- getFilePath basedir o "key"
         host <- (fmap fromString <$> o .:? "host") .!= "*"
         port <- o .:? "port" .!= 443
-        return $ TLSConfigNoDir
+        return $! TLSConfig
             Warp.defaultSettings
                 { Warp.settingsHost = host
                 , Warp.settingsPort = port
                 }
             WarpTLS.defaultTlsSettings
-                { WarpTLS.certFile = cert
-                , WarpTLS.keyFile = key
+                { WarpTLS.certFile = encodeString cert
+                , WarpTLS.keyFile = encodeString key
                 }
-    parseJSON _ = mzero

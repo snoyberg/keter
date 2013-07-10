@@ -106,7 +106,7 @@ keter (F.decodeString -> input) mkPlugins = do
 
     processTracker <- initProcessTracker
     portman <- runThrow $ PortMan.start configPortMan
-    tf <- runThrow $ TempFolder.setup $ configDir </> "temp"
+    tf <- runThrow $ liftIO $ TempFolder.setup $ configDir </> "temp"
     plugins <- runThrow $ loadPlugins $ map ($ configDir) mkPlugins
     mainlog <- runThrow $ liftIO $ LogFile.openRotatingLog
         (F.encodeString $ configDir </> "log" </> "keter")

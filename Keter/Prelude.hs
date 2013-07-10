@@ -157,7 +157,7 @@ data LogMessage
     | ProcessDidNotStart F.FilePath
     | ExceptionThrown T.Text E.SomeException
     | RemovingPort P.Int
-    | UnpackingBundle F.FilePath F.FilePath
+    | UnpackingBundle F.FilePath
     | TerminatingApp T.Text
     | FinishedReloading T.Text
     | TerminatingOldProcess T.Text
@@ -183,11 +183,10 @@ instance P.Show LogMessage where
         , P.show e
         ]
     show (RemovingPort p) = "Port in use, removing from port pool: " ++ P.show p
-    show (UnpackingBundle b dir) = P.concat
+    show (UnpackingBundle b) = P.concat
         [ "Unpacking bundle '"
         , F.encodeString b
-        , "' into folder: "
-        , F.encodeString dir
+        , "'"
         ]
     show (TerminatingApp t) = "Shutting down app: " ++ T.unpack t
     show (FinishedReloading t) = "App finished reloading: " ++ T.unpack t

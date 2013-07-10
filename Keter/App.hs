@@ -16,30 +16,17 @@ import Keter.TempFolder
 import Keter.Process
 import Keter.Types
 import Keter.PortManager hiding (start)
-import qualified Codec.Archive.Tar as Tar
-import qualified Codec.Archive.Tar.Check as Tar
-import qualified Codec.Archive.Tar.Entry as Tar
-import Codec.Compression.GZip (decompress)
 import qualified Filesystem.Path.CurrentOS as F
-import qualified Filesystem as F
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>), (<|>), pure)
 import qualified Network
 import Data.Maybe (fromMaybe, mapMaybe)
-import Control.Exception (onException, throwIO, bracket)
+import Control.Exception (throwIO)
 import System.IO (hClose)
-import qualified Data.ByteString.Lazy as L
-import Data.Conduit (($$), yield)
 import Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Data.Conduit.List as CL
-import System.Posix.IO (fdWriteBuf, closeFd, FdOption (CloseOnExec), setFdOption, createFile)
-import Foreign.Ptr (castPtr)
-import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
-import System.Posix.Files (setOwnerAndGroup, setFdOwnerAndGroup)
-import Control.Monad (unless)
 import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog)
 
 data AppConfig = AppConfig
@@ -107,30 +94,20 @@ unpackBundle :: TempFolder
              -> Appname
              -> KIO (Either SomeException (FilePath, Config))
 unpackBundle tf muid bundle appname = do
-    elbs <- readFileLBS bundle
-    case elbs of
-        Left e -> return $ Left e
-        Right lbs -> do
-            edir <- getFolder muid tf appname
-            case edir of
-                Left e -> return $ Left e
-                Right dir -> do
-                    log $ UnpackingBundle bundle dir
-                    let rest = do
-                            unpackTar muid dir $ Tar.read $ decompress lbs
-                            let configFP = dir F.</> "config" F.</> "keter.yaml"
-                            mconfig <- decodeFile $ F.encodeString configFP
-                            config <-
-                                case mconfig of
-                                    Just config -> return config
-                                    Nothing -> throwIO InvalidConfigFile
-                            return (dir, config
-                                { configStaticHosts = Set.fromList
-                                                    $ mapMaybe (fixStaticHost dir)
-                                                    $ Set.toList
-                                                    $ configStaticHosts config
-                                })
-                    liftIO $ rest `onException` removeTree dir
+    log $ UnpackingBundle bundle
+    liftIO $ unpackTempTar muid tf bundle appname $ \dir -> do
+        let configFP = dir F.</> "config" F.</> "keter.yaml"
+        mconfig <- decodeFile $ F.encodeString configFP
+        config <-
+            case mconfig of
+                Just config -> return config
+                Nothing -> throwIO InvalidConfigFile
+        return (dir, config
+            { configStaticHosts = Set.fromList
+                                $ mapMaybe (fixStaticHost dir)
+                                $ Set.toList
+                                $ configStaticHosts config
+            })
 
 -- | Ensures that the given path does not escape the containing folder and sets
 -- the pathname based on config file location.
@@ -142,50 +119,6 @@ fixStaticHost dir sh =
   where
     fp0 = shRoot sh
     fp = F.collapse $ dir F.</> "config" F.</> fp0
-
--- | Create a directory tree, setting the uid and gid of all newly created
--- folders.
-createTreeUID :: UserID -> GroupID -> FilePath -> IO ()
-createTreeUID uid gid =
-    go
-  where
-    go fp = do
-        exists <- F.isDirectory fp
-        unless exists $ do
-            go $ F.parent fp
-            F.createDirectory False fp
-            setOwnerAndGroup (F.encodeString fp) uid gid
-
-unpackTar :: Maybe (UserID, GroupID)
-          -> FilePath -> Tar.Entries Tar.FormatError -> IO ()
-unpackTar muid dir =
-    loop . Tar.checkSecurity
-  where
-    loop Tar.Done = return ()
-    loop (Tar.Fail e) = either throwIO throwIO e
-    loop (Tar.Next e es) = go e >> loop es
-
-    go e = do
-        let fp = dir </> decodeString (Tar.entryPath e)
-        case Tar.entryContent e of
-            Tar.NormalFile lbs _ -> do
-                case muid of
-                    Nothing -> createTree $ F.directory fp
-                    Just (uid, gid) -> createTreeUID uid gid $ F.directory fp
-                let write fd bs = unsafeUseAsCStringLen bs $ \(ptr, len) -> do
-                        _ <- fdWriteBuf fd (castPtr ptr) (fromIntegral len)
-                        return ()
-                bracket
-                    (do
-                        fd <- createFile (F.encodeString fp) $ Tar.entryPermissions e
-                        setFdOption fd CloseOnExec True
-                        case muid of
-                            Nothing -> return ()
-                            Just (uid, gid) -> setFdOwnerAndGroup fd uid gid
-                        return fd)
-                    closeFd
-                    (\fd -> mapM_ yield (L.toChunks lbs) $$ CL.mapM_ (write fd))
-            _ -> return ()
 
 start :: TempFolder
       -> Maybe (Text, (UserID, GroupID))

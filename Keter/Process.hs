@@ -8,15 +8,13 @@ module Keter.Process
     ) where
 
 import Keter.Prelude
-import Keter.ProcessTracker
 import Keter.Logger (Logger, attach, LogPipes (..), mkLogPipe)
 import Data.Time (diffUTCTime)
-import Data.Conduit.Process.Unix (forkExecuteFile, waitForProcess, killProcess, terminateProcess)
+import Data.Conduit.Process.Unix (forkExecuteFile, killProcess, terminateProcess, ProcessTracker, trackProcess)
 import System.Process (ProcessHandle)
 import Prelude (error)
 import Data.Text.Encoding (encodeUtf8)
 import Data.Conduit (($$))
-import Control.Exception (onException)
 
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
@@ -68,10 +66,7 @@ run processTracker msetuid exec dir args env logger = do
                                 attach logger $ LogPipes pout perr
                                 log $ ProcessCreated exec
                                 return (Running pid, do
-                                    _ <- liftIO $ do
-                                        unregister <- trackProcess processTracker pid
-                                        _ <- waitForProcess pid `onException` killProcess pid
-                                        unregister
+                                    void $ liftIO $ trackProcess processTracker pid
                                     loop (Just now))
             next
     forkKIO $ loop Nothing

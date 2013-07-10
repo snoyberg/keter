@@ -15,7 +15,6 @@ import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
 import Keter.Process
-import Keter.ProcessTracker (ProcessTracker)
 import Keter.Logger (Logger, detach)
 import Keter.PortManager hiding (start)
 import qualified Codec.Archive.Tar as Tar
@@ -42,6 +41,7 @@ import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
 import System.Posix.Files (setOwnerAndGroup, setFdOwnerAndGroup)
 import Control.Monad (unless)
+import Data.Conduit.Process.Unix (ProcessTracker)
 
 data AppConfig = AppConfig
     { configExec :: F.FilePath

@@ -60,9 +60,11 @@ Library
                      , warp
                      , warp-tls
                      , aeson
+                     , unordered-containers
   Exposed-Modules:     Keter.Process
-                       Keter.Postgres
+                       Keter.Plugin.Postgres
                        Keter.TempFolder
+                       Keter.Types
                        Keter.App
                        Keter.Main
                        Keter.Prelude
@@ -75,7 +77,7 @@ Library
 Executable keter
   Main-is:             keter.hs
   hs-source-dirs:      main
-  Build-depends:       base, keter
+  Build-depends:       base, keter, system-filepath, data-default
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
 

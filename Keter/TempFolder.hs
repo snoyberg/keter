@@ -10,7 +10,7 @@ module Keter.TempFolder
 
 import Keter.Prelude
 import Data.Word (Word)
-import Keter.Postgres (Appname)
+import Keter.Types (Appname)
 import qualified Data.IORef as I
 import System.Posix.Files (setOwnerAndGroup)
 import System.Posix.Types (UserID, GroupID)

@@ -1,17 +1,13 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE NoImplicitPrelude #-}
-module Keter.Postgres
-    ( -- * Types
-      Appname
-    , DBInfo (..)
-    , Postgres
-      -- ** Settings
-    , Settings
+{-# LANGUAGE TemplateHaskell #-}
+module Keter.Plugin.Postgres
+    ( -- * Settings
+      Settings
     , setupDBInfo
       -- * Functions
     , load
-    , getInfo
     ) where
 
 import Keter.Prelude
@@ -19,6 +15,7 @@ import qualified Prelude as P
 import qualified Data.Text as T
 import Data.Yaml
 import qualified Data.Map as Map
+import qualified Data.HashMap.Strict as HMap
 import Control.Monad (forever, mzero, replicateM)
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
@@ -27,6 +24,7 @@ import qualified System.Random as R
 import Data.Text.Lazy.Builder (toLazyText)
 import qualified Data.Text.Lazy as TL
 import System.Process (readProcess)
+import Keter.Types
 
 data Settings = Settings
     { setupDBInfo :: DBInfo -> P.IO ()
@@ -46,10 +44,6 @@ instance Default Settings where
             _ <- readProcess "sudo" ["-u", "postgres", "psql"] $ TL.unpack sql
             return ()
         }
-
--- | Name of the application. Should just be the basename of the application
--- file.
-type Appname = Text
 
 -- | Information on an individual PostgreSQL database.
 data DBInfo = DBInfo
@@ -92,7 +86,7 @@ data Command = GetConfig Appname (Either SomeException DBInfo -> KIO ())
 -- | Load a set of existing connections from a config file. If the file does
 -- not exist, it will be created. Any newly created databases will
 -- automatically be saved to this file.
-load :: Settings -> FilePath -> KIO (Either SomeException Postgres)
+load :: Settings -> FilePath -> KIO (Either SomeException Plugin)
 load Settings{..} fp = do
     mdb <- liftIO $ do
         createTree $ directory fp
@@ -109,10 +103,16 @@ load Settings{..} fp = do
         chan <- newChan
         g0 <- newStdGen
         forkKIO $ flip S.evalStateT (db0, g0) $ forever $ loop chan
-        return $ Right $ Postgres $ \appname -> do
-            x <- newEmptyMVar
-            writeChan chan $ GetConfig appname $ putMVar x
-            takeMVar x
+        return $ Right Plugin
+            { pluginGetEnv = \appname o -> do
+                case HMap.lookup "postgres" o of
+                    Just (Bool True) -> do
+                        x <- newEmptyMVar
+                        writeChan chan $ GetConfig appname $ putMVar x
+                        edbi <- takeMVar x
+                        edbiToEnv edbi
+                    _ -> return []
+            }
 
     tmpfp = fp <.> "tmp"
 
@@ -149,3 +149,16 @@ load Settings{..} fp = do
         | 'a' <= c && c <= 'z' = c
         | '0' <= c && c <= '9' = c
         | otherwise = '_'
+
+edbiToEnv :: Either SomeException DBInfo
+          -> KIO [(Text, Text)]
+edbiToEnv (Left e) = do
+    $logEx e
+    return []
+edbiToEnv (Right dbi) = return
+    [ ("PGHOST", "localhost")
+    , ("PGPORT", "5432")
+    , ("PGUSER", dbiUser dbi)
+    , ("PGPASS", dbiPass dbi)
+    , ("PGDATABASE", dbiName dbi)
+    ]

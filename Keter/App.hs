@@ -10,11 +10,11 @@ module Keter.App
     , Keter.App.terminate
     ) where
 
-import Prelude (IO, Eq, Ord, fst, snd)
+import Prelude (IO, Eq, Ord, fst, snd, concat, mapM)
 import Keter.Prelude
 import Keter.TempFolder
-import Keter.Postgres
 import Keter.Process
+import Keter.Types
 import Keter.PortManager hiding (start)
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Check as Tar
@@ -46,9 +46,9 @@ data AppConfig = AppConfig
     { configExec :: F.FilePath
     , configArgs :: [Text]
     , configHost :: Text
-    , configPostgres :: Bool
     , configSsl :: Bool
     , configExtraHosts :: Set String
+    , configRaw :: Object
     }
 
 instance FromJSON AppConfig where
@@ -56,9 +56,9 @@ instance FromJSON AppConfig where
         <$> (F.fromText <$> o .: "exec")
         <*> o .:? "args" .!= []
         <*> o .: "host"
-        <*> o .:? "postgres" .!= False
         <*> o .:? "ssl" .!= False
         <*> o .:? "extra-hosts" .!= Set.empty
+        <*> return o
     parseJSON _ = fail "Wanted an object"
 
 data Config = Config
@@ -191,37 +191,18 @@ start :: TempFolder
       -> Maybe (Text, (UserID, GroupID))
       -> ProcessTracker
       -> PortManager
-      -> Postgres
+      -> Plugins
       -> RotatingLog
       -> Appname
       -> F.FilePath -- ^ app bundle
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
-start tf muid processTracker portman postgres rlog appname bundle removeFromList = do
+start tf muid processTracker portman plugins rlog appname bundle removeFromList = do
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
     runApp port dir config = do
-        otherEnv <- do
-            mdbi <-
-                if configPostgres config
-                    then do
-                        edbi <- getInfo postgres appname
-                        case edbi of
-                            Left e -> do
-                                $logEx e
-                                return Nothing
-                            Right dbi -> return $ Just dbi
-                    else return Nothing
-            return $ case mdbi of
-                Just dbi ->
-                    [ ("PGHOST", "localhost")
-                    , ("PGPORT", "5432")
-                    , ("PGUSER", dbiUser dbi)
-                    , ("PGPASS", dbiPass dbi)
-                    , ("PGDATABASE", dbiName dbi)
-                    ]
-                Nothing -> []
+        otherEnv <- pluginsGetEnv plugins appname (configRaw config)
         let env = ("PORT", show port)
                 : ("APPROOT", (if configSsl config then "https://" else "http://") ++ configHost config)
                 : otherEnv
@@ -356,3 +337,6 @@ reload (App f) = f Reload
 
 terminate :: App -> KIO ()
 terminate (App f) = f Terminate
+
+pluginsGetEnv :: Plugins -> Appname -> Object -> KIO [(Text, Text)]
+pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps

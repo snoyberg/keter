@@ -11,7 +11,7 @@ module Keter.Main
 import Keter.Prelude hiding (getCurrentTime)
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
-import qualified Keter.Postgres as Postgres
+import Keter.Types
 import qualified Keter.PortManager as PortMan
 import qualified Keter.Proxy as Proxy
 import qualified Keter.ReverseProxy as ReverseProxy
@@ -81,8 +81,9 @@ instance ParseYamlFile Config where
         <*> o .:? "ip-from-header" .!= False
 
 keter :: P.FilePath -- ^ root directory or config file
+      -> [F.FilePath -> KIO (Either SomeException Plugin)]
       -> P.IO ()
-keter (F.decodeString -> input) = do
+keter (F.decodeString -> input) mkPlugins = do
     exists <- F.isFile input
     Config{..} <-
         if exists
@@ -106,7 +107,7 @@ keter (F.decodeString -> input) = do
     processTracker <- initProcessTracker
     portman <- runThrow $ PortMan.start configPortMan
     tf <- runThrow $ TempFolder.setup $ configDir </> "temp"
-    postgres <- runThrow $ Postgres.load def $ configDir </> "etc" </> "postgres.yaml"
+    plugins <- runThrow $ loadPlugins $ map ($ configDir) mkPlugins
     mainlog <- runThrow $ liftIO $ LogFile.openRotatingLog
         (F.encodeString $ configDir </> "log" </> "keter")
         LogFile.defaultMaxTotal
@@ -171,7 +172,7 @@ keter (F.decodeString -> input) = do
                             muid
                             processTracker
                             portman
-                            postgres
+                            plugins
                             logger
                             appname
                             bundle
@@ -199,7 +200,7 @@ keter (F.decodeString -> input) = do
                 $ PortMan.PEReverseProxy
                 $ ReverseProxy.RPEntry r manager
     runKIO' $ mapM_ staticReverse (Set.toList configReverseProxy)
-    
+
     -- File system watching
     wm <- FSN.startManager
     FSN.watchDir wm incoming (P.const True) $ \e ->
@@ -237,3 +238,15 @@ keter (F.decodeString -> input) = do
     getAppname = either id id . toText . basename
     getAppname' = getAppname . F.decodeString
     runThrow f = runKIO P.print f >>= either throwIO return
+
+loadPlugins :: [KIO (Either SomeException Plugin)]
+            -> KIO (Either SomeException Plugins)
+loadPlugins =
+    loop id
+  where
+    loop front [] = return $ Right $ front []
+    loop front (x:xs) = do
+        eres <- x
+        case eres of
+            Left e -> return $ Left e
+            Right p -> loop (front . (p:)) xs

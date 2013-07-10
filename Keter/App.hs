@@ -15,7 +15,6 @@ import Keter.Prelude
 import Keter.TempFolder
 import Keter.Postgres
 import Keter.Process
-import Keter.Logger (Logger, detach)
 import Keter.PortManager hiding (start)
 import qualified Codec.Archive.Tar as Tar
 import qualified Codec.Archive.Tar.Check as Tar
@@ -41,7 +40,7 @@ import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
 import System.Posix.Files (setOwnerAndGroup, setFdOwnerAndGroup)
 import Control.Monad (unless)
-import Data.Conduit.Process.Unix (ProcessTracker)
+import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog)
 
 data AppConfig = AppConfig
     { configExec :: F.FilePath
@@ -193,12 +192,12 @@ start :: TempFolder
       -> ProcessTracker
       -> PortManager
       -> Postgres
-      -> Logger
+      -> RotatingLog
       -> Appname
       -> F.FilePath -- ^ app bundle
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
-start tf muid processTracker portman postgres logger appname bundle removeFromList = do
+start tf muid processTracker portman postgres rlog appname bundle removeFromList = do
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
@@ -233,7 +232,7 @@ start tf muid processTracker portman postgres logger appname bundle removeFromLi
             dir
             (configArgs config)
             env
-            logger
+            rlog
 
     rest chan = forkKIO $ do
         mres <- unpackBundle tf (snd <$> muid) bundle appname
@@ -283,7 +282,6 @@ start tf muid processTracker portman postgres logger appname bundle removeFromLi
                 mapM_ (removeEntry portman) $ map redFrom $ Set.toList $ configRedirects configOld
                 log $ TerminatingApp appname
                 terminateOld
-                detach logger
             Reload -> do
                 mres <- unpackBundle tf (snd <$> muid) bundle appname
                 case mres of

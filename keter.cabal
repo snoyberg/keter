@@ -66,8 +66,6 @@ Library
                        Keter.App
                        Keter.Main
                        Keter.Prelude
-                       Keter.LogFile
-                       Keter.Logger
                        Keter.Proxy
                        Keter.PortManager
                        Keter.ReverseProxy

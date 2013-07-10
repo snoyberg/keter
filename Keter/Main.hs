@@ -12,13 +12,12 @@ import Keter.Prelude hiding (getCurrentTime)
 import qualified Keter.TempFolder as TempFolder
 import qualified Keter.App as App
 import qualified Keter.Postgres as Postgres
-import qualified Keter.LogFile as LogFile
-import qualified Keter.Logger as Logger
 import qualified Keter.PortManager as PortMan
 import qualified Keter.Proxy as Proxy
 import qualified Keter.ReverseProxy as ReverseProxy
 import System.Posix.Files (modificationTime, getFileStatus)
 import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
+import qualified Data.Conduit.LogFile as LogFile
 
 import Data.Yaml.FilePath
 import Data.Aeson (withObject)
@@ -108,7 +107,9 @@ keter (F.decodeString -> input) = do
     portman <- runThrow $ PortMan.start configPortMan
     tf <- runThrow $ TempFolder.setup $ configDir </> "temp"
     postgres <- runThrow $ Postgres.load def $ configDir </> "etc" </> "postgres.yaml"
-    mainlog <- runThrow $ LogFile.start $ configDir </> "log" </> "keter"
+    mainlog <- runThrow $ liftIO $ LogFile.openRotatingLog
+        (F.encodeString $ configDir </> "log" </> "keter")
+        LogFile.defaultMaxTotal
 
     let runKIO' = runKIO $ \ml -> do
             now <- getCurrentTime
@@ -118,7 +119,7 @@ keter (F.decodeString -> input) = do
                     , show ml
                     , "\n"
                     ]
-            runKIOPrint $ LogFile.addChunk mainlog bs
+            LogFile.addChunk mainlog bs
         runKIOPrint = runKIO P.print
 
     manager <- HTTP.newManager def
@@ -156,20 +157,15 @@ keter (F.decodeString -> input) = do
                         mlogger <- do
                             let dirout = configDir </> "log" </> fromText ("app-" ++ appname)
                                 direrr = dirout </> "err"
-                            elfout <- LogFile.start dirout
-                            case elfout of
+                            erlog <- liftIO $ LogFile.openRotatingLog
+                                (F.encodeString dirout)
+                                LogFile.defaultMaxTotal
+                            case erlog of
                                 Left e -> do
                                     $logEx e
                                     return Nothing
-                                Right lfout -> do
-                                    elferr <- LogFile.start direrr
-                                    case elferr of
-                                        Left e -> do
-                                            $logEx e
-                                            LogFile.close lfout
-                                            return Nothing
-                                        Right lferr -> fmap Just $ Logger.start lfout lferr
-                        let logger = fromMaybe Logger.dummy mlogger
+                                Right rlog -> return (Just rlog)
+                        let logger = fromMaybe LogFile.dummy mlogger
                         (app, rest) <- App.start
                             tf
                             muid

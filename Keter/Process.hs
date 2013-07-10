@@ -8,13 +8,10 @@ module Keter.Process
     ) where
 
 import Keter.Prelude
-import Keter.Logger (Logger, attach, LogPipes (..), mkLogPipe)
 import Data.Time (diffUTCTime)
-import Data.Conduit.Process.Unix (forkExecuteFile, killProcess, terminateProcess, ProcessTracker, trackProcess)
+import Data.Conduit.Process.Unix (forkExecuteLog, killProcess, terminateProcess, ProcessTracker, trackProcess, RotatingLog, waitForProcess)
 import System.Process (ProcessHandle)
-import Prelude (error)
 import Data.Text.Encoding (encodeUtf8)
-import Data.Conduit (($$))
 
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
@@ -25,9 +22,9 @@ run :: ProcessTracker
     -> FilePath -- ^ working directory
     -> [String] -- ^ command line parameter
     -> [(String, String)] -- ^ environment
-    -> Logger
+    -> RotatingLog
     -> KIO Process
-run processTracker msetuid exec dir args env logger = do
+run processTracker msetuid exec dir args env rlog = do
     mstatus <- newMVar NeedsRestart
     let loop mlast = do
             next <- modifyMVar mstatus $ \status ->
@@ -40,30 +37,24 @@ run processTracker msetuid exec dir args env logger = do
                                 log $ ProcessWaiting exec
                                 threadDelay $ 5 * 1000 * 1000
                             _ -> return ()
-                        (pout, sout) <- mkLogPipe
-                        (perr, serr) <- mkLogPipe
                         let cmd0 = encodeUtf8 $ either id id $ toText exec
                             args0 = map encodeUtf8 args
                             (cmd, args') =
                                 case msetuid of
                                     Nothing -> (cmd0, args0)
                                     Just setuid -> ("sudo", "-E" : "-u" : encodeUtf8 setuid : "--" : cmd0 : args0)
-                        res <- liftIO $ forkExecuteFile
+                        res <- liftIO $ forkExecuteLog
                             cmd
                             args'
                             (Just $ map (encodeUtf8 *** encodeUtf8) env)
                             (Just $ encodeUtf8 $ either id id $ toText dir)
                             (Just $ return ())
-                            (Just sout)
-                            (Just serr)
+                            rlog
                         case res of
                             Left e -> do
                                 $logEx e
-                                void $ liftIO $ return () $$ sout
-                                void $ liftIO $ return () $$ serr
                                 return (NeedsRestart, return ())
                             Right pid -> do
-                                attach logger $ LogPipes pout perr
                                 log $ ProcessCreated exec
                                 return (Running pid, do
                                     void $ liftIO $ do

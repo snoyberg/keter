@@ -15,6 +15,7 @@ main = do
     fp <- canonicalizePath "."
     [msg] <- getArgs
     portS <- getEnv "PORT"
+    env <- getEnvironment
     let port = read portS
     logger <- mkRequestLogger def
         { outputFormat = Apache FromHeader
@@ -25,7 +26,12 @@ main = do
         liftIO $ hPutStrLn stderr $ "Testing standard error"
         liftIO $ hFlush stderr
         return $ responseLBS status200 [("content-type", "text/plain")] $ L8.pack $ unlines
-            [ "Message: " ++ msg
-            , "Path: " ++ fp
-            , "Headers: " ++ show (requestHeaders req)
-            ]
+            $ ("Message: " ++ msg)
+            : ("Path: " ++ fp)
+            : ("Headers: " ++ show (requestHeaders req))
+            : map (\(k, v) -> concat
+                [ "Env: "
+                , k
+                , " = "
+                , v
+                ]) env

@@ -13,7 +13,6 @@ module Keter.App
 import Prelude (IO, Eq, Ord, fst, snd, concat, mapM)
 import Keter.Prelude
 import Codec.Archive.TempTarball
-import Keter.Process
 import Keter.Types
 import Keter.PortManager hiding (start)
 import qualified Filesystem.Path.CurrentOS as F
@@ -25,9 +24,10 @@ import Data.Maybe (fromMaybe)
 import Control.Exception (throwIO)
 import System.IO (hClose)
 import qualified Data.Set as Set
-import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
+import Data.Text.Encoding.Error (lenientDecode)
 import System.Posix.Types (UserID, GroupID)
-import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog)
+import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog, terminateMonitoredProcess, monitorProcess)
 import Data.Yaml.FilePath
 
 data Command = Reload | Terminate
@@ -78,13 +78,15 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
         let env = ("PORT", show port)
                 : ("APPROOT", (if aconfigSsl config then "https://" else "http://") ++ aconfigHost config)
                 : otherEnv
-        run
+        log' <- getIOLogger
+        liftIO $ monitorProcess
+            (log' . decodeUtf8With lenientDecode)
             processTracker
-            (fst <$> muid)
-            (aconfigExec config)
-            dir
-            (aconfigArgs config)
-            env
+            (encodeUtf8 . fst <$> muid)
+            (encodeUtf8 $ either id id $ F.toText $ aconfigExec config)
+            (encodeUtf8 $ either id id $ F.toText dir)
+            (map encodeUtf8 $ aconfigArgs config)
+            (map (encodeUtf8 *** encodeUtf8) env)
             rlog
 
     rest chan = forkKIO $ do
@@ -108,18 +110,23 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                                 $logEx e
                                 removeFromList
                             Right port -> do
-                                process <- runApp port dir appconfig
-                                b <- testApp port
-                                if b
-                                    then do
-                                        addEntry portman (aconfigHost appconfig) $ PEPort port
-                                        mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ aconfigExtraHosts appconfig
-                                        common
-                                        loop chan dir config $ Just (process, port)
-                                    else do
+                                eprocess <- runApp port dir appconfig
+                                case eprocess of
+                                    Left e -> do
+                                        $logEx e
                                         removeFromList
-                                        releasePort portman port
-                                        Keter.Process.terminate process
+                                    Right process -> do
+                                        b <- testApp port
+                                        if b
+                                            then do
+                                                addEntry portman (aconfigHost appconfig) $ PEPort port
+                                                mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ aconfigExtraHosts appconfig
+                                                common
+                                                loop chan dir config $ Just (process, port)
+                                            else do
+                                                removeFromList
+                                                releasePort portman port
+                                                void $ liftIO $ terminateMonitoredProcess process
 
     loop chan dirOld configOld mprocPortOld = do
         command <- readChan chan
@@ -154,10 +161,17 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                                         common
                                         loop chan dir config Nothing
                                     Just appconfig -> do
-                                        process <- runApp port dir appconfig
-                                        b <- testApp port
-                                        if b
-                                            then do
+                                        eprocess <- runApp port dir appconfig
+                                        mprocess <-
+                                            case eprocess of
+                                                Left _ -> return Nothing
+                                                Right process -> do
+                                                    b <- testApp port
+                                                    return $ if b
+                                                        then Just process
+                                                        else Nothing
+                                        case mprocess of
+                                            Just process -> do
                                                 addEntry portman (aconfigHost appconfig) $ PEPort port
                                                 mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ aconfigExtraHosts appconfig
                                                 common
@@ -168,9 +182,11 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                                                 log $ FinishedReloading appname
                                                 terminateOld
                                                 loop chan dir config $ Just (process, port)
-                                            else do
+                                            Nothing -> do
                                                 releasePort portman port
-                                                Keter.Process.terminate process
+                                                case eprocess of
+                                                    Left _ -> return ()
+                                                    Right process -> void $ liftIO $ terminateMonitoredProcess process
                                                 log $ ProcessDidNotStart bundle
                                                 loop chan dirOld configOld mprocPortOld
       where
@@ -179,7 +195,7 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
             log $ TerminatingOldProcess appname
             case mprocPortOld of
                 Nothing -> return ()
-                Just (processOld, _) -> Keter.Process.terminate processOld
+                Just (processOld, _) -> void $ liftIO $ terminateMonitoredProcess processOld
             threadDelay $ 60 * 1000 * 1000
             log $ RemovingOldFolder dirOld
             res <- liftIO $ removeTree dirOld

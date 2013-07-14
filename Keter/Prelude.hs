@@ -27,6 +27,7 @@ module Keter.Prelude
     , liftIO
     , forkKIO
     , forkKIO'
+    , getIOLogger
     , (++)
     , P.minBound
     , P.succ
@@ -165,6 +166,7 @@ data LogMessage
     | RemovingOldFolder F.FilePath
     | ReceivedInotifyEvent T.Text
     | ProcessWaiting F.FilePath
+    | OtherMessage T.Text
 
 instance P.Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ F.encodeString f
@@ -195,6 +197,10 @@ instance P.Show LogMessage where
     show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ F.encodeString fp
     show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ T.unpack t
     show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ F.encodeString f
+    show (OtherMessage t) = T.unpack t
+
+getIOLogger :: KIO (T.Text -> P.IO ())
+getIOLogger = KIO $ \f -> P.return $ f . OtherMessage
 
 logEx :: TH.Q TH.Exp
 logEx = do

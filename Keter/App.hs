@@ -17,10 +17,11 @@ import Keter.Process
 import Keter.Types
 import Keter.PortManager hiding (start)
 import qualified Filesystem.Path.CurrentOS as F
+import qualified Filesystem as F
 import Data.Yaml
 import Control.Applicative ((<$>), (<*>), (<|>), pure)
 import qualified Network
-import Data.Maybe (fromMaybe, mapMaybe)
+import Data.Maybe (fromMaybe)
 import Control.Exception (throwIO)
 import System.IO (hClose)
 import Data.Set (Set)
@@ -28,6 +29,8 @@ import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
 import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog)
+import Data.Yaml.FilePath
+import Data.Aeson (withObject)
 
 data AppConfig = AppConfig
     { configExec :: F.FilePath
@@ -38,15 +41,14 @@ data AppConfig = AppConfig
     , configRaw :: Object
     }
 
-instance FromJSON AppConfig where
-    parseJSON (Object o) = AppConfig
-        <$> (F.fromText <$> o .: "exec")
+instance ParseYamlFile AppConfig where
+    parseYamlFile basedir = withObject "AppConfig" $ \o -> AppConfig
+        <$> lookupBase basedir o "exec"
         <*> o .:? "args" .!= []
         <*> o .: "host"
         <*> o .:? "ssl" .!= False
         <*> o .:? "extra-hosts" .!= Set.empty
         <*> return o
-    parseJSON _ = fail "Wanted an object"
 
 data Config = Config
     { configApp :: Maybe AppConfig
@@ -54,12 +56,11 @@ data Config = Config
     , configRedirects :: Set Redirect
     }
 
-instance FromJSON Config where
-    parseJSON (Object o) = Config
-        <$> ((Just <$> parseJSON (Object o)) <|> pure Nothing)
-        <*> o .:? "static-hosts" .!= Set.empty
+instance ParseYamlFile Config where
+    parseYamlFile basedir = withObject "Config" $ \o -> Config
+        <$> ((Just <$> parseYamlFile basedir (Object o)) <|> pure Nothing)
+        <*> lookupBaseMaybe basedir o "static-hosts" .!= Set.empty
         <*> o .:? "redirects" .!= Set.empty
-    parseJSON _ = fail "Wanted an object"
 
 data StaticHost = StaticHost
     { shHost :: String
@@ -67,11 +68,10 @@ data StaticHost = StaticHost
     }
     deriving (Eq, Ord)
 
-instance FromJSON StaticHost where
-    parseJSON (Object o) = StaticHost
+instance ParseYamlFile StaticHost where
+    parseYamlFile basedir = withObject "StaticHost" $ \o -> StaticHost
         <$> o .: "host"
-        <*> (F.fromText <$> o .: "root")
-    parseJSON _ = fail "Wanted an object"
+        <*> lookupBase basedir o "root"
 
 data Redirect = Redirect
     { redFrom :: Text
@@ -97,28 +97,22 @@ unpackBundle tf muid bundle appname = do
     log $ UnpackingBundle bundle
     liftIO $ unpackTempTar muid tf bundle appname $ \dir -> do
         let configFP = dir F.</> "config" F.</> "keter.yaml"
-        mconfig <- decodeFile $ F.encodeString configFP
+        mconfig <- decodeFileRelative configFP
         config <-
             case mconfig of
-                Just config -> return config
-                Nothing -> throwIO InvalidConfigFile
-        return (dir, config
-            { configStaticHosts = Set.fromList
-                                $ mapMaybe (fixStaticHost dir)
-                                $ Set.toList
-                                $ configStaticHosts config
-            })
-
--- | Ensures that the given path does not escape the containing folder and sets
--- the pathname based on config file location.
-fixStaticHost :: FilePath -> StaticHost -> Maybe StaticHost
-fixStaticHost dir sh =
-    case (F.stripPrefix (F.collapse dir F.</> "") fp, F.relative fp0) of
-        (Just _, True) -> Just sh { shRoot = fp }
-        _ -> Nothing
-  where
-    fp0 = shRoot sh
-    fp = F.collapse $ dir F.</> "config" F.</> fp0
+                Right config -> return config
+                Left e -> throwIO $ InvalidConfigFile e
+        config' <-
+            case configApp config of
+                Nothing -> return config
+                Just app -> do
+                    abs <- F.canonicalizePath $ configExec app
+                    return config
+                        { configApp = Just app
+                            { configExec = abs
+                            }
+                        }
+        return (dir, config')
 
 start :: TempFolder
       -> Maybe (Text, (UserID, GroupID))
@@ -142,7 +136,7 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
         run
             processTracker
             (fst <$> muid)
-            ("config" </> configExec config)
+            (configExec config)
             dir
             (configArgs config)
             env

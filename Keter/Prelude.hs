@@ -123,6 +123,7 @@ import qualified Blaze.ByteString.Builder.Char.Utf8
 import qualified System.Timeout
 import qualified Language.Haskell.TH.Syntax as TH
 import qualified Data.Time
+import qualified Data.Yaml
 
 type String = T.Text
 
@@ -287,7 +288,7 @@ instance FromText Blaze.Builder where
 data KeterException = CannotParsePostgres F.FilePath
                     | ExitCodeFailure F.FilePath ExitCode
                     | NoPortsAvailable
-                    | InvalidConfigFile
+                    | InvalidConfigFile Data.Yaml.ParseException
     deriving (P.Show, Typeable)
 instance E.Exception KeterException
 

@@ -3,17 +3,19 @@
 -- paths.
 module Data.Yaml.FilePath
     ( decodeFileRelative
-    , getFilePath
+    , lookupBase
+    , lookupBaseMaybe
     , BaseDir
     , ParseYamlFile (..)
     ) where
 
 import Control.Applicative ((<$>))
 import Filesystem.Path.CurrentOS (FilePath, encodeString, directory, fromText, (</>))
-import Data.Yaml (decodeFileEither, ParseException (AesonException))
-import Prelude (($!), ($), Either (..), return, IO, (.))
-import Data.Aeson.Types ((.:), Object, Parser, Value, parseEither)
+import Data.Yaml (decodeFileEither, ParseException (AesonException), parseJSON)
+import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord)
+import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
 import Data.Text (Text)
+import qualified Data.Set as Set
 
 -- | The directory from which we're reading the config file.
 newtype BaseDir = BaseDir FilePath
@@ -35,9 +37,19 @@ decodeFileRelative fp = do
 
 -- | A replacement for the @.:@ operator which will both parse a file path and
 -- apply the relative file logic.
-getFilePath :: BaseDir -> Object -> Text -> Parser FilePath
-getFilePath (BaseDir dir) o t = ((dir </>) . fromText) <$> o .: t
+lookupBase :: ParseYamlFile a => BaseDir -> Object -> Text -> Parser a
+lookupBase basedir o t = (o .: t) >>= parseYamlFile basedir
+
+-- | A replacement for the @.:?@ operator which will both parse a file path and
+-- apply the relative file logic.
+lookupBaseMaybe :: ParseYamlFile a => BaseDir -> Object -> Text -> Parser (Maybe a)
+lookupBaseMaybe basedir o t = (o .:? t) >>= maybe (return Nothing) ((Just <$>) . parseYamlFile basedir)
 
 -- | A replacement for the standard @FromJSON@ typeclass which can handle relative filepaths.
 class ParseYamlFile a where
     parseYamlFile :: BaseDir -> Value -> Parser a
+
+instance ParseYamlFile FilePath where
+    parseYamlFile (BaseDir dir) o = ((dir </>) . fromText) <$> parseJSON o
+instance (ParseYamlFile a, Ord a) => ParseYamlFile (Set.Set a) where
+    parseYamlFile base o = parseJSON o >>= ((Set.fromList <$>) . mapM (parseYamlFile base))

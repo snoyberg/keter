@@ -35,8 +35,8 @@ data TLSConfig = TLSConfig !Warp.Settings !WarpTLS.TLSSettings
 
 instance ParseYamlFile TLSConfig where
     parseYamlFile basedir = withObject "TLSConfig" $ \o -> do
-        cert <- getFilePath basedir o "certificate"
-        key <- getFilePath basedir o "key"
+        cert <- lookupBase basedir o "certificate"
+        key <- lookupBase basedir o "key"
         host <- (fmap fromString <$> o .:? "host") .!= "*"
         port <- o .:? "port" .!= 443
         return $! TLSConfig

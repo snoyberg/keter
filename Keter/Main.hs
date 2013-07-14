@@ -71,7 +71,7 @@ instance Default Config where
 
 instance ParseYamlFile Config where
     parseYamlFile basedir = withObject "Config" $ \o -> Config
-        <$> (getFilePath basedir o "root")
+        <$> lookupBase basedir o "root"
         <*> o .:? "port-manager" .!= def
         <*> (fmap fromString <$> o .:? "host") .!= configHost def
         <*> o .:? "port" .!= configPort def

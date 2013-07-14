@@ -46,35 +46,35 @@ import qualified Network.HTTP.Conduit as HTTP (newManager)
 import qualified Network.Wai.Handler.Warp as Warp
 import Data.Conduit.Process.Unix (initProcessTracker)
 
-data Config = Config
-    { configDir :: F.FilePath
-    , configPortMan :: PortMan.Settings
-    , configHost :: HostPreference
-    , configPort :: PortMan.Port
-    , configSsl :: Maybe Proxy.TLSConfig
-    , configSetuid :: Maybe Text
-    , configReverseProxy :: Set ReverseProxy.ReverseProxyConfig
-    , configIpFromHeader :: Bool
+data KeterConfig = KeterConfig
+    { kconfigDir :: F.FilePath
+    , kconfigPortMan :: PortMan.Settings
+    , kconfigHost :: HostPreference
+    , kconfigPort :: PortMan.Port
+    , kconfigSsl :: Maybe Proxy.TLSConfig
+    , kconfigSetuid :: Maybe Text
+    , kconfigReverseProxy :: Set ReverseProxy.ReverseProxyConfig
+    , kconfigIpFromHeader :: Bool
     }
 
-instance Default Config where
-    def = Config
-        { configDir = "."
-        , configPortMan = def
-        , configHost = "*"
-        , configPort = 80
-        , configSsl = Nothing
-        , configSetuid = Nothing
-        , configReverseProxy = Set.empty
-        , configIpFromHeader = False
+instance Default KeterConfig where
+    def = KeterConfig
+        { kconfigDir = "."
+        , kconfigPortMan = def
+        , kconfigHost = "*"
+        , kconfigPort = 80
+        , kconfigSsl = Nothing
+        , kconfigSetuid = Nothing
+        , kconfigReverseProxy = Set.empty
+        , kconfigIpFromHeader = False
         }
 
-instance ParseYamlFile Config where
-    parseYamlFile basedir = withObject "Config" $ \o -> Config
+instance ParseYamlFile KeterConfig where
+    parseYamlFile basedir = withObject "KeterConfig" $ \o -> KeterConfig
         <$> lookupBase basedir o "root"
         <*> o .:? "port-manager" .!= def
-        <*> (fmap fromString <$> o .:? "host") .!= configHost def
-        <*> o .:? "port" .!= configPort def
+        <*> (fmap fromString <$> o .:? "host") .!= kconfigHost def
+        <*> o .:? "port" .!= kconfigPort def
         <*> (o .:? "ssl" >>= maybe (return Nothing) (fmap Just . parseYamlFile basedir))
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
@@ -85,15 +85,15 @@ keter :: P.FilePath -- ^ root directory or config file
       -> P.IO ()
 keter (F.decodeString -> input) mkPlugins = do
     exists <- F.isFile input
-    Config{..} <-
+    KeterConfig{..} <-
         if exists
             then decodeFileRelative input >>= either
                     (\e -> P.error $ "Invalid config file: " ++ P.show e)
                     return
-            else return def { configDir = input }
+            else return def { kconfigDir = input }
 
     muid <-
-        case configSetuid of
+        case kconfigSetuid of
             Nothing -> return Nothing
             Just t -> do
                 x <- try $
@@ -105,11 +105,11 @@ keter (F.decodeString -> input) mkPlugins = do
                     Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
     processTracker <- initProcessTracker
-    portman <- runThrow $ PortMan.start configPortMan
-    tf <- runThrow $ liftIO $ TempFolder.setup $ configDir </> "temp"
-    plugins <- runThrow $ loadPlugins $ map ($ configDir) mkPlugins
+    portman <- runThrow $ PortMan.start kconfigPortMan
+    tf <- runThrow $ liftIO $ TempFolder.setup $ kconfigDir </> "temp"
+    plugins <- runThrow $ loadPlugins $ map ($ kconfigDir) mkPlugins
     mainlog <- runThrow $ liftIO $ LogFile.openRotatingLog
-        (F.encodeString $ configDir </> "log" </> "keter")
+        (F.encodeString $ kconfigDir </> "log" </> "keter")
         LogFile.defaultMaxTotal
 
     let runKIO' = runKIO $ \ml -> do
@@ -125,18 +125,18 @@ keter (F.decodeString -> input) mkPlugins = do
 
     manager <- HTTP.newManager def
     _ <- forkIO $ Proxy.reverseProxy
-            configIpFromHeader
+            kconfigIpFromHeader
             manager
             Warp.defaultSettings
-                { Warp.settingsPort = configPort
-                , Warp.settingsHost = configHost
+                { Warp.settingsPort = kconfigPort
+                , Warp.settingsHost = kconfigHost
                 }
             (runKIOPrint . PortMan.lookupPort portman)
-    case configSsl of
+    case kconfigSsl of
         Nothing -> return ()
         Just (Proxy.TLSConfig s ts) -> do
             _ <- forkIO $ Proxy.reverseProxySsl
-                    configIpFromHeader
+                    kconfigIpFromHeader
                     manager
                     ts
                     s
@@ -156,7 +156,7 @@ keter (F.decodeString -> input) mkPlugins = do
                         return (Map.insert appname (app, time) appMap, return ())
                     Nothing -> do
                         mlogger <- do
-                            let dirout = configDir </> "log" </> fromText ("app-" ++ appname)
+                            let dirout = kconfigDir </> "log" </> fromText ("app-" ++ appname)
                                 direrr = dirout </> "err"
                             erlog <- liftIO $ LogFile.openRotatingLog
                                 (F.encodeString dirout)
@@ -189,7 +189,7 @@ keter (F.decodeString -> input) mkPlugins = do
                 Nothing -> return ()
                 Just (app, _) -> runKIO' $ App.terminate app
 
-    let incoming = configDir </> "incoming"
+    let incoming = kconfigDir </> "incoming"
         isKeter fp = hasExtension fp "keter"
     createTree incoming
     bundles0 <- fmap (filter isKeter) $ listDirectory incoming
@@ -199,7 +199,7 @@ keter (F.decodeString -> input) mkPlugins = do
             PortMan.addEntry portman (ReverseProxy.reversingHost r)
                 $ PortMan.PEReverseProxy
                 $ ReverseProxy.RPEntry r manager
-    runKIO' $ mapM_ staticReverse (Set.toList configReverseProxy)
+    runKIO' $ mapM_ staticReverse (Set.toList kconfigReverseProxy)
 
     -- File system watching
     wm <- FSN.startManager

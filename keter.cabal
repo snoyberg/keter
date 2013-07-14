@@ -65,6 +65,8 @@ Library
                        Keter.Plugin.Postgres
                        Keter.Types
                        Keter.Types.V04
+                       Keter.Types.V10
+                       Keter.Types.Common
                        Keter.App
                        Keter.Main
                        Keter.Prelude

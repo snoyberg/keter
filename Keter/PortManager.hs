@@ -9,9 +9,6 @@ module Keter.PortManager
     , Host
     , PortManager
     , PortEntry (..)
-      -- ** Settings
-    , Settings
-    , portRange
       -- * Actions
     , getPort
     , releasePort
@@ -26,20 +23,13 @@ import Keter.Prelude
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
 import qualified Data.Map as Map
-import Control.Monad (forever, mzero, mplus)
+import Control.Monad (forever, mplus)
 import Data.ByteString.Char8 ()
 import qualified Network
 import qualified Data.ByteString as S
 import Data.Text.Encoding (encodeUtf8)
-import Data.Yaml (FromJSON (parseJSON), Value (Object))
-import Control.Applicative ((<$>))
 import qualified Keter.ReverseProxy as ReverseProxy (RPEntry)
-
--- | A port for an individual app to listen on.
-type Port = Int
-
--- | A virtual host we want to serve content from.
-type Host = String
+import Keter.Types
 
 data Command = GetPort (Either SomeException Port -> KIO ())
              | ReleasePort Port
@@ -53,27 +43,10 @@ data Command = GetPort (Either SomeException Port -> KIO ())
 -- nginx thread.
 newtype PortManager = PortManager (Command -> KIO ())
 
--- | Controls execution of the nginx thread. Follows the settings type pattern.
--- See: <http://www.yesodweb.com/book/settings-types>.
-data Settings = Settings
-    { portRange :: [Port]
-      -- ^ Which ports to assign to apps. Default: 4000-4999
-    }
-
-instance Default Settings where
-    def = Settings
-        { portRange = [4000..4999]
-        }
-
-instance FromJSON Settings where
-    parseJSON (Object _) = Settings
-        <$> return (portRange def)
-    parseJSON _ = mzero
-
 -- | Start running a separate thread which will accept commands and modify
 -- Nginx's behavior accordingly.
-start :: Settings -> KIO (Either SomeException PortManager)
-start Settings{..} = do
+start :: PortSettings -> KIO (Either SomeException PortManager)
+start PortSettings{..} = do
     chan <- newChan
     forkKIO $ flip S.evalStateT freshState $ forever $ do
         command <- lift $ readChan chan

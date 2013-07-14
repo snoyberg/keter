@@ -7,7 +7,7 @@ module Keter.ReverseProxy
   )
   where
 
-import Control.Applicative ((<$>),(<*>),(<|>))
+import Control.Applicative ((<|>))
 import Data.Monoid ((<>))
 
 import qualified Data.Set as Set
@@ -25,7 +25,6 @@ import qualified Data.CaseInsensitive as CI
 import Blaze.ByteString.Builder (fromByteString)
 
 -- Configuration files
-import Data.Yaml (FromJSON (..), Value (Object), (.:), (.:?), (.!=))
 import Data.Default
 
 -- Regular expression parsing, replacement, matching
@@ -40,51 +39,7 @@ import Data.Conduit
 import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
 import Network.HTTP.Types
-
-data ReverseProxyConfig = ReverseProxyConfig
-    { reversedHost :: Text
-    , reversedPort :: Int
-    , reversingHost :: Text
-    , reverseUseSSL :: Bool
-    , reverseTimeout :: Maybe Int
-    , rewriteResponseRules :: Set RewriteRule
-    , rewriteRequestRules :: Set RewriteRule
-    } deriving (Eq, Ord)
-
-instance FromJSON ReverseProxyConfig where
-    parseJSON (Object o) = ReverseProxyConfig
-        <$> o .: "reversed-host"
-        <*> o .: "reversed-port"
-        <*> o .: "reversing-host"
-        <*> o .:? "ssl" .!= False
-        <*> o .:? "timeout" .!= Nothing
-        <*> o .:? "rewrite-response" .!= Set.empty
-        <*> o .:? "rewrite-request" .!= Set.empty
-    parseJSON _ = fail "Wanted an object"
-
-instance Default ReverseProxyConfig where
-    def = ReverseProxyConfig
-        { reversedHost = ""
-        , reversedPort = 80
-        , reversingHost = ""
-        , reverseUseSSL = False
-        , reverseTimeout = Nothing
-        , rewriteResponseRules = Set.empty
-        , rewriteRequestRules = Set.empty
-        }
-
-data RewriteRule = RewriteRule
-    { ruleHeader :: Text
-    , ruleRegex :: Text
-    , ruleReplacement :: Text
-    } deriving (Eq, Ord)
-
-instance FromJSON RewriteRule where
-    parseJSON (Object o) = RewriteRule
-        <$> o .: "header"
-        <*> o .: "from"
-        <*> o .: "to"
-    parseJSON _ = fail "Wanted an object"
+import Keter.Types
 
 data RPEntry = RPEntry
     { config :: ReverseProxyConfig

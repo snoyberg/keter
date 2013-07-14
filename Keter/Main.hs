@@ -20,8 +20,6 @@ import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
 import qualified Data.Conduit.LogFile as LogFile
 
 import Data.Yaml.FilePath
-import Data.Aeson (withObject)
-import Data.Conduit.Network (HostPreference)
 import qualified Control.Concurrent.MVar as M
 import Control.Concurrent (forkIO)
 import qualified Data.Map as Map
@@ -35,50 +33,13 @@ import Data.Text.Encoding (encodeUtf8)
 import Data.Time (getCurrentTime)
 import qualified Data.Text as T
 import Data.Maybe (fromMaybe, catMaybes)
-import Data.Yaml ((.:?), (.!=))
-import Control.Applicative ((<$>), (<*>))
-import Data.String (fromString)
+import Control.Applicative ((<$>))
 import System.Posix.User (userID, userGroupID, getUserEntryForName, getUserEntryForID, userName)
 import qualified Data.Text.Read
-import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Network.HTTP.Conduit as HTTP (newManager)
 import qualified Network.Wai.Handler.Warp as Warp
 import Data.Conduit.Process.Unix (initProcessTracker)
-
-data KeterConfig = KeterConfig
-    { kconfigDir :: F.FilePath
-    , kconfigPortMan :: PortMan.Settings
-    , kconfigHost :: HostPreference
-    , kconfigPort :: PortMan.Port
-    , kconfigSsl :: Maybe Proxy.TLSConfig
-    , kconfigSetuid :: Maybe Text
-    , kconfigReverseProxy :: Set ReverseProxy.ReverseProxyConfig
-    , kconfigIpFromHeader :: Bool
-    }
-
-instance Default KeterConfig where
-    def = KeterConfig
-        { kconfigDir = "."
-        , kconfigPortMan = def
-        , kconfigHost = "*"
-        , kconfigPort = 80
-        , kconfigSsl = Nothing
-        , kconfigSetuid = Nothing
-        , kconfigReverseProxy = Set.empty
-        , kconfigIpFromHeader = False
-        }
-
-instance ParseYamlFile KeterConfig where
-    parseYamlFile basedir = withObject "KeterConfig" $ \o -> KeterConfig
-        <$> lookupBase basedir o "root"
-        <*> o .:? "port-manager" .!= def
-        <*> (fmap fromString <$> o .:? "host") .!= kconfigHost def
-        <*> o .:? "port" .!= kconfigPort def
-        <*> (o .:? "ssl" >>= maybe (return Nothing) (fmap Just . parseYamlFile basedir))
-        <*> o .:? "setuid"
-        <*> o .:? "reverse-proxy" .!= Set.empty
-        <*> o .:? "ip-from-header" .!= False
 
 keter :: P.FilePath -- ^ root directory or config file
       -> [F.FilePath -> KIO (Either SomeException Plugin)]

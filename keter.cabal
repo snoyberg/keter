@@ -64,6 +64,7 @@ Library
   Exposed-Modules:     Keter.Process
                        Keter.Plugin.Postgres
                        Keter.Types
+                       Keter.Types.V04
                        Keter.App
                        Keter.Main
                        Keter.Prelude

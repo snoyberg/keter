@@ -19,71 +19,16 @@ import Keter.PortManager hiding (start)
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
 import Data.Yaml
-import Control.Applicative ((<$>), (<*>), (<|>), pure)
+import Control.Applicative ((<$>))
 import qualified Network
 import Data.Maybe (fromMaybe)
 import Control.Exception (throwIO)
 import System.IO (hClose)
-import Data.Set (Set)
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
 import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog)
 import Data.Yaml.FilePath
-import Data.Aeson (withObject)
-
-data AppConfig = AppConfig
-    { configExec :: F.FilePath
-    , configArgs :: [Text]
-    , configHost :: Text
-    , configSsl :: Bool
-    , configExtraHosts :: Set String
-    , configRaw :: Object
-    }
-
-instance ParseYamlFile AppConfig where
-    parseYamlFile basedir = withObject "AppConfig" $ \o -> AppConfig
-        <$> lookupBase basedir o "exec"
-        <*> o .:? "args" .!= []
-        <*> o .: "host"
-        <*> o .:? "ssl" .!= False
-        <*> o .:? "extra-hosts" .!= Set.empty
-        <*> return o
-
-data Config = Config
-    { configApp :: Maybe AppConfig
-    , configStaticHosts :: Set StaticHost
-    , configRedirects :: Set Redirect
-    }
-
-instance ParseYamlFile Config where
-    parseYamlFile basedir = withObject "Config" $ \o -> Config
-        <$> ((Just <$> parseYamlFile basedir (Object o)) <|> pure Nothing)
-        <*> lookupBaseMaybe basedir o "static-hosts" .!= Set.empty
-        <*> o .:? "redirects" .!= Set.empty
-
-data StaticHost = StaticHost
-    { shHost :: String
-    , shRoot :: FilePath
-    }
-    deriving (Eq, Ord)
-
-instance ParseYamlFile StaticHost where
-    parseYamlFile basedir = withObject "StaticHost" $ \o -> StaticHost
-        <$> o .: "host"
-        <*> lookupBase basedir o "root"
-
-data Redirect = Redirect
-    { redFrom :: Text
-    , redTo :: Text
-    }
-    deriving (Eq, Ord)
-
-instance FromJSON Redirect where
-    parseJSON (Object o) = Redirect
-        <$> o .: "from"
-        <*> o .: "to"
-    parseJSON _ = fail "Wanted an object"
 
 data Command = Reload | Terminate
 newtype App = App (Command -> KIO ())
@@ -92,7 +37,7 @@ unpackBundle :: TempFolder
              -> Maybe (UserID, GroupID)
              -> F.FilePath
              -> Appname
-             -> KIO (Either SomeException (FilePath, Config))
+             -> KIO (Either SomeException (FilePath, BundleConfig))
 unpackBundle tf muid bundle appname = do
     log $ UnpackingBundle bundle
     liftIO $ unpackTempTar muid tf bundle appname $ \dir -> do
@@ -103,13 +48,13 @@ unpackBundle tf muid bundle appname = do
                 Right config -> return config
                 Left e -> throwIO $ InvalidConfigFile e
         config' <-
-            case configApp config of
+            case bconfigApp config of
                 Nothing -> return config
                 Just app -> do
-                    abs <- F.canonicalizePath $ configExec app
+                    abs <- F.canonicalizePath $ aconfigExec app
                     return config
-                        { configApp = Just app
-                            { configExec = abs
+                        { bconfigApp = Just app
+                            { aconfigExec = abs
                             }
                         }
         return (dir, config')
@@ -129,16 +74,16 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
     return (App $ writeChan chan, rest chan)
   where
     runApp port dir config = do
-        otherEnv <- pluginsGetEnv plugins appname (configRaw config)
+        otherEnv <- pluginsGetEnv plugins appname (aconfigRaw config)
         let env = ("PORT", show port)
-                : ("APPROOT", (if configSsl config then "https://" else "http://") ++ configHost config)
+                : ("APPROOT", (if aconfigSsl config then "https://" else "http://") ++ aconfigHost config)
                 : otherEnv
         run
             processTracker
             (fst <$> muid)
-            (configExec config)
+            (aconfigExec config)
             dir
-            (configArgs config)
+            (aconfigArgs config)
             env
             rlog
 
@@ -150,9 +95,9 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                 removeFromList
             Right (dir, config) -> do
                 let common = do
-                        mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
-                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
-                case configApp config of
+                        mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ bconfigStaticHosts config
+                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ bconfigRedirects config
+                case bconfigApp config of
                     Nothing -> do
                         common
                         loop chan dir config Nothing
@@ -167,8 +112,8 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                                 b <- testApp port
                                 if b
                                     then do
-                                        addEntry portman (configHost appconfig) $ PEPort port
-                                        mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts appconfig
+                                        addEntry portman (aconfigHost appconfig) $ PEPort port
+                                        mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ aconfigExtraHosts appconfig
                                         common
                                         loop chan dir config $ Just (process, port)
                                     else do
@@ -181,13 +126,13 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
         case command of
             Terminate -> do
                 removeFromList
-                case configApp configOld of
+                case bconfigApp configOld of
                     Nothing -> return ()
                     Just appconfig -> do
-                        removeEntry portman $ configHost appconfig
-                        mapM_ (removeEntry portman) $ Set.toList $ configExtraHosts appconfig
-                mapM_ (removeEntry portman) $ map shHost $ Set.toList $ configStaticHosts configOld
-                mapM_ (removeEntry portman) $ map redFrom $ Set.toList $ configRedirects configOld
+                        removeEntry portman $ aconfigHost appconfig
+                        mapM_ (removeEntry portman) $ Set.toList $ aconfigExtraHosts appconfig
+                mapM_ (removeEntry portman) $ map shHost $ Set.toList $ bconfigStaticHosts configOld
+                mapM_ (removeEntry portman) $ map redFrom $ Set.toList $ bconfigRedirects configOld
                 log $ TerminatingApp appname
                 terminateOld
             Reload -> do
@@ -202,9 +147,9 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                             Left e -> $logEx e
                             Right port -> do
                                 let common = do
-                                        mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
-                                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
-                                case configApp config of
+                                        mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ bconfigStaticHosts config
+                                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ bconfigRedirects config
+                                case bconfigApp config of
                                     Nothing -> do
                                         common
                                         loop chan dir config Nothing
@@ -213,12 +158,12 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                                         b <- testApp port
                                         if b
                                             then do
-                                                addEntry portman (configHost appconfig) $ PEPort port
-                                                mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ configExtraHosts appconfig
+                                                addEntry portman (aconfigHost appconfig) $ PEPort port
+                                                mapM_ (flip (addEntry portman) $ PEPort port) $ Set.toList $ aconfigExtraHosts appconfig
                                                 common
-                                                case configApp configOld of
-                                                    Just appconfigOld | configHost appconfig /= configHost appconfigOld ->
-                                                        removeEntry portman $ configHost appconfigOld
+                                                case bconfigApp configOld of
+                                                    Just appconfigOld | aconfigHost appconfig /= aconfigHost appconfigOld ->
+                                                        removeEntry portman $ aconfigHost appconfigOld
                                                     _ -> return ()
                                                 log $ FinishedReloading appname
                                                 terminateOld

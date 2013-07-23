@@ -4,6 +4,27 @@ set -o errexit -o nounset -o xtrace
 # Quick start:
 # wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
 
+REQMEM=1024
+MEM=`free -m | grep '^Mem' | awk '{print $2}'`
+MAYBESWAP=`free -m | grep '^Swap' | awk '{print $2}'`
+
+if [ -z $MAYBESWAP ]
+then
+  SWAP=0
+else
+  SWAP=$MAYBESWAP
+fi
+
+MEMSWAP=$(($MEM+$SWAP))
+
+if [ $REQMEM -gt $MEMSWAP ]
+then
+  echo "Making swap (THIS WILL MAKE INSTALL SLOWER, BUT PREVENT CRASH"
+  dd if=/dev/zero of=/keterswap bs=1M count=1024
+  mkswap /keterswap
+  swapon /keterswap
+fi
+
 sudo apt-get update
 sudo apt-get install postgresql haskell-platform -y
 

@@ -14,7 +14,7 @@ import Prelude (IO, Eq, Ord, fst, snd, concat, mapM)
 import Keter.Prelude
 import Codec.Archive.TempTarball
 import Keter.Types
-import Keter.PortManager hiding (start)
+import Keter.HostManager hiding (start)
 import qualified Filesystem.Path.CurrentOS as F
 import qualified Filesystem as F
 import Data.Yaml
@@ -62,7 +62,7 @@ unpackBundle tf muid bundle appname = do
 start :: TempFolder
       -> Maybe (Text, (UserID, GroupID))
       -> ProcessTracker
-      -> PortManager
+      -> HostManager
       -> Plugins
       -> RotatingLog
       -> Appname

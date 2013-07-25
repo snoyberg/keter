@@ -10,7 +10,7 @@ module Keter.Proxy
 import Prelude hiding ((++), FilePath)
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString (ByteString)
-import Keter.PortManager (PortEntry (..))
+import Keter.HostManager (HostEntry (..))
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import Network.HTTP.ReverseProxy (waiProxyToSettings, wpsSetIpHeader, SetIpHeader (..), ProxyDest (ProxyDest), WaiProxyResponse (..))
@@ -27,7 +27,7 @@ import Data.Default
 import Keter.Types
 
 -- | Mapping from virtual hostname to port number.
-type PortLookup = ByteString -> IO (Maybe PortEntry)
+type PortLookup = ByteString -> IO (Maybe HostEntry)
 
 reverseProxy :: Bool -> Manager -> Warp.Settings -> PortLookup -> IO ()
 reverseProxy useHeader manager settings = Warp.runSettings settings . withClient useHeader manager

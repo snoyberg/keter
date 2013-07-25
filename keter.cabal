@@ -70,7 +70,7 @@ Library
                        Keter.Main
                        Keter.Prelude
                        Keter.Proxy
-                       Keter.PortManager
+                       Keter.HostManager
                        Keter.ReverseProxy
                        Data.Yaml.FilePath
                        Codec.Archive.TempTarball

@@ -12,7 +12,7 @@ import Keter.Prelude hiding (getCurrentTime)
 import qualified Codec.Archive.TempTarball as TempFolder
 import qualified Keter.App as App
 import Keter.Types
-import qualified Keter.PortManager as PortMan
+import qualified Keter.HostManager as HostMan
 import qualified Keter.Proxy as Proxy
 import qualified Keter.ReverseProxy as ReverseProxy
 import System.Posix.Files (modificationTime, getFileStatus)
@@ -66,7 +66,7 @@ keter (F.decodeString -> input) mkPlugins = do
                     Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
     processTracker <- initProcessTracker
-    portman <- runThrow $ PortMan.start kconfigPortMan
+    portman <- runThrow $ HostMan.start kconfigHostMan
     tf <- runThrow $ liftIO $ TempFolder.setup $ kconfigDir </> "temp"
     plugins <- runThrow $ loadPlugins $ map ($ kconfigDir) mkPlugins
     mainlog <- runThrow $ liftIO $ LogFile.openRotatingLog
@@ -92,7 +92,7 @@ keter (F.decodeString -> input) mkPlugins = do
                 { Warp.settingsPort = kconfigPort
                 , Warp.settingsHost = kconfigHost
                 }
-            (runKIOPrint . PortMan.lookupPort portman)
+            (runKIOPrint . HostMan.lookupPort portman)
     case kconfigSsl of
         Nothing -> return ()
         Just (Proxy.TLSConfig s ts) -> do
@@ -101,7 +101,7 @@ keter (F.decodeString -> input) mkPlugins = do
                     manager
                     ts
                     s
-                    (runKIOPrint . PortMan.lookupPort portman)
+                    (runKIOPrint . HostMan.lookupPort portman)
             return ()
 
     mappMap <- M.newMVar Map.empty
@@ -157,8 +157,8 @@ keter (F.decodeString -> input) mkPlugins = do
     runKIO' $ mapM_ addApp bundles0
 
     let staticReverse r = do
-            PortMan.addEntry portman (ReverseProxy.reversingHost r)
-                $ PortMan.PEReverseProxy
+            HostMan.addEntry portman (ReverseProxy.reversingHost r)
+                $ HostMan.PEReverseProxy
                 $ ReverseProxy.RPEntry r manager
     runKIO' $ mapM_ staticReverse (Set.toList kconfigReverseProxy)
 

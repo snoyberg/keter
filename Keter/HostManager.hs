@@ -3,12 +3,12 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
-module Keter.PortManager
+module Keter.HostManager
     ( -- * Types
       Port
     , Host
-    , PortManager
-    , PortEntry (..)
+    , HostManager
+    , HostEntry (..)
       -- * Actions
     , getPort
     , releasePort
@@ -33,19 +33,19 @@ import Keter.Types
 
 data Command = GetPort (Either SomeException Port -> KIO ())
              | ReleasePort Port
-             | AddEntry Host PortEntry
+             | AddEntry Host HostEntry
              | RemoveEntry Host
-             | AddDefaultEntry PortEntry
+             | AddDefaultEntry HostEntry
              | RemoveDefaultEntry
-             | LookupPort S.ByteString (Maybe PortEntry -> KIO ())
+             | LookupPort S.ByteString (Maybe HostEntry -> KIO ())
 
 -- | An abstract type which can accept commands and sends them to a background
 -- nginx thread.
-newtype PortManager = PortManager (Command -> KIO ())
+newtype HostManager = HostManager (Command -> KIO ())
 
 -- | Start running a separate thread which will accept commands and modify
 -- Nginx's behavior accordingly.
-start :: PortSettings -> KIO (Either SomeException PortManager)
+start :: PortSettings -> KIO (Either SomeException HostManager)
 start PortSettings{..} = do
     chan <- newChan
     forkKIO $ flip S.evalStateT freshState $ forever $ do
@@ -86,7 +86,7 @@ start PortSettings{..} = do
             LookupPort h f -> do
                 NState {..} <- S.get
                 lift $ f $ mplus (Map.lookup h nsEntries) nsDefault
-    return $ Right $ PortManager $ writeChan chan
+    return $ Right $ HostManager $ writeChan chan
   where
     change f = do
         ns <- S.get
@@ -97,13 +97,13 @@ start PortSettings{..} = do
 data NState = NState
     { nsAvail :: [Port]
     , nsRecycled :: [Port]
-    , nsEntries :: Map.Map S.ByteString PortEntry
-    , nsDefault :: Maybe PortEntry
+    , nsEntries :: Map.Map S.ByteString HostEntry
+    , nsDefault :: Maybe HostEntry
     }
 
 -- | Gets an unassigned port number.
-getPort :: PortManager -> KIO (Either SomeException Port)
-getPort (PortManager f) = do
+getPort :: HostManager -> KIO (Either SomeException Port)
+getPort (HostManager f) = do
     x <- newEmptyMVar
     f $ GetPort $ \p -> putMVar x p
     takeMVar x
@@ -112,28 +112,28 @@ getPort (PortManager f) = do
 -- used, and may be reused by a new process. Note that recycling puts the new
 -- ports at the end of the queue (FIFO), so that if an application holds onto
 -- the port longer than expected, there should be no issues.
-releasePort :: PortManager -> Port -> KIO ()
-releasePort (PortManager f) p = f $ ReleasePort p
+releasePort :: HostManager -> Port -> KIO ()
+releasePort (HostManager f) p = f $ ReleasePort p
 
 -- | Add a new entry to the configuration for the given hostname and reload
 -- nginx. Will overwrite any existing configuration for the given host. The
 -- second point is important: it is how we achieve zero downtime transitions
 -- between an old and new version of an app.
-addEntry :: PortManager -> Host -> PortEntry -> KIO ()
-addEntry (PortManager f) h p = f $ case h of
+addEntry :: HostManager -> Host -> HostEntry -> KIO ()
+addEntry (HostManager f) h p = f $ case h of
     "*" -> AddDefaultEntry p
     _   -> AddEntry h p
 
-data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy ReverseProxy.RPEntry
+data HostEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy ReverseProxy.RPEntry
 
 -- | Remove an entry from the configuration and reload nginx.
-removeEntry :: PortManager -> Host -> KIO ()
-removeEntry (PortManager f) h = f $ case h of
+removeEntry :: HostManager -> Host -> KIO ()
+removeEntry (HostManager f) h = f $ case h of
     "*" -> RemoveDefaultEntry
     _   -> RemoveEntry h
 
-lookupPort :: PortManager -> S.ByteString -> KIO (Maybe PortEntry)
-lookupPort (PortManager f) h = do
+lookupPort :: HostManager -> S.ByteString -> KIO (Maybe HostEntry)
+lookupPort (HostManager f) h = do
     x <- newEmptyMVar
     f $ LookupPort h $ \p -> putMVar x p
     takeMVar x

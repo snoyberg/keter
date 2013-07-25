@@ -93,7 +93,7 @@ instance FromJSON Redirect where
 
 data KeterConfig = KeterConfig
     { kconfigDir :: F.FilePath
-    , kconfigPortMan :: V04.PortSettings
+    , kconfigHostMan :: V04.PortSettings
     , kconfigHost :: HostPreference
     , kconfigPort :: Port
     , kconfigSsl :: Maybe V04.TLSConfig
@@ -117,7 +117,7 @@ instance ToCurrent KeterConfig where
 instance Default KeterConfig where
     def = KeterConfig
         { kconfigDir = "."
-        , kconfigPortMan = def
+        , kconfigHostMan = def
         , kconfigHost = "*"
         , kconfigPort = 80
         , kconfigSsl = Nothing

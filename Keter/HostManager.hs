@@ -28,7 +28,7 @@ import Data.ByteString.Char8 ()
 import qualified Network
 import qualified Data.ByteString as S
 import Data.Text.Encoding (encodeUtf8)
-import qualified Keter.ReverseProxy as ReverseProxy (RPEntry)
+import Network.HTTP.ReverseProxy.Rewrite (RPEntry)
 import Keter.Types
 
 data Command = GetPort (Either SomeException Port -> KIO ())
@@ -124,7 +124,7 @@ addEntry (HostManager f) h p = f $ case h of
     "*" -> AddDefaultEntry p
     _   -> AddEntry h p
 
-data HostEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy ReverseProxy.RPEntry
+data HostEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy RPEntry
 
 -- | Remove an entry from the configuration and reload nginx.
 removeEntry :: HostManager -> Host -> KIO ()

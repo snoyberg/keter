@@ -3,7 +3,7 @@ module Keter.Types
     ) where
 
 import Keter.Types.Common as X
-import Keter.Types.V04 as X (ReverseProxyConfig (..), RewriteRule (..), PortSettings (..), TLSConfig (..))
+import Keter.Types.V04 as X (PortSettings (..), TLSConfig (..))
 import Keter.Types.V10 as X
     ( BundleConfig (..)
     , WebAppConfig (..)
@@ -12,3 +12,4 @@ import Keter.Types.V10 as X
     , KeterConfig (..)
     , Stanza (..)
     )
+import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig (..), RewriteRule (..))

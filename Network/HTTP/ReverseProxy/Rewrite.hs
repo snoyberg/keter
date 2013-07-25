@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Keter.ReverseProxy
+module Network.HTTP.ReverseProxy.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
   , RPEntry (..)
@@ -7,7 +7,7 @@ module Keter.ReverseProxy
   )
   where
 
-import Control.Applicative ((<|>))
+import Control.Applicative
 import Data.Monoid ((<>))
 
 import qualified Data.Set as Set
@@ -15,6 +15,7 @@ import Data.Set (Set)
 import qualified Data.Map as Map
 import Data.Map ( Map )
 import Data.Array ((!))
+import Data.Aeson
 
 import qualified Data.ByteString as S
 import qualified Data.Text as T
@@ -39,7 +40,6 @@ import Data.Conduit
 import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
 import Network.HTTP.Types
-import Keter.Types
 
 data RPEntry = RPEntry
     { config :: ReverseProxyConfig
@@ -142,3 +142,48 @@ simpleReverseProxy (RPEntry { config = rpConfig, httpManager = mgr }) request =
         (mapOutput (Chunk . fromByteString) body)
   where
     respRuleMap = mkRuleMap $ rewriteResponseRules rpConfig
+
+data ReverseProxyConfig = ReverseProxyConfig
+    { reversedHost :: Text
+    , reversedPort :: Int
+    , reversingHost :: Text
+    , reverseUseSSL :: Bool
+    , reverseTimeout :: Maybe Int
+    , rewriteResponseRules :: Set RewriteRule
+    , rewriteRequestRules :: Set RewriteRule
+    } deriving (Eq, Ord)
+
+instance FromJSON ReverseProxyConfig where
+    parseJSON (Object o) = ReverseProxyConfig
+        <$> o .: "reversed-host"
+        <*> o .: "reversed-port"
+        <*> o .: "reversing-host"
+        <*> o .:? "ssl" .!= False
+        <*> o .:? "timeout" .!= Nothing
+        <*> o .:? "rewrite-response" .!= Set.empty
+        <*> o .:? "rewrite-request" .!= Set.empty
+    parseJSON _ = fail "Wanted an object"
+
+instance Default ReverseProxyConfig where
+    def = ReverseProxyConfig
+        { reversedHost = ""
+        , reversedPort = 80
+        , reversingHost = ""
+        , reverseUseSSL = False
+        , reverseTimeout = Nothing
+        , rewriteResponseRules = Set.empty
+        , rewriteRequestRules = Set.empty
+        }
+
+data RewriteRule = RewriteRule
+    { ruleHeader :: Text
+    , ruleRegex :: Text
+    , ruleReplacement :: Text
+    } deriving (Eq, Ord)
+
+instance FromJSON RewriteRule where
+    parseJSON (Object o) = RewriteRule
+        <$> o .: "header"
+        <*> o .: "from"
+        <*> o .: "to"
+    parseJSON _ = fail "Wanted an object"

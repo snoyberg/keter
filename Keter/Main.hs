@@ -14,7 +14,7 @@ import qualified Keter.App as App
 import Keter.Types
 import qualified Keter.HostManager as HostMan
 import qualified Keter.Proxy as Proxy
-import qualified Keter.ReverseProxy as ReverseProxy
+import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import System.Posix.Files (modificationTime, getFileStatus)
 import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
 import qualified Data.Conduit.LogFile as LogFile

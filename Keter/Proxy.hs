@@ -17,7 +17,7 @@ import Network.HTTP.ReverseProxy (waiProxyToSettings, wpsSetIpHeader, SetIpHeade
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
 import qualified Network.Wai as Wai
 import Network.HTTP.Types (status301, status200)
-import qualified Keter.ReverseProxy as ReverseProxy
+import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import Network.HTTP.Conduit (Manager)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
@@ -54,7 +54,7 @@ withClient useHeader manager portLookup =
             Just (PEPort port) -> return $ WPRProxyDest $ ProxyDest "127.0.0.1" port
             Just (PEStatic root) -> fmap WPRResponse $ staticApp (defaultFileServerSettings root) req
             Just (PERedirect host) -> return $ WPRResponse $ redirectApp host req
-            Just (PEReverseProxy rpentry) -> fmap WPRResponse $ ReverseProxy.simpleReverseProxy rpentry req
+            Just (PEReverseProxy rpentry) -> fmap WPRResponse $ Rewrite.simpleReverseProxy rpentry req
       where
         mhost = lookup "host" $ Wai.requestHeaders req
 

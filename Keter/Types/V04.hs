@@ -19,6 +19,7 @@ import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import Filesystem.Path.CurrentOS (encodeString)
 import Keter.Types.Common
+import Network.HTTP.ReverseProxy.Rewrite
 
 data AppConfig = AppConfig
     { configExec :: F.FilePath
@@ -140,48 +141,3 @@ instance Default PortSettings where
 instance FromJSON PortSettings where
     parseJSON = withObject "PortSettings" $ \_ -> PortSettings
         <$> return (portRange def)
-
-data ReverseProxyConfig = ReverseProxyConfig
-    { reversedHost :: Text
-    , reversedPort :: Int
-    , reversingHost :: Text
-    , reverseUseSSL :: Bool
-    , reverseTimeout :: Maybe Int
-    , rewriteResponseRules :: Set RewriteRule
-    , rewriteRequestRules :: Set RewriteRule
-    } deriving (Eq, Ord)
-
-instance FromJSON ReverseProxyConfig where
-    parseJSON (Object o) = ReverseProxyConfig
-        <$> o .: "reversed-host"
-        <*> o .: "reversed-port"
-        <*> o .: "reversing-host"
-        <*> o .:? "ssl" .!= False
-        <*> o .:? "timeout" .!= Nothing
-        <*> o .:? "rewrite-response" .!= Set.empty
-        <*> o .:? "rewrite-request" .!= Set.empty
-    parseJSON _ = fail "Wanted an object"
-
-instance Default ReverseProxyConfig where
-    def = ReverseProxyConfig
-        { reversedHost = ""
-        , reversedPort = 80
-        , reversingHost = ""
-        , reverseUseSSL = False
-        , reverseTimeout = Nothing
-        , rewriteResponseRules = Set.empty
-        , rewriteRequestRules = Set.empty
-        }
-
-data RewriteRule = RewriteRule
-    { ruleHeader :: Text
-    , ruleRegex :: Text
-    , ruleReplacement :: Text
-    } deriving (Eq, Ord)
-
-instance FromJSON RewriteRule where
-    parseJSON (Object o) = RewriteRule
-        <$> o .: "header"
-        <*> o .: "from"
-        <*> o .: "to"
-    parseJSON _ = fail "Wanted an object"

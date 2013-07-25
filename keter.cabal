@@ -72,7 +72,7 @@ Library
                        Keter.Prelude
                        Keter.Proxy
                        Keter.HostManager
-                       Keter.ReverseProxy
+                       Network.HTTP.ReverseProxy.Rewrite
                        Data.Yaml.FilePath
                        Codec.Archive.TempTarball
   ghc-options:         -Wall

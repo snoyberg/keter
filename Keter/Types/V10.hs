@@ -19,6 +19,7 @@ import Data.Conduit.Network (HostPreference)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Monoid (mempty)
+import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector Stanza)
@@ -95,7 +96,7 @@ instance ParseYamlFile KeterConfig where
 data Stanza = StanzaStaticFiles StaticFilesConfig
             | StanzaRedirect RedirectConfig
             | StanzaWebApp WebAppConfig
-            | StanzaReverseProxy V04.ReverseProxyConfig
+            | StanzaReverseProxy ReverseProxyConfig
 
 instance ParseYamlFile Stanza where
     parseYamlFile basedir = withObject "Stanza" $ \o -> do

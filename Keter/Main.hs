@@ -91,10 +91,12 @@ keter (F.decodeString -> input) mkPlugins = do
         runKIOPrint = runKIO P.print
 
     manager <- HTTP.newManager def
-    V.mapM_ (forkIO . Proxy.reverseProxy
+    V.forM_ kconfigListeners
+        $ forkIO
+        . Proxy.reverseProxy
             kconfigIpFromHeader
             manager
-            (runKIOPrint . HostMan.lookupAction hostman)) kconfigListeners
+            (runKIOPrint . HostMan.lookupAction hostman)
 
     appMan <- AppMan.initialize
     let addApp bundle = AppMan.perform

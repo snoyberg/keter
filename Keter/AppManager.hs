@@ -1,5 +1,4 @@
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
 -- | Used for management of applications.
 module Keter.AppManager
     ( -- * Types
@@ -15,17 +14,16 @@ module Keter.AppManager
     ) where
 
 import           Control.Applicative
-import           Control.Concurrent (forkIO)
+import           Control.Concurrent     (forkIO)
 import           Control.Concurrent.STM
+import qualified Control.Exception      as E
+import           Control.Monad          (void)
 import           Data.Map               (Map)
 import qualified Data.Map               as Map
 import           Data.Maybe             (mapMaybe)
 import           Data.Set               (Set)
 import qualified Data.Set               as Set
-import           Keter.Prelude
 import           Keter.Types
-import           Prelude                (Eq, IO, Ord)
-import qualified Control.Exception as E
 
 data AppManager = AppManager
     { apps :: TVar (Map AppId (TVar AppState))
@@ -35,19 +33,13 @@ data AppId = AIBuiltin | AINamed Appname
     deriving (Eq, Ord)
 
 data AppState = ASRunning RunningApp
-              | ASStarting !(Maybe RunningApp) (TVar (Maybe Request)) -- ^ the next one to try
+              | ASStarting !(Maybe RunningApp) (TVar (Maybe Action)) -- ^ the next one to try
 
 data RunningApp = RunningApp
 
 data AppInput = AIBundle | AIData !BundleConfig
 
 data Action = Reload AppInput | Terminate
-
-data Request = Request Action (TMVar Result)
-
-data Result = ResultSuccess
-            | ResultFailure SomeException
-            | ResultCanceled
 
 initialize :: IO AppManager
 initialize = AppManager
@@ -62,49 +54,39 @@ getAllApps AppManager {..} = atomically $ do
     toAppName (AINamed x) = Just x
 
 perform :: AppManager -> AppId -> Action -> IO ()
-perform AppManager {..} aid action = E.mask_ $ do
-    (launchWorker', tresult) <- atomically $ do
-        tresult <- newEmptyTMVar
-        let request = Request action tresult
+perform am@AppManager {..} aid action = E.mask_ $ do
+    launchWorker' <- atomically $ do
         m <- readTVar apps
-        launchWorker' <- case Map.lookup aid m of
+        case Map.lookup aid m of
             Just tstate -> do
                 state <- readTVar tstate
                 case state of
                     ASStarting mcurrent tmnext -> do
-                        mnext <- readTVar tmnext
-                        case mnext of
-                            Nothing -> return ()
-                            Just (Request _ tresultOld) -> void $ tryPutTMVar tresultOld ResultCanceled
-                        writeTVar tmnext $ Just request
+                        writeTVar tmnext $ Just action
                         -- use the previous worker, so nothing to do
-                        return (return ())
+                        return noWorker
                     ASRunning runningApp -> do
                         tmnext <- newTVar Nothing
                         writeTVar tstate $ ASStarting (Just runningApp) tmnext
-                        return launchWorker
+                        return $ launchWorker am tstate action
             Nothing -> do
                 case action of
                     Reload _ -> do
                         tmnext <- newTVar Nothing
                         tstate <- newTVar $ ASStarting Nothing tmnext
                         writeTVar apps $ Map.insert aid tstate m
-                        return launchWorker
-                    Terminate -> do
-                        putTMVar tresult ResultSuccess
-                        return (return ())
-        return (launchWorker', tresult)
+                        return $ launchWorker am tstate action
+                    Terminate -> return noWorker
     launchWorker'
-    void $ forkIO $ do
-        result <- atomically $ takeTMVar tresult
-        -- FIXME
-        return ()
-        {-
-        case (aid, result) of
-            ResultSuccess -> log $ AppLoadedSuccessfully
-            -}
   where
-    launchWorker = return () -- FIXME
+    noWorker = return ()
+
+launchWorker :: AppManager
+             -> TVar AppState
+             -> Action
+             -> IO ()
+launchWorker AppManager {..} tstate action = void $ forkIO $ do
+    return () -- FIXME
 
 {- FIXME
             rest <-

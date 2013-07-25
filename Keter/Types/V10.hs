@@ -12,7 +12,7 @@ import Data.Aeson (FromJSON (..), (.:), (.:?), Value (Object), withObject, (.!=)
 import Control.Applicative ((<$>), (<*>), pure, (<|>))
 import Data.Set (Set)
 import qualified Data.Set as Set
-import qualified Filesystem.Path as F
+import qualified Filesystem.Path.CurrentOS as F
 import Data.Default
 import Data.String (fromString)
 import Data.Conduit.Network (HostPreference)
@@ -20,6 +20,9 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Monoid (mempty)
 import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
+import Data.Maybe (fromMaybe)
+import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector Stanza)
@@ -43,12 +46,27 @@ instance ParseYamlFile BundleConfig where
             <$> lookupBase basedir o "stanzas"
             <*> pure o
 
+data ListeningPort = LPSecure !HostPreference !Port !F.FilePath !F.FilePath
+                   | LPInsecure !HostPreference !Port
+
+instance ParseYamlFile ListeningPort where
+    parseYamlFile basedir = withObject "ListeningPort" $ \o -> do
+        host <- (fmap fromString <$> o .:? "host") .!= "*"
+        mcert <- lookupBaseMaybe basedir o "certificate"
+        mkey <- lookupBaseMaybe basedir o "key"
+        case (mcert, mkey) of
+            (Nothing, Nothing) -> do
+                port <- o .:? "port" .!= 80
+                return $ LPInsecure host port
+            (Just cert, Just key) -> do
+                port <- o .:? "port" .!= 443
+                return $ LPSecure host port cert key
+            _ -> fail "Must provide both certificate and key files"
+
 data KeterConfig = KeterConfig
     { kconfigDir :: F.FilePath
     , kconfigPortPool :: V04.PortSettings
-    , kconfigHost :: HostPreference
-    , kconfigPort :: Port
-    , kconfigSsl :: Maybe V04.TLSConfig
+    , kconfigListeners :: !(V.Vector ListeningPort)
     , kconfigSetuid :: Maybe Text
     , kconfigBuiltinStanzas :: !(V.Vector Stanza)
     , kconfigIpFromHeader :: Bool
@@ -56,23 +74,29 @@ data KeterConfig = KeterConfig
 
 instance ToCurrent KeterConfig where
     type Previous KeterConfig = V04.KeterConfig
-    toCurrent (V04.KeterConfig a b c d e f g h) = KeterConfig
-        a
-        b
-        c
-        d
-        e
-        f
-        (V.fromList $ map StanzaReverseProxy $ Set.toList g)
-        h
+    toCurrent (V04.KeterConfig dir portman host port ssl setuid rproxy ipFromHeader) = KeterConfig
+        { kconfigDir = dir
+        , kconfigPortPool = portman
+        , kconfigListeners = V.fromList
+                           $ addSSL ssl
+                             [LPInsecure host port]
+        , kconfigSetuid = setuid
+        , kconfigBuiltinStanzas = V.fromList $ map StanzaReverseProxy $ Set.toList rproxy
+        , kconfigIpFromHeader = ipFromHeader
+        }
+      where
+        addSSL Nothing = id
+        addSSL (Just (V04.TLSConfig s ts)) = (LPSecure
+            (Warp.settingsHost s)
+            (Warp.settingsPort s)
+            (F.decodeString $ WarpTLS.certFile ts)
+            (F.decodeString $ WarpTLS.keyFile ts):)
 
 instance Default KeterConfig where
     def = KeterConfig
         { kconfigDir = "."
         , kconfigPortPool = def
-        , kconfigHost = "*"
-        , kconfigPort = 80
-        , kconfigSsl = Nothing
+        , kconfigListeners = V.singleton $ LPInsecure "*" 80
         , kconfigSetuid = Nothing
         , kconfigBuiltinStanzas = V.empty
         , kconfigIpFromHeader = False
@@ -86,9 +110,7 @@ instance ParseYamlFile KeterConfig where
         current o = KeterConfig
             <$> lookupBase basedir o "root"
             <*> o .:? "port-manager" .!= def
-            <*> (fmap fromString <$> o .:? "host") .!= kconfigHost def
-            <*> o .:? "port" .!= kconfigPort def
-            <*> (o .:? "ssl" >>= maybe (return Nothing) (fmap Just . parseYamlFile basedir))
+            <*> fmap (fromMaybe (kconfigListeners def)) (lookupBaseMaybe basedir o "listeners")
             <*> o .:? "setuid"
             <*> return V.empty
             <*> o .:? "ip-from-header" .!= False

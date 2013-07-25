@@ -4,7 +4,6 @@
 module Keter.Proxy
     ( reverseProxy
     , HostLookup
-    , reverseProxySsl
     , TLSConfig (..)
     ) where
 
@@ -28,15 +27,25 @@ import Data.Default
 import Keter.Types
 import qualified Data.Vector as V
 import Data.Text.Encoding (encodeUtf8)
+import qualified Filesystem.Path.CurrentOS as F
 
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe ProxyAction)
 
-reverseProxy :: Bool -> Manager -> Warp.Settings -> HostLookup -> IO ()
-reverseProxy useHeader manager settings = Warp.runSettings settings . withClient useHeader manager
-
-reverseProxySsl :: Bool -> Manager -> WarpTLS.TLSSettings -> Warp.Settings -> HostLookup -> IO ()
-reverseProxySsl useHeader manager tsettings settings = WarpTLS.runTLS tsettings settings . withClient useHeader manager
+reverseProxy :: Bool -> Manager -> HostLookup -> ListeningPort -> IO ()
+reverseProxy useHeader manager hostLookup listener =
+    run $ withClient useHeader manager hostLookup
+  where
+    warp host port = Warp.defaultSettings
+        { Warp.settingsHost = host
+        , Warp.settingsPort = port
+        }
+    run =
+        case listener of
+            LPInsecure host port -> Warp.runSettings (warp host port)
+            LPSecure host port cert key -> WarpTLS.runTLS
+                (WarpTLS.tlsSettings (F.encodeString cert) (F.encodeString key))
+                (warp host port)
 
 withClient :: Bool -- ^ use incoming request header for IP address
            -> Manager

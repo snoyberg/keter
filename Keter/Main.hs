@@ -91,24 +91,10 @@ keter (F.decodeString -> input) mkPlugins = do
         runKIOPrint = runKIO P.print
 
     manager <- HTTP.newManager def
-    _ <- forkIO $ Proxy.reverseProxy
+    V.mapM_ (forkIO . Proxy.reverseProxy
             kconfigIpFromHeader
             manager
-            Warp.defaultSettings
-                { Warp.settingsPort = kconfigPort
-                , Warp.settingsHost = kconfigHost
-                }
-            (runKIOPrint . HostMan.lookupAction hostman)
-    case kconfigSsl of
-        Nothing -> return ()
-        Just (Proxy.TLSConfig s ts) -> do
-            _ <- forkIO $ Proxy.reverseProxySsl
-                    kconfigIpFromHeader
-                    manager
-                    ts
-                    s
-                    (runKIOPrint . HostMan.lookupAction hostman)
-            return ()
+            (runKIOPrint . HostMan.lookupAction hostman)) kconfigListeners
 
     appMan <- AppMan.initialize
     let addApp bundle = AppMan.perform

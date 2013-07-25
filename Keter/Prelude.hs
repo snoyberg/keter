@@ -88,6 +88,8 @@ module Keter.Prelude
     , takeMVar
     , tryTakeMVar
     , putMVar
+      -- * STM
+    , atomicallyK
       -- * IORef
     , I.IORef
     , newIORef
@@ -97,6 +99,8 @@ module Keter.Prelude
     , newChan
     , readChan
     , writeChan
+      -- * Exception
+    , mask_
     ) where
 
 import qualified Filesystem.Path.CurrentOS as F
@@ -117,6 +121,7 @@ import Data.Monoid (Monoid, mappend)
 import qualified Data.Text.Lazy.Builder as B
 import Data.Typeable (Typeable)
 import qualified Control.Concurrent.Chan as C
+import Control.Concurrent.STM (STM, atomically)
 import qualified System.Random as R
 import Data.Default (Default (..))
 import System.Exit (ExitCode)
@@ -264,6 +269,9 @@ tryTakeMVar = liftIO_ . M.tryTakeMVar
 putMVar :: M.MVar a -> a -> KIO ()
 putMVar m = liftIO_ . M.putMVar m
 
+atomicallyK :: STM a -> KIO a
+atomicallyK = liftIO_ . atomically
+
 forkKIO :: KIO () -> KIO ()
 forkKIO = void . forkKIO'
 
@@ -322,3 +330,6 @@ threadDelay = liftIO_ . Control.Concurrent.threadDelay
 
 getCurrentTime :: KIO Data.Time.UTCTime
 getCurrentTime = liftIO_ Data.Time.getCurrentTime
+
+mask_ :: KIO a -> KIO a
+mask_ (KIO f) = KIO (\lm -> E.mask_ (f lm))

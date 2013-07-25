@@ -19,6 +19,10 @@ import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import System.Posix.Files (modificationTime, getFileStatus)
 import System.Posix.Signals (sigHUP, installHandler, Handler (Catch))
 import qualified Data.Conduit.LogFile as LogFile
+import qualified Keter.AppManager as AppMan
+import Data.Monoid (mempty)
+import Control.Monad (unless)
+import qualified Data.Vector as V
 
 import Data.Yaml.FilePath
 import qualified Control.Concurrent.MVar as M
@@ -106,65 +110,23 @@ keter (F.decodeString -> input) mkPlugins = do
                     (runKIOPrint . HostMan.lookupAction hostman)
             return ()
 
-    mappMap <- M.newMVar Map.empty
-    let removeApp appname = Keter.Prelude.modifyMVar_ mappMap $ return . Map.delete appname
-        addApp bundle = do
-            let appname = getAppname bundle
-            rest <- modifyMVar mappMap $ \appMap ->
-                case Map.lookup appname appMap of
-                    Just (app, _time) -> do
-                        App.reload app
-                        etime <- liftIO $ modificationTime <$> getFileStatus (F.encodeString bundle)
-                        let time = either (P.const 0) id etime
-                        return (Map.insert appname (app, time) appMap, return ())
-                    Nothing -> do
-                        mlogger <- do
-                            let dirout = kconfigDir </> "log" </> fromText ("app-" ++ appname)
-                                direrr = dirout </> "err"
-                            erlog <- liftIO $ LogFile.openRotatingLog
-                                (F.encodeString dirout)
-                                LogFile.defaultMaxTotal
-                            case erlog of
-                                Left e -> do
-                                    $logEx e
-                                    return Nothing
-                                Right rlog -> return (Just rlog)
-                        let logger = fromMaybe LogFile.dummy mlogger
-                        (app, rest) <- App.start
-                            tf
-                            muid
-                            processTracker
-                            hostman
-                            plugins
-                            logger
-                            appname
-                            bundle
-                            (removeApp appname)
-                        etime <- liftIO $ modificationTime <$> getFileStatus (F.encodeString bundle)
-                        let time = either (P.const 0) id etime
-                        let appMap' = Map.insert appname (app, time) appMap
-                        return (appMap', rest)
-            rest
-        terminateApp appname = do
-            -- FIXME why not remove it from the map?
-            appMap <- M.readMVar mappMap
-            case Map.lookup appname appMap of
-                Nothing -> return ()
-                Just (app, _) -> runKIO' $ App.terminate app
+    appMan <- AppMan.initialize
+    let addApp bundle = AppMan.perform
+            appMan
+            (AppMan.AINamed $ getAppname bundle)
+            (AppMan.Reload AppMan.AIBundle)
+        terminateApp appname = AppMan.perform appMan (AppMan.AINamed appname) AppMan.Terminate
 
     let incoming = kconfigDir </> "incoming"
         isKeter fp = hasExtension fp "keter"
     createTree incoming
     bundles0 <- fmap (filter isKeter) $ listDirectory incoming
-    runKIO' $ mapM_ addApp bundles0
+    mapM_ addApp bundles0
 
-    {- FIXME handle static stanzas
-    let staticReverse r = do
-            HostMan.addEntry hostman (ReverseProxy.reversingHost r)
-                $ HostMan.PEReverseProxy
-                $ ReverseProxy.RPEntry r manager
-    runKIO' $ mapM_ staticReverse (Set.toList kconfigReverseProxy)
-    -}
+    unless (V.null kconfigBuiltinStanzas) $ AppMan.perform
+        appMan
+        AppMan.AIBuiltin
+        (AppMan.Reload $ AppMan.AIData $ BundleConfig kconfigBuiltinStanzas mempty)
 
     -- File system watching
     wm <- FSN.startManager
@@ -176,27 +138,29 @@ keter (F.decodeString -> input) mkPlugins = do
                     FSN.Modified fp _ -> Right fp
          in case e' of
             Left fp -> when (isKeter fp) $ terminateApp $ getAppname fp
-            Right fp -> when (isKeter fp) $ runKIO' $ addApp $ incoming </> fp
+            Right fp -> when (isKeter fp) $ addApp $ incoming </> fp
 
     -- Install HUP handler for cases when inotify cannot be used.
+    {- FIXME
     _ <- flip (installHandler sigHUP) Nothing $ Catch $ do
-        actions <- M.withMVar mappMap $ \appMap -> do
+        actions <- do
             bundles <- fmap (filter isKeter) $ F.listDirectory incoming
             newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
                 time <- modificationTime <$> getFileStatus (F.encodeString bundle)
                 return (getAppname' $ F.encodeString bundle, (bundle, time))
 
-            let apps = Set.toList $ Set.fromList (Map.keys newMap)
-                        `Set.union` Set.fromList (Map.keys appMap)
+            current <- getAllApps appMan
+            let apps = Set.toList $ Set.fromList (Map.keys newMap) `Set.union` current
             fmap catMaybes $ forM apps $ \appname -> return $
-                case (Map.lookup appname appMap, Map.lookup appname newMap) of
-                    (Nothing, Nothing) -> Nothing -- should never happen
-                    (Just _, Nothing) -> Just $ terminateApp appname
-                    (Nothing, Just (bundle, _)) -> Just $ runKIO' $ addApp bundle
+                case (Set.member appname current, Map.lookup appname newMap) of
+                    (False, Nothing) -> Nothing -- should never happen
+                    (True, Nothing) -> Just $ terminateApp appname
+                    (False, Just (bundle, _)) -> Just $ runKIO' $ addApp bundle
                     (Just (_, oldTime), Just (bundle, newTime))
                         | newTime /= oldTime -> Just $ runKIO' $ addApp bundle
                         | otherwise -> Nothing
         P.sequence_ actions
+    -}
 
     runKIO' $ forever $ threadDelay $ 60 * 1000 * 1000
   where

@@ -62,12 +62,14 @@ Library
                      , aeson
                      , unordered-containers
                      , vector
+                     , stm
   Exposed-Modules:     Keter.Plugin.Postgres
                        Keter.Types
                        Keter.Types.V04
                        Keter.Types.V10
                        Keter.Types.Common
                        Keter.App
+                       Keter.AppManager
                        Keter.Main
                        Keter.PortPool
                        Keter.Prelude

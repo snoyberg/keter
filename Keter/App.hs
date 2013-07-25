@@ -222,3 +222,11 @@ terminate (App f) = f Terminate
 
 pluginsGetEnv :: Plugins -> Appname -> Object -> KIO [(Text, Text)]
 pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
+
+    {- FIXME handle static stanzas
+    let staticReverse r = do
+            HostMan.addEntry hostman (ReverseProxy.reversingHost r)
+                $ HostMan.PEReverseProxy
+                $ ReverseProxy.RPEntry r manager
+    runKIO' $ mapM_ staticReverse (Set.toList kconfigReverseProxy)
+    -}

@@ -29,6 +29,7 @@ import Data.Text.Encoding.Error (lenientDecode)
 import System.Posix.Types (UserID, GroupID)
 import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog, terminateMonitoredProcess, monitorProcess)
 import Data.Yaml.FilePath
+import qualified Prelude
 
 data Command = Reload | Terminate
 newtype App = App (Command -> KIO ())
@@ -47,17 +48,7 @@ unpackBundle tf muid bundle appname = do
             case mconfig of
                 Right config -> return config
                 Left e -> throwIO $ InvalidConfigFile e
-        config' <-
-            case bconfigApp config of
-                Nothing -> return config
-                Just app -> do
-                    abs <- F.canonicalizePath $ aconfigExec app
-                    return config
-                        { bconfigApp = Just app
-                            { aconfigExec = abs
-                            }
-                        }
-        return (dir, config')
+        return (dir, config)
 
 start :: TempFolder
       -> Maybe (Text, (UserID, GroupID))
@@ -70,11 +61,13 @@ start :: TempFolder
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
 start tf muid processTracker portman plugins rlog appname bundle removeFromList = do
+    Prelude.error "FIXME Keter.App.start"
+    {-
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
     runApp port dir config = do
-        otherEnv <- pluginsGetEnv plugins appname (aconfigRaw config)
+        otherEnv <- pluginsGetEnv plugins appname (bconfigRaw config)
         let env = ("PORT", show port)
                 : ("APPROOT", (if aconfigSsl config then "https://" else "http://") ++ aconfigHost config)
                 : otherEnv
@@ -202,6 +195,7 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
             case res of
                 Left e -> $logEx e
                 Right () -> return ()
+    -}
 
 testApp :: Port -> KIO Bool
 testApp port = do

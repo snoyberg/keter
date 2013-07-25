@@ -16,39 +16,22 @@ import qualified Filesystem.Path as F
 import Data.Default
 import Data.String (fromString)
 import Data.Conduit.Network (HostPreference)
-
--- Bundle configuration
-data AppConfig = AppConfig
-    { aconfigExec :: F.FilePath
-    , aconfigArgs :: [Text]
-    , aconfigHost :: Text
-    , aconfigSsl :: Bool
-    , aconfigExtraHosts :: Set Text
-    , aconfigRaw :: Object
-    }
-
-instance ToCurrent AppConfig where
-    type Previous AppConfig = V04.AppConfig
-    toCurrent (V04.AppConfig a b c d e f) = AppConfig a b c d e f
-
-instance ParseYamlFile AppConfig where
-    parseYamlFile basedir = withObject "AppConfig" $ \o -> AppConfig
-        <$> lookupBase basedir o "exec"
-        <*> o .:? "args" .!= []
-        <*> o .: "host"
-        <*> o .:? "ssl" .!= False
-        <*> o .:? "extra-hosts" .!= Set.empty
-        <*> return o
+import Data.Vector (Vector)
+import qualified Data.Vector as V
+import Data.Monoid (mempty)
 
 data BundleConfig = BundleConfig
-    { bconfigApp :: Maybe AppConfig
-    , bconfigStaticHosts :: Set StaticHost
-    , bconfigRedirects :: Set Redirect
+    { bconfigStanzas :: !(Vector Stanza)
+    , bconfigRaw     :: !Object -- ^ used for plugins
     }
 
 instance ToCurrent BundleConfig where
     type Previous BundleConfig = V04.BundleConfig
-    toCurrent (V04.BundleConfig a b c) = BundleConfig (fmap toCurrent a) (Set.map toCurrent b) (Set.map toCurrent c)
+    toCurrent (V04.BundleConfig webapp statics redirs) = BundleConfig (V.concat
+        [ maybe V.empty V.singleton $ fmap (StanzaWebApp . toCurrent) webapp
+        , V.fromList $ map (StanzaStaticFiles . toCurrent) $ Set.toList statics
+        , V.fromList $ map (StanzaRedirect . toCurrent) $ Set.toList redirs
+        ]) (maybe mempty V04.configRaw webapp)
 
 instance ParseYamlFile BundleConfig where
     parseYamlFile basedir = withObject "Config" $ \o -> do
@@ -56,40 +39,8 @@ instance ParseYamlFile BundleConfig where
             ((toCurrent :: V04.BundleConfig -> BundleConfig) <$> parseYamlFile basedir (Object o))
       where
         current o = BundleConfig
-            <$> ((Just <$> parseYamlFile basedir (Object o)) <|> pure Nothing)
-            <*> lookupBaseMaybe basedir o "static-hosts" .!= Set.empty
-            <*> o .:? "redirects" .!= Set.empty
-
-data StaticHost = StaticHost
-    { shHost :: Text
-    , shRoot :: F.FilePath
-    }
-    deriving (Eq, Ord)
-
-instance ToCurrent StaticHost where
-    type Previous StaticHost = V04.StaticHost
-    toCurrent (V04.StaticHost a b) = StaticHost a b
-
-instance ParseYamlFile StaticHost where
-    parseYamlFile basedir = withObject "StaticHost" $ \o -> StaticHost
-        <$> o .: "host"
-        <*> lookupBase basedir o "root"
-
-data Redirect = Redirect
-    { redFrom :: Text
-    , redTo :: Text
-    }
-    deriving (Eq, Ord)
-
-instance ToCurrent Redirect where
-    type Previous Redirect = V04.Redirect
-    toCurrent (V04.Redirect a b) = Redirect a b
-
-instance FromJSON Redirect where
-    parseJSON (Object o) = Redirect
-        <$> o .: "from"
-        <*> o .: "to"
-    parseJSON _ = fail "Wanted an object"
+            <$> lookupBase basedir o "stanzas"
+            <*> pure o
 
 data KeterConfig = KeterConfig
     { kconfigDir :: F.FilePath
@@ -98,7 +49,7 @@ data KeterConfig = KeterConfig
     , kconfigPort :: Port
     , kconfigSsl :: Maybe V04.TLSConfig
     , kconfigSetuid :: Maybe Text
-    , kconfigReverseProxy :: Set V04.ReverseProxyConfig
+    , kconfigBuiltinStanzas :: !(V.Vector Stanza)
     , kconfigIpFromHeader :: Bool
     }
 
@@ -111,7 +62,7 @@ instance ToCurrent KeterConfig where
         d
         e
         f
-        g
+        (V.fromList $ map StanzaReverseProxy $ Set.toList g)
         h
 
 instance Default KeterConfig where
@@ -122,7 +73,7 @@ instance Default KeterConfig where
         , kconfigPort = 80
         , kconfigSsl = Nothing
         , kconfigSetuid = Nothing
-        , kconfigReverseProxy = Set.empty
+        , kconfigBuiltinStanzas = V.empty
         , kconfigIpFromHeader = False
         }
 
@@ -138,5 +89,123 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "port" .!= kconfigPort def
             <*> (o .:? "ssl" >>= maybe (return Nothing) (fmap Just . parseYamlFile basedir))
             <*> o .:? "setuid"
-            <*> o .:? "reverse-proxy" .!= Set.empty
+            <*> return V.empty
             <*> o .:? "ip-from-header" .!= False
+
+data Stanza = StanzaStaticFiles StaticFilesConfig
+            | StanzaRedirect RedirectConfig
+            | StanzaWebApp WebAppConfig
+            | StanzaReverseProxy V04.ReverseProxyConfig
+
+instance ParseYamlFile Stanza where
+    parseYamlFile basedir = withObject "Stanza" $ \o -> do
+        typ <- o .: "type"
+        case typ of
+            "static-files" -> fmap StanzaStaticFiles $ parseYamlFile basedir $ Object o
+            "redirect" -> fmap StanzaRedirect $ parseYamlFile basedir $ Object o
+            "webapp" -> fmap StanzaWebApp $ parseYamlFile basedir $ Object o
+            "reverse-proxy" -> fmap StanzaReverseProxy $ parseJSON $ Object o
+            _ -> fail $ "Unknown stanza type: " ++ typ
+
+data StaticFilesConfig = StaticFilesConfig
+    { sfconfigRoot     :: !F.FilePath
+    , sfconfigHosts    :: !(Set Host)
+    , sfconfigListings :: !Bool
+    -- FIXME basic auth
+    }
+
+instance ToCurrent StaticFilesConfig where
+    type Previous StaticFilesConfig = V04.StaticHost
+    toCurrent (V04.StaticHost host root) = StaticFilesConfig
+        { sfconfigRoot = root
+        , sfconfigHosts = Set.singleton host
+        , sfconfigListings = False
+        }
+
+instance ParseYamlFile StaticFilesConfig where
+    parseYamlFile basedir = withObject "StaticFilesConfig" $ \o -> StaticFilesConfig
+        <$> lookupBase basedir o "root"
+        <*> (o .: "hosts" <|> (Set.singleton <$> (o .: "host")))
+        <*> o .:? "directory-listing" .!= False
+
+data RedirectConfig = RedirectConfig
+    { redirconfigHosts :: !(Set Host)
+    , redirconfigStatus :: !Int
+    , redirconfigActions :: !(Vector RedirectAction)
+    }
+
+instance ToCurrent RedirectConfig where
+    type Previous RedirectConfig = V04.Redirect
+    toCurrent (V04.Redirect from to) = RedirectConfig
+        { redirconfigHosts = Set.singleton from
+        , redirconfigStatus = 303
+        , redirconfigActions = V.singleton $ RedirectAction SPAny
+                             $ RDPrefix False to 80
+        }
+
+instance ParseYamlFile RedirectConfig where
+    parseYamlFile _ = withObject "RedirectConfig" $ \o -> RedirectConfig
+        <$> (o .: "hosts" <|> (Set.singleton <$> (o .: "host")))
+        <*> o .:? "status" .!= 303
+        <*> o .: "actions"
+
+data RedirectAction = RedirectAction !SourcePath !RedirectDest
+
+instance FromJSON RedirectAction where
+    parseJSON = withObject "RedirectAction" $ \o -> RedirectAction
+        <$> (maybe SPAny SPSpecific <$> (o .:? "path"))
+        <*> parseJSON (Object o)
+
+data SourcePath = SPAny
+                | SPSpecific !Text
+
+data RedirectDest = RDUrl !Text
+                  | RDPrefix !IsSecure !Host !Port
+
+instance FromJSON RedirectDest where
+    parseJSON = withObject "RedirectDest" $ \o ->
+        url o <|> prefix o
+      where
+        url o = RDUrl <$> o .: "url"
+        prefix o = RDPrefix
+            <$> o .:? "secure" .!= False
+            <*> o .: "host"
+            <*> o .: "port"
+
+type IsSecure = Bool
+
+data WebAppConfig = WebAppConfig
+    { waconfigExec        :: !F.FilePath
+    , waconfigArgs        :: !(Vector Text)
+    , waconfigApprootHost :: !Text -- ^ primary host, used for approot
+    , waconfigHosts       :: !(Set Text) -- ^ all hosts, not including the approot host
+    , waconfigSsl         :: !Bool
+    }
+
+instance ToCurrent WebAppConfig where
+    type Previous WebAppConfig = V04.AppConfig
+    toCurrent (V04.AppConfig exec args host ssl hosts _raw) = WebAppConfig
+        { waconfigExec = exec
+        , waconfigArgs = V.fromList args
+        , waconfigApprootHost = host
+        , waconfigHosts = hosts
+        , waconfigSsl = ssl
+        }
+
+instance ParseYamlFile WebAppConfig where
+    parseYamlFile basedir = withObject "WebAppConfig" $ \o -> do
+        (ahost, hosts) <-
+            (do
+                h <- o .: "host"
+                return (h, Set.empty)) <|>
+            (do
+                hs <- o .: "hosts"
+                case hs of
+                    [] -> fail "Must provide at least one host"
+                    h:hs' -> return (h, Set.fromList hs'))
+        WebAppConfig
+            <$> lookupBase basedir o "exec"
+            <*> o .:? "args" .!= V.empty
+            <*> return ahost
+            <*> return hosts
+            <*> o .:? "ssl" .!= False

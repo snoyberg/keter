@@ -61,6 +61,7 @@ Library
                      , warp-tls
                      , aeson
                      , unordered-containers
+                     , vector
   Exposed-Modules:     Keter.Plugin.Postgres
                        Keter.Types
                        Keter.Types.V04

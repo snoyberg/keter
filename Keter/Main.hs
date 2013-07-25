@@ -156,11 +156,13 @@ keter (F.decodeString -> input) mkPlugins = do
     bundles0 <- fmap (filter isKeter) $ listDirectory incoming
     runKIO' $ mapM_ addApp bundles0
 
+    {- FIXME handle static stanzas
     let staticReverse r = do
             HostMan.addEntry portman (ReverseProxy.reversingHost r)
                 $ HostMan.PEReverseProxy
                 $ ReverseProxy.RPEntry r manager
     runKIO' $ mapM_ staticReverse (Set.toList kconfigReverseProxy)
+    -}
 
     -- File system watching
     wm <- FSN.startManager

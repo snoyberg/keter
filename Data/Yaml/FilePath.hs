@@ -16,6 +16,7 @@ import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), mayb
 import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
 import Data.Text (Text)
 import qualified Data.Set as Set
+import qualified Data.Vector as V
 
 -- | The directory from which we're reading the config file.
 newtype BaseDir = BaseDir FilePath
@@ -53,3 +54,5 @@ instance ParseYamlFile FilePath where
     parseYamlFile (BaseDir dir) o = ((dir </>) . fromText) <$> parseJSON o
 instance (ParseYamlFile a, Ord a) => ParseYamlFile (Set.Set a) where
     parseYamlFile base o = parseJSON o >>= ((Set.fromList <$>) . mapM (parseYamlFile base))
+instance ParseYamlFile a => ParseYamlFile (V.Vector a) where
+    parseYamlFile base o = parseJSON o >>= ((V.fromList <$>) . mapM (parseYamlFile base))

@@ -13,6 +13,7 @@ import qualified Codec.Archive.TempTarball as TempFolder
 import qualified Keter.App as App
 import Keter.Types
 import qualified Keter.HostManager as HostMan
+import qualified Keter.PortPool as PortPool
 import qualified Keter.Proxy as Proxy
 import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import System.Posix.Files (modificationTime, getFileStatus)
@@ -66,7 +67,8 @@ keter (F.decodeString -> input) mkPlugins = do
                     Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
     processTracker <- initProcessTracker
-    portman <- runThrow $ HostMan.start kconfigHostMan
+    hostman <- HostMan.start
+    portpool <- PortPool.start kconfigPortPool
     tf <- runThrow $ liftIO $ TempFolder.setup $ kconfigDir </> "temp"
     plugins <- runThrow $ loadPlugins $ map ($ kconfigDir) mkPlugins
     mainlog <- runThrow $ liftIO $ LogFile.openRotatingLog
@@ -92,7 +94,7 @@ keter (F.decodeString -> input) mkPlugins = do
                 { Warp.settingsPort = kconfigPort
                 , Warp.settingsHost = kconfigHost
                 }
-            (runKIOPrint . HostMan.lookupPort portman)
+            (runKIOPrint . HostMan.lookupAction hostman)
     case kconfigSsl of
         Nothing -> return ()
         Just (Proxy.TLSConfig s ts) -> do
@@ -101,7 +103,7 @@ keter (F.decodeString -> input) mkPlugins = do
                     manager
                     ts
                     s
-                    (runKIOPrint . HostMan.lookupPort portman)
+                    (runKIOPrint . HostMan.lookupAction hostman)
             return ()
 
     mappMap <- M.newMVar Map.empty
@@ -132,7 +134,7 @@ keter (F.decodeString -> input) mkPlugins = do
                             tf
                             muid
                             processTracker
-                            portman
+                            hostman
                             plugins
                             logger
                             appname
@@ -158,7 +160,7 @@ keter (F.decodeString -> input) mkPlugins = do
 
     {- FIXME handle static stanzas
     let staticReverse r = do
-            HostMan.addEntry portman (ReverseProxy.reversingHost r)
+            HostMan.addEntry hostman (ReverseProxy.reversingHost r)
                 $ HostMan.PEReverseProxy
                 $ ReverseProxy.RPEntry r manager
     runKIO' $ mapM_ staticReverse (Set.toList kconfigReverseProxy)

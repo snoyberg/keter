@@ -2,7 +2,7 @@
 -- | A light-weight, minimalistic reverse HTTP proxy.
 module Keter.Proxy
     ( reverseProxy
-    , PortLookup
+    , HostLookup
     , reverseProxySsl
     , TLSConfig (..)
     ) where
@@ -10,7 +10,6 @@ module Keter.Proxy
 import Prelude hiding ((++), FilePath)
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString (ByteString)
-import Keter.HostManager (HostEntry (..))
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import Network.HTTP.ReverseProxy (waiProxyToSettings, wpsSetIpHeader, SetIpHeader (..), ProxyDest (ProxyDest), WaiProxyResponse (..))
@@ -27,17 +26,17 @@ import Data.Default
 import Keter.Types
 
 -- | Mapping from virtual hostname to port number.
-type PortLookup = ByteString -> IO (Maybe HostEntry)
+type HostLookup = ByteString -> IO (Maybe ProxyAction)
 
-reverseProxy :: Bool -> Manager -> Warp.Settings -> PortLookup -> IO ()
+reverseProxy :: Bool -> Manager -> Warp.Settings -> HostLookup -> IO ()
 reverseProxy useHeader manager settings = Warp.runSettings settings . withClient useHeader manager
 
-reverseProxySsl :: Bool -> Manager -> WarpTLS.TLSSettings -> Warp.Settings -> PortLookup -> IO ()
+reverseProxySsl :: Bool -> Manager -> WarpTLS.TLSSettings -> Warp.Settings -> HostLookup -> IO ()
 reverseProxySsl useHeader manager tsettings settings = WarpTLS.runTLS tsettings settings . withClient useHeader manager
 
 withClient :: Bool -- ^ use incoming request header for IP address
            -> Manager
-           -> PortLookup
+           -> HostLookup
            -> Wai.Application
 withClient useHeader manager portLookup =
     waiProxyToSettings getDest def
@@ -47,14 +46,21 @@ withClient useHeader manager portLookup =
                 else SIHFromSocket
         } manager
   where
-    getDest req = do
-        mport <- liftIO $ maybe (return Nothing) portLookup mhost
+    getDest req =
+        case lookup "host" $ Wai.requestHeaders req of
+            Nothing -> return $ WPRResponse missingHostResponse
+            Just host -> processHost req host
+
+    processHost req host = do
+        mport <- liftIO $ portLookup host
         case mport of
-            Nothing -> return $ WPRResponse $ toResponse mhost
+            Nothing -> return $ WPRResponse $ unknownHostResponse host
+            {- FIXME
             Just (PEPort port) -> return $ WPRProxyDest $ ProxyDest "127.0.0.1" port
             Just (PEStatic root) -> fmap WPRResponse $ staticApp (defaultFileServerSettings root) req
-            Just (PERedirect host) -> return $ WPRResponse $ redirectApp host req
+            Just (PERedirect dest) -> return $ WPRResponse $ redirectApp dest req
             Just (PEReverseProxy rpentry) -> fmap WPRResponse $ Rewrite.simpleReverseProxy rpentry req
+            -}
       where
         mhost = lookup "host" $ Wai.requestHeaders req
 
@@ -71,13 +77,16 @@ redirectApp host req = Wai.responseLBS
         , Wai.rawQueryString req
         ]
 
-toResponse :: Maybe ByteString -> Wai.Response
-toResponse mhost = Wai.ResponseBuilder
+missingHostResponse :: Wai.Response
+missingHostResponse = Wai.ResponseBuilder
     status200
     [("Content-Type", "text/html; charset=utf-8")]
-    $ case mhost of
-        Nothing -> copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
-        Just host ->
-            copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
-            `mappend` copyByteString host
-            `mappend` copyByteString "</code>, is not recognized.</p></body></html>"
+    $ copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
+
+unknownHostResponse :: ByteString -> Wai.Response
+unknownHostResponse host = Wai.ResponseBuilder
+    status200
+    [("Content-Type", "text/html; charset=utf-8")]
+    (copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
+     `mappend` copyByteString host
+     `mappend` copyByteString "</code>, is not recognized.</p></body></html>")

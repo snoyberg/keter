@@ -45,7 +45,7 @@ instance ParseYamlFile BundleConfig where
 
 data KeterConfig = KeterConfig
     { kconfigDir :: F.FilePath
-    , kconfigHostMan :: V04.PortSettings
+    , kconfigPortPool :: V04.PortSettings
     , kconfigHost :: HostPreference
     , kconfigPort :: Port
     , kconfigSsl :: Maybe V04.TLSConfig
@@ -69,7 +69,7 @@ instance ToCurrent KeterConfig where
 instance Default KeterConfig where
     def = KeterConfig
         { kconfigDir = "."
-        , kconfigHostMan = def
+        , kconfigPortPool = def
         , kconfigHost = "*"
         , kconfigPort = 80
         , kconfigSsl = Nothing
@@ -98,6 +98,18 @@ data Stanza = StanzaStaticFiles StaticFilesConfig
             | StanzaWebApp WebAppConfig
             | StanzaReverseProxy ReverseProxyConfig
 
+-- | An action to be performed for a requested hostname.
+--
+-- This datatype is very similar to Stanza, but is necessarily separate since:
+--
+-- 1. Webapps will be assigned ports.
+--
+-- 2. Not all stanzas have an associated proxy action.
+data ProxyAction = PAPort Port
+                 | PAStatic StaticFilesConfig
+                 | PARedirect RedirectConfig
+                 | PAReverseProxy ReverseProxyConfig
+
 instance ParseYamlFile Stanza where
     parseYamlFile basedir = withObject "Stanza" $ \o -> do
         typ <- o .: "type"
@@ -120,7 +132,7 @@ instance ToCurrent StaticFilesConfig where
     toCurrent (V04.StaticHost host root) = StaticFilesConfig
         { sfconfigRoot = root
         , sfconfigHosts = Set.singleton host
-        , sfconfigListings = False
+        , sfconfigListings = True
         }
 
 instance ParseYamlFile StaticFilesConfig where
@@ -139,7 +151,7 @@ instance ToCurrent RedirectConfig where
     type Previous RedirectConfig = V04.Redirect
     toCurrent (V04.Redirect from to) = RedirectConfig
         { redirconfigHosts = Set.singleton from
-        , redirconfigStatus = 303
+        , redirconfigStatus = 301
         , redirconfigActions = V.singleton $ RedirectAction SPAny
                              $ RDPrefix False to 80
         }

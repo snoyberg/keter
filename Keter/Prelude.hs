@@ -83,6 +83,7 @@ module Keter.Prelude
     , newEmptyMVar
     , modifyMVar
     , modifyMVar_
+    , withMVar
     , swapMVar
     , takeMVar
     , tryTakeMVar
@@ -244,6 +245,9 @@ newEmptyMVar = liftIO_ M.newEmptyMVar
 
 modifyMVar :: M.MVar a -> (a -> KIO (a, b)) -> KIO b
 modifyMVar m f = KIO $ \x -> M.modifyMVar m (\a -> unKIO (f a) x)
+
+withMVar :: M.MVar a -> (a -> KIO b) -> KIO b
+withMVar m f = KIO $ \x -> M.withMVar m (\a -> unKIO (f a) x)
 
 modifyMVar_ :: M.MVar a -> (a -> KIO a) -> KIO ()
 modifyMVar_ m f = KIO $ \x -> M.modifyMVar_ m (\a -> unKIO (f a) x)

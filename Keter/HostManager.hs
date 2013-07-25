@@ -1,139 +1,129 @@
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude   #-}
+{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TemplateHaskell     #-}
 module Keter.HostManager
     ( -- * Types
-      Port
-    , Host
-    , HostManager
-    , HostEntry (..)
+      HostManager
+    , Reservations
+    , Conflicts
       -- * Actions
-    , getPort
-    , releasePort
-    , addEntry
-    , removeEntry
-    , lookupPort
+    , reserveHosts
+    , forgetReservations
+    , activateApp
+    , lookupAction
       -- * Initialize
     , start
     ) where
 
-import Keter.Prelude
-import qualified Control.Monad.Trans.State as S
-import Control.Monad.Trans.Class (lift)
-import qualified Data.Map as Map
-import Control.Monad (forever, mplus)
-import Data.ByteString.Char8 ()
-import qualified Network
-import qualified Data.ByteString as S
-import Data.Text.Encoding (encodeUtf8)
-import Network.HTTP.ReverseProxy.Rewrite (RPEntry)
-import Keter.Types
+import           Control.Applicative
+import qualified Control.Concurrent.MVar as M
+import           Control.Exception       (assert)
+import           Data.ByteString.Char8   ()
+import           Data.Either             (partitionEithers)
+import qualified Data.Map                as Map
+import qualified Data.Set                as Set
+import           Data.Text.Encoding      (encodeUtf8)
+import           Keter.Prelude
+import           Keter.Types
+import           Prelude                 (null)
+import           Prelude                 (IO)
 
-data Command = GetPort (Either SomeException Port -> KIO ())
-             | ReleasePort Port
-             | AddEntry Host HostEntry
-             | RemoveEntry Host
-             | AddDefaultEntry HostEntry
-             | RemoveDefaultEntry
-             | LookupPort S.ByteString (Maybe HostEntry -> KIO ())
+type HMState = Map.Map HostBS HostValue
 
--- | An abstract type which can accept commands and sends them to a background
--- nginx thread.
-newtype HostManager = HostManager (Command -> KIO ())
+data HostValue = HVActive !Appname !ProxyAction
+               | HVReserved !Appname
 
--- | Start running a separate thread which will accept commands and modify
--- Nginx's behavior accordingly.
-start :: PortSettings -> KIO (Either SomeException HostManager)
-start PortSettings{..} = do
-    chan <- newChan
-    forkKIO $ flip S.evalStateT freshState $ forever $ do
-        command <- lift $ readChan chan
-        case command of
-            GetPort f -> do
-                ns0 <- S.get
-                let loop :: NState -> KIO (Either SomeException Port, NState)
-                    loop ns =
-                        case nsAvail ns of
-                            p:ps -> do
-                                res <- liftIO $ Network.listenOn $ Network.PortNumber $ fromIntegral p
-                                case res of
-                                    Left (_ :: SomeException) -> do
-                                        log $ RemovingPort p
-                                        loop ns { nsAvail = ps }
-                                    Right socket -> do
-                                        res' <- liftIO $ Network.sClose socket
-                                        case res' of
-                                            Left e -> do
-                                                $logEx e
-                                                log $ RemovingPort p
-                                                loop ns { nsAvail = ps }
-                                            Right () -> return (Right p, ns { nsAvail = ps })
-                            [] ->
-                                case reverse $ nsRecycled ns of
-                                    [] -> return (Left $ toException NoPortsAvailable, ns)
-                                    ps -> loop ns { nsAvail = ps, nsRecycled = [] }
-                (eport, ns) <- lift $ loop ns0
-                S.put ns
-                lift $ f eport
-            ReleasePort p ->
-                S.modify $ \ns -> ns { nsRecycled = p : nsRecycled ns }
-            AddEntry h e -> change $ Map.insert (encodeUtf8 h) e
-            RemoveEntry h -> change $ Map.delete $ encodeUtf8 h
-            AddDefaultEntry e -> S.modify $ \ns -> ns { nsDefault = Just e }
-            RemoveDefaultEntry -> S.modify $ \ns -> ns { nsDefault = Nothing }
-            LookupPort h f -> do
-                NState {..} <- S.get
-                lift $ f $ mplus (Map.lookup h nsEntries) nsDefault
-    return $ Right $ HostManager $ writeChan chan
+newtype HostManager = HostManager (MVar HMState) -- FIXME use an IORef instead
+
+type Conflicts = Map.Map Host Appname
+type Reservations = Set.Set Host
+
+start :: IO HostManager
+start = HostManager <$> M.newMVar Map.empty
+
+-- | Reserve the given hosts so that no other application may use them. Does
+-- not yet enable any action. The semantics are:
+--
+-- 1. If a requested host is currently actively used or by an app of the same name, it is
+--    considered reserved.
+--
+-- 2. If a requested host is currently reserved by an app of the same name, it
+--    is considered an error in calling this API. Only one app reservation can
+--    happen at a time.
+--
+-- 3. If any requested host is currently used or reserved by an app with a
+--    different name, then those values are returned as @Left@.
+--
+-- 4. Otherwise, the hosts which were reserved are returned as @Right@. This
+--    does /not/ include previously active hosts.
+reserveHosts :: HostManager
+             -> Appname
+             -> Set.Set Host
+             -> KIO (Either Conflicts Reservations)
+reserveHosts (HostManager mstate) app hosts = modifyMVar mstate $ \entries0 ->
+    return $ case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
+        ([], toReserve) ->
+            (Set.foldr reserve entries0 $ Set.unions toReserve, Right Set.empty)
+        (conflicts, _) -> (entries0, Left $ Map.fromList conflicts)
   where
-    change f = do
-        ns <- S.get
-        let entries = f $ nsEntries ns
-        S.put $ ns { nsEntries = entries }
-    freshState = NState portRange [] Map.empty Nothing
+    checkHost entries0 host =
+        case Map.lookup (encodeUtf8 host) entries0 of
+            Nothing -> Right $ Set.singleton host
+            Just (HVReserved app') -> assert (app /= app')
+                                    $ Left (host, app')
+            Just (HVActive app' _)
+                | app == app' -> Right Set.empty
+                | otherwise   -> Left (host, app')
 
-data NState = NState
-    { nsAvail :: [Port]
-    , nsRecycled :: [Port]
-    , nsEntries :: Map.Map S.ByteString HostEntry
-    , nsDefault :: Maybe HostEntry
-    }
+    hvres = HVReserved app
+    reserve host es =
+        assert (Map.notMember hostBS es) $ Map.insert hostBS hvres es
+      where
+        hostBS = encodeUtf8 host
 
--- | Gets an unassigned port number.
-getPort :: HostManager -> KIO (Either SomeException Port)
-getPort (HostManager f) = do
-    x <- newEmptyMVar
-    f $ GetPort $ \p -> putMVar x p
-    takeMVar x
+-- | Forget previously made reservations.
+forgetReservations :: HostManager
+                   -> Appname
+                   -> Reservations
+                   -> KIO ()
+forgetReservations (HostManager mstate) app hosts = modifyMVar_ mstate $ \state0 ->
+    return $ Set.foldr forget state0 hosts
+  where
+    forget host state =
+        assert isReservedByMe $ Map.delete hostBS state
+      where
+        hostBS = encodeUtf8 host
+        isReservedByMe =
+            case Map.lookup hostBS state of
+                Nothing -> False
+                Just (HVReserved app') -> app == app'
+                Just HVActive{} -> False
 
--- | Inform the nginx thread that the given port number is no longer being
--- used, and may be reused by a new process. Note that recycling puts the new
--- ports at the end of the queue (FIFO), so that if an application holds onto
--- the port longer than expected, there should be no issues.
-releasePort :: HostManager -> Port -> KIO ()
-releasePort (HostManager f) p = f $ ReleasePort p
+-- | Activate a new app. Note that you /must/ first reserve the hostnames you'll be using.
+activateApp :: HostManager
+            -> Appname
+            -> Map.Map Host ProxyAction
+            -> KIO ()
+activateApp (HostManager mstate) app actions = modifyMVar_ mstate $ \state0 ->
+    return $ Map.foldrWithKey activate state0 actions
+  where
+    activate host action state =
+        assert isOwnedByMe $ Map.insert hostBS (HVActive app action) state
+      where
+        hostBS = encodeUtf8 host
+        isOwnedByMe =
+            case Map.lookup hostBS state of
+                Nothing -> False
+                Just (HVReserved app') -> app == app'
+                Just (HVActive app' _) -> app == app'
 
--- | Add a new entry to the configuration for the given hostname and reload
--- nginx. Will overwrite any existing configuration for the given host. The
--- second point is important: it is how we achieve zero downtime transitions
--- between an old and new version of an app.
-addEntry :: HostManager -> Host -> HostEntry -> KIO ()
-addEntry (HostManager f) h p = f $ case h of
-    "*" -> AddDefaultEntry p
-    _   -> AddEntry h p
-
-data HostEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy RPEntry
-
--- | Remove an entry from the configuration and reload nginx.
-removeEntry :: HostManager -> Host -> KIO ()
-removeEntry (HostManager f) h = f $ case h of
-    "*" -> RemoveDefaultEntry
-    _   -> RemoveEntry h
-
-lookupPort :: HostManager -> S.ByteString -> KIO (Maybe HostEntry)
-lookupPort (HostManager f) h = do
-    x <- newEmptyMVar
-    f $ LookupPort h $ \p -> putMVar x p
-    takeMVar x
+lookupAction :: HostManager
+             -> HostBS
+             -> KIO (Maybe ProxyAction)
+lookupAction (HostManager mstate) host = withMVar mstate $ \state ->
+    return $ case Map.lookup host state of
+        Nothing -> Nothing
+        Just (HVActive _ action) -> Just action
+        Just (HVReserved _) -> Nothing

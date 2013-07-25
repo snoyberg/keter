@@ -11,5 +11,6 @@ import Keter.Types.V10 as X
     , StaticFilesConfig (..)
     , KeterConfig (..)
     , Stanza (..)
+    , ProxyAction (..)
     )
-import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig (..), RewriteRule (..))
+import Network.HTTP.ReverseProxy.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))

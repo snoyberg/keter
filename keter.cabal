@@ -69,6 +69,7 @@ Library
                        Keter.Types.Common
                        Keter.App
                        Keter.Main
+                       Keter.PortPool
                        Keter.Prelude
                        Keter.Proxy
                        Keter.HostManager

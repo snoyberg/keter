@@ -1,9 +1,10 @@
 {-# LANGUAGE TypeFamilies #-}
 module Keter.Types.Common where
 
-import Data.Text (Text)
-import Data.Aeson (Object)
-import Keter.Prelude (KIO)
+import           Data.Aeson      (Object)
+import           Data.ByteString (ByteString)
+import           Data.Text       (Text)
+import           Keter.Prelude   (KIO)
 
 -- | Name of the application. Should just be the basename of the application
 -- file.
@@ -28,3 +29,5 @@ type Port = Int
 
 -- | A virtual host we want to serve content from.
 type Host = Text
+
+type HostBS = ByteString

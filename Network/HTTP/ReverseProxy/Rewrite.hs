@@ -129,8 +129,8 @@ mkRequest rpConfig request =
   where
     reqRuleMap = mkRuleMap $ rewriteRequestRules rpConfig
 
-simpleReverseProxy :: RPEntry -> Wai.Application
-simpleReverseProxy (RPEntry { config = rpConfig, httpManager = mgr }) request =
+simpleReverseProxy :: Manager -> ReverseProxyConfig -> Wai.Application
+simpleReverseProxy mgr rpConfig request =
   do
     let proxiedRequest = mkRequest rpConfig request
     response <- http proxiedRequest mgr

@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 -- | A light-weight, minimalistic reverse HTTP proxy.
 module Keter.Proxy
     ( reverseProxy
@@ -11,11 +12,12 @@ import Prelude hiding ((++), FilePath)
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString (ByteString)
 import qualified Data.ByteString as S
-import qualified Data.ByteString.Lazy as L
+import qualified Data.ByteString.Char8 as S8
 import Network.HTTP.ReverseProxy (waiProxyToSettings, wpsSetIpHeader, SetIpHeader (..), ProxyDest (ProxyDest), WaiProxyResponse (..))
-import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
+import Network.Wai.Application.Static (defaultFileServerSettings, staticApp, ssListing)
+import WaiAppStatic.Listing (defaultListing)
 import qualified Network.Wai as Wai
-import Network.HTTP.Types (status301, status200)
+import Network.HTTP.Types (status301, status302, status303, status307, status404, status200, mkStatus)
 import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import Network.HTTP.Conduit (Manager)
 import qualified Network.Wai.Handler.Warp as Warp
@@ -24,6 +26,8 @@ import Blaze.ByteString.Builder (copyByteString)
 import Data.Monoid (mappend)
 import Data.Default
 import Keter.Types
+import qualified Data.Vector as V
+import Data.Text.Encoding (encodeUtf8)
 
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe ProxyAction)
@@ -55,24 +59,54 @@ withClient useHeader manager portLookup =
         mport <- liftIO $ portLookup host
         case mport of
             Nothing -> return $ WPRResponse $ unknownHostResponse host
-            {- FIXME
-            Just (PEPort port) -> return $ WPRProxyDest $ ProxyDest "127.0.0.1" port
-            Just (PEStatic root) -> fmap WPRResponse $ staticApp (defaultFileServerSettings root) req
-            Just (PERedirect dest) -> return $ WPRResponse $ redirectApp dest req
-            Just (PEReverseProxy rpentry) -> fmap WPRResponse $ Rewrite.simpleReverseProxy rpentry req
-            -}
-      where
-        mhost = lookup "host" $ Wai.requestHeaders req
+            Just action -> performAction req action
 
-redirectApp :: ByteString -> Wai.Request -> Wai.Response
-redirectApp host req = Wai.responseLBS
-    status301
-    [("Location", dest)]
-    (L.fromChunks [dest])
+    performAction _ (PAPort port) =
+        return $ WPRProxyDest $ ProxyDest "127.0.0.1" port
+    performAction req (PAStatic StaticFilesConfig {..}) =
+        fmap WPRResponse $ staticApp (defaultFileServerSettings sfconfigRoot)
+            { ssListing =
+                if sfconfigListings
+                    then Just defaultListing
+                    else Nothing
+            } req
+    performAction req (PARedirect config) = return $ WPRResponse $ redirectApp config req
+    performAction req (PAReverseProxy config) = fmap WPRResponse $ Rewrite.simpleReverseProxy manager config req
+
+redirectApp :: RedirectConfig -> Wai.Request -> Wai.Response
+redirectApp RedirectConfig {..} req =
+    V.foldr checkAction noAction redirconfigActions
   where
-    dest = S.concat
-        [ "http://"
-        , host
+    checkAction (RedirectAction SPAny dest) _ = sendTo $ mkUrl dest
+    checkAction (RedirectAction (SPSpecific path) dest) other
+        | encodeUtf8 path == Wai.rawPathInfo req = sendTo $ mkUrl dest
+        | otherwise = other
+
+    noAction = Wai.ResponseBuilder
+        status404
+        [("Content-Type", "text/plain")]
+        (copyByteString "File not found")
+
+    sendTo url = Wai.ResponseBuilder
+        status
+        [("Location", url)]
+        (copyByteString url)
+
+    status =
+        case redirconfigStatus of
+            301 -> status301
+            302 -> status302
+            303 -> status303
+            307 -> status307
+            i   -> mkStatus i $ S8.pack $ show i
+
+    mkUrl (RDUrl url) = encodeUtf8 url
+    mkUrl (RDPrefix isSecure host port) = S.concat
+        [ if isSecure then "https://" else "http://"
+        , encodeUtf8 host
+        , if (isSecure && port == 443) || (not isSecure && port == 80)
+            then ""
+            else S8.pack $ ':' : show port
         , Wai.rawPathInfo req
         , Wai.rawQueryString req
         ]

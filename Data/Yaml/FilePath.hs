@@ -7,12 +7,13 @@ module Data.Yaml.FilePath
     , lookupBaseMaybe
     , BaseDir
     , ParseYamlFile (..)
+    , NonEmptyVector (..)
     ) where
 
 import Control.Applicative ((<$>))
 import Filesystem.Path.CurrentOS (FilePath, encodeString, directory, fromText, (</>))
 import Data.Yaml (decodeFileEither, ParseException (AesonException), parseJSON)
-import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord)
+import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord, fail)
 import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
 import Data.Text (Text)
 import qualified Data.Set as Set
@@ -56,3 +57,11 @@ instance (ParseYamlFile a, Ord a) => ParseYamlFile (Set.Set a) where
     parseYamlFile base o = parseJSON o >>= ((Set.fromList <$>) . mapM (parseYamlFile base))
 instance ParseYamlFile a => ParseYamlFile (V.Vector a) where
     parseYamlFile base o = parseJSON o >>= ((V.fromList <$>) . mapM (parseYamlFile base))
+
+data NonEmptyVector a = NonEmptyVector !a !(V.Vector a)
+instance ParseYamlFile a => ParseYamlFile (NonEmptyVector a) where
+    parseYamlFile base o = do
+        v <- parseYamlFile base o
+        if V.null v
+            then fail "NonEmptyVector: Expected at least one value"
+            else return $ NonEmptyVector (V.head v) (V.tail v)

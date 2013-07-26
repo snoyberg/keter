@@ -24,6 +24,7 @@ import qualified Keter.AppManager as AppMan
 import Data.Monoid (mempty)
 import Control.Monad (unless)
 import qualified Data.Vector as V
+import Control.Concurrent.Async (withAsync, waitAny)
 
 import Data.Yaml.FilePath
 import qualified Control.Concurrent.MVar as M
@@ -71,12 +72,7 @@ keter (F.decodeString -> input) mkPlugins = do
                     Left (_ :: SomeException) -> P.error $ T.unpack $ "Invalid user ID: " ++ t
                     Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
-    processTracker <- initProcessTracker
-    hostman <- HostMan.start
-    portpool <- PortPool.start kconfigPortPool
-    tf <- runThrow $ liftIO $ TempFolder.setup $ kconfigDir </> "temp"
-    plugins <- runThrow $ loadPlugins $ map ($ kconfigDir) mkPlugins
-    mainlog <- runThrow $ liftIO $ LogFile.openRotatingLog
+    mainlog <- LogFile.openRotatingLog
         (F.encodeString $ kconfigDir </> "log" </> "keter")
         LogFile.defaultMaxTotal
 
@@ -89,15 +85,14 @@ keter (F.decodeString -> input) mkPlugins = do
                     , "\n"
                     ]
             LogFile.addChunk mainlog bs
-        runKIOPrint = runKIO P.print
+        runThrow f = runKIO P.print f >>= either throwIO return
 
+    processTracker <- initProcessTracker
+    hostman <- HostMan.start
+    portpool <- PortPool.start kconfigPortPool
+    tf <- TempFolder.setup $ kconfigDir </> "temp"
+    plugins <- runThrow $ loadPlugins $ map ($ kconfigDir) mkPlugins
     manager <- HTTP.newManager def
-    V.forM_ kconfigListeners
-        $ forkIO
-        . Proxy.reverseProxy
-            kconfigIpFromHeader
-            manager
-            (runKIOPrint . HostMan.lookupAction hostman)
 
     let appStartConfig = AppStartConfig
             { ascTempFolder = tf
@@ -148,11 +143,25 @@ keter (F.decodeString -> input) mkPlugins = do
             return (getAppname bundle, (bundle, time))
         AppMan.reloadAppList appMan newMap
 
-    runKIO' $ forever $ threadDelay $ 60 * 1000 * 1000
+    runAndBlock kconfigListeners $ Proxy.reverseProxy
+        kconfigIpFromHeader
+        manager
+        (runKIO' . HostMan.lookupAction hostman)
   where
     getAppname = either id id . toText . basename
-    getAppname' = getAppname . F.decodeString
-    runThrow f = runKIO P.print f >>= either throwIO return
+
+runAndBlock :: NonEmptyVector a
+            -> (a -> P.IO ())
+            -> P.IO ()
+runAndBlock (NonEmptyVector x0 v) f =
+    loop l0 []
+  where
+    l0 = x0 : V.toList v
+
+    loop (x:xs) asyncs = withAsync (f x) $ \async -> loop xs $ async : asyncs
+    -- Once we have all of our asyncs, we wait for /any/ of them to exit. If
+    -- any listener thread exits, we kill the whole process.
+    loop [] asyncs = void $ waitAny asyncs
 
 loadPlugins :: [KIO (Either SomeException Plugin)]
             -> KIO (Either SomeException Plugins)

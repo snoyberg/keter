@@ -65,6 +65,7 @@ Library
                      , unordered-containers
                      , vector
                      , stm
+                     , async
   Exposed-Modules:     Keter.Plugin.Postgres
                        Keter.Types
                        Keter.Types.V04

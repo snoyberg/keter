@@ -66,7 +66,7 @@ instance ParseYamlFile ListeningPort where
 data KeterConfig = KeterConfig
     { kconfigDir :: F.FilePath
     , kconfigPortPool :: V04.PortSettings
-    , kconfigListeners :: !(V.Vector ListeningPort)
+    , kconfigListeners :: !(NonEmptyVector ListeningPort)
     , kconfigSetuid :: Maybe Text
     , kconfigBuiltinStanzas :: !(V.Vector Stanza)
     , kconfigIpFromHeader :: Bool
@@ -77,26 +77,24 @@ instance ToCurrent KeterConfig where
     toCurrent (V04.KeterConfig dir portman host port ssl setuid rproxy ipFromHeader) = KeterConfig
         { kconfigDir = dir
         , kconfigPortPool = portman
-        , kconfigListeners = V.fromList
-                           $ addSSL ssl
-                             [LPInsecure host port]
+        , kconfigListeners = NonEmptyVector (LPInsecure host port) (getSSL ssl)
         , kconfigSetuid = setuid
         , kconfigBuiltinStanzas = V.fromList $ map StanzaReverseProxy $ Set.toList rproxy
         , kconfigIpFromHeader = ipFromHeader
         }
       where
-        addSSL Nothing = id
-        addSSL (Just (V04.TLSConfig s ts)) = (LPSecure
+        getSSL Nothing = V.empty
+        getSSL (Just (V04.TLSConfig s ts)) = V.singleton $ LPSecure
             (Warp.settingsHost s)
             (Warp.settingsPort s)
             (F.decodeString $ WarpTLS.certFile ts)
-            (F.decodeString $ WarpTLS.keyFile ts):)
+            (F.decodeString $ WarpTLS.keyFile ts)
 
 instance Default KeterConfig where
     def = KeterConfig
         { kconfigDir = "."
         , kconfigPortPool = def
-        , kconfigListeners = V.singleton $ LPInsecure "*" 80
+        , kconfigListeners = NonEmptyVector (LPInsecure "*" 80) V.empty
         , kconfigSetuid = Nothing
         , kconfigBuiltinStanzas = V.empty
         , kconfigIpFromHeader = False

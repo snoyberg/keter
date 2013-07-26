@@ -62,6 +62,7 @@ module Keter.Prelude
     , (P.+)
     , (P.-)
     , getCurrentTime
+    , getAppname
       -- * Filepath
     , (F.</>)
     , (F.<.>)
@@ -340,3 +341,6 @@ getCurrentTime = liftIO_ Data.Time.getCurrentTime
 
 mask_ :: KIO a -> KIO a
 mask_ (KIO f) = KIO (\lm -> E.mask_ (f lm))
+
+getAppname :: F.FilePath -> T.Text
+getAppname = P.either P.id P.id . F.toText . F.basename

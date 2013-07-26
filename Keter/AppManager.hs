@@ -12,6 +12,8 @@ module Keter.AppManager
       -- * Actions
     , perform
     , reloadAppList
+    , addApp
+    , terminateApp
       -- * Initialize
     , initialize
     ) where
@@ -32,9 +34,11 @@ import           System.Posix.Types      (EpochTime)
 import           Keter.App               (App, AppId (..), AppInput (..),
                                           AppStartConfig)
 import qualified Keter.App               as App
-import           Keter.Prelude           (KIO)
+import           Keter.Prelude           (KIO, getAppname)
 import qualified Keter.Prelude           as KP
 import           Keter.Types
+import System.Posix.Files (modificationTime, getFileStatus)
+import qualified Filesystem.Path.CurrentOS as F
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
@@ -237,3 +241,14 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
         -- reloading will /always/ result in a valid app, either the old one
         -- will continue running or the new one will replace it.
         return $ Just app
+
+addApp appMan bundle = do
+    (input, action) <- getInputForBundle bundle
+    etime <- modificationTime <$> getFileStatus (F.encodeString bundle)
+    perform appMan input action
+
+getInputForBundle bundle = do
+    time <- modificationTime <$> getFileStatus (F.encodeString bundle)
+    return (AINamed $ getAppname bundle, Reload $ AIBundle bundle time)
+
+terminateApp appMan appname = perform appMan (AINamed appname) Terminate

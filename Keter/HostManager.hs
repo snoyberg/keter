@@ -121,8 +121,8 @@ activateApp (HostManager mstate) app actions = modifyMVar_ mstate $ \state0 ->
 
 lookupAction :: HostManager
              -> HostBS
-             -> KIO (Maybe ProxyAction)
-lookupAction (HostManager mstate) host = withMVar mstate $ \state ->
+             -> IO (Maybe ProxyAction)
+lookupAction (HostManager mstate) host = M.withMVar mstate $ \state ->
     return $ case Map.lookup host state of
         Nothing -> Nothing
         Just (HVActive _ action) -> Just action

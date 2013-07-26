@@ -1,10 +1,12 @@
 Name:                keter
-Version:             0.4.0
+Version:             1.0.0
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
     .
     Release history:
+    .
+    [1.0.0] Significant overhaul. We now support monitoring of much more arbitrary jobs (e.g., background tasks), have a proper plugin system (PostgreSQL is no longer a required component), and have a much better system for tracking hostname mapping changes.
     .
     [0.4.0] Switch to fsnotify to get cross-platform support. No longer using raw proxies, but instead WAI proxies.
     .

@@ -11,7 +11,7 @@ import           Keter.Prelude   (KIO)
 type Appname = Text
 
 data Plugin = Plugin
-    { pluginGetEnv :: Appname -> Object -> KIO [(Text, Text)]
+    { pluginGetEnv :: Appname -> Object -> IO [(Text, Text)]
     }
 
 type Plugins = [Plugin]

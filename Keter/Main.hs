@@ -48,10 +48,10 @@ import qualified Network.HTTP.Conduit as HTTP (newManager)
 import qualified Network.Wai.Handler.Warp as Warp
 import Data.Conduit.Process.Unix (initProcessTracker)
 
-keter :: P.FilePath -- ^ root directory or config file
-      -> [F.FilePath -> KIO (Either SomeException Plugin)]
+keter :: F.FilePath -- ^ root directory or config file
+      -> [F.FilePath -> P.IO Plugin]
       -> P.IO ()
-keter (F.decodeString -> input) mkPlugins = do
+keter input mkPlugins = do
     exists <- F.isFile input
     KeterConfig{..} <-
         if exists
@@ -59,18 +59,6 @@ keter (F.decodeString -> input) mkPlugins = do
                     (\e -> P.error $ "Invalid config file: " ++ P.show e)
                     return
             else return def { kconfigDir = input }
-
-    muid <-
-        case kconfigSetuid of
-            Nothing -> return Nothing
-            Just t -> do
-                x <- try $
-                    case Data.Text.Read.decimal t of
-                        Right (i, "") -> getUserEntryForID i
-                        _ -> getUserEntryForName $ T.unpack t
-                case x of
-                    Left (_ :: SomeException) -> P.error $ T.unpack $ "Invalid user ID: " ++ t
-                    Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
     mainlog <- LogFile.openRotatingLog
         (F.encodeString $ kconfigDir </> "log" </> "keter")
@@ -91,8 +79,19 @@ keter (F.decodeString -> input) mkPlugins = do
     hostman <- HostMan.start
     portpool <- PortPool.start kconfigPortPool
     tf <- TempFolder.setup $ kconfigDir </> "temp"
-    plugins <- runThrow $ loadPlugins $ map ($ kconfigDir) mkPlugins
+    plugins <- P.sequence $ map ($ kconfigDir) mkPlugins
     manager <- HTTP.newManager def
+    muid <-
+        case kconfigSetuid of
+            Nothing -> return Nothing
+            Just t -> do
+                x <- try $
+                    case Data.Text.Read.decimal t of
+                        Right (i, "") -> getUserEntryForID i
+                        _ -> getUserEntryForName $ T.unpack t
+                case x of
+                    Left (_ :: SomeException) -> P.error $ T.unpack $ "Invalid user ID: " ++ t
+                    Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
     let appStartConfig = AppStartConfig
             { ascTempFolder = tf

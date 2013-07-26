@@ -253,8 +253,8 @@ terminate (App f) = f Terminate
 getTimestamp :: App -> STM (Maybe EpochTime)
 getTimestamp _ = return Nothing -- FIXME
 
-pluginsGetEnv :: Plugins -> Appname -> Object -> KIO [(Text, Text)]
-pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
+pluginsGetEnv :: Plugins -> Appname -> Object -> KIO (Either SomeException [(Text, Text)])
+pluginsGetEnv ps app o = liftIO $ fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
 
     {- FIXME handle static stanzas
     let staticReverse r = do

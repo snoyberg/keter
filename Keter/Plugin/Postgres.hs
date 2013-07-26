@@ -1,7 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
-{-# LANGUAGE NoImplicitPrelude #-}
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
 module Keter.Plugin.Postgres
     ( -- * Settings
       Settings
@@ -10,24 +9,34 @@ module Keter.Plugin.Postgres
     , load
     ) where
 
-import Keter.Prelude
-import qualified Prelude as P
-import qualified Data.Text as T
-import Data.Yaml
-import qualified Data.Map as Map
-import qualified Data.HashMap.Strict as HMap
-import Control.Monad (forever, mzero, replicateM)
+import           Control.Applicative       ((<$>), (<*>))
+import           Control.Concurrent        (forkIO)
+import           Control.Concurrent.Chan
+import           Control.Concurrent.MVar
+import           Control.Exception         (SomeException, throwIO, try)
+import           Control.Monad             (void)
+import           Control.Monad             (forever, mzero, replicateM)
+import           Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
-import Control.Monad.Trans.Class (lift)
-import Control.Applicative ((<$>), (<*>))
-import qualified System.Random as R
-import Data.Text.Lazy.Builder (toLazyText)
-import qualified Data.Text.Lazy as TL
-import System.Process (readProcess)
-import Keter.Types
+import           Data.Default
+import qualified Data.HashMap.Strict       as HMap
+import qualified Data.Map                  as Map
+import           Data.Monoid               ((<>))
+import           Data.Text                 (Text)
+import qualified Data.Text                 as T
+import qualified Data.Text.Lazy            as TL
+import           Data.Text.Lazy.Builder    (fromText, toLazyText)
+import           Data.Yaml
+import           Filesystem                (createTree, isFile, rename)
+import           Filesystem.Path.CurrentOS (FilePath, directory, encodeString,
+                                            (<.>))
+import           Keter.Types
+import           Prelude                   hiding (FilePath)
+import           System.Process            (readProcess)
+import qualified System.Random             as R
 
 data Settings = Settings
-    { setupDBInfo :: DBInfo -> P.IO ()
+    { setupDBInfo :: DBInfo -> IO ()
       -- ^ How to create the given user/database. Default: uses the @psql@
       -- command line tool and @sudo -u postgres@.
     }
@@ -36,10 +45,10 @@ instance Default Settings where
     def = Settings
         { setupDBInfo = \DBInfo{..} -> do
             let sql = toLazyText $
-                    "CREATE USER "         ++ fromText dbiUser ++
-                    " PASSWORD '"          ++ fromText dbiPass ++
-                    "';\nCREATE DATABASE " ++ fromText dbiName ++
-                    " OWNER "              ++ fromText dbiUser ++
+                    "CREATE USER "         <> fromText dbiUser <>
+                    " PASSWORD '"          <> fromText dbiPass <>
+                    "';\nCREATE DATABASE " <> fromText dbiName <>
+                    " OWNER "              <> fromText dbiUser <>
                     ";"
             _ <- readProcess "sudo" ["-u", "postgres", "psql"] $ TL.unpack sql
             return ()
@@ -73,37 +82,28 @@ instance FromJSON DBInfo where
         <*> o .: "pass"
     parseJSON _ = mzero
 
--- | Abstract type allowing access to config information via 'getInfo'
-newtype Postgres = Postgres
-    { getInfo :: Appname -> KIO (Either SomeException DBInfo)
-    -- ^ Get information on an individual app\'s database information. If no
-    -- information exists, it will create a random database, add it to the
-    -- config file, and return it.
-    }
-
-data Command = GetConfig Appname (Either SomeException DBInfo -> KIO ())
+data Command = GetConfig Appname (Either SomeException DBInfo -> IO ())
 
 -- | Load a set of existing connections from a config file. If the file does
 -- not exist, it will be created. Any newly created databases will
 -- automatically be saved to this file.
-load :: Settings -> FilePath -> KIO (Either SomeException Plugin)
+load :: Settings -> FilePath -> IO Plugin
 load Settings{..} fp = do
-    mdb <- liftIO $ do
-        createTree $ directory fp
-        e <- isFile fp
-        if e
-            then decodeFile $ toString fp
-            else return $ Just Map.empty
-    case mdb of
-        Left e -> return $ Left e
-        Right Nothing -> return $ Left $ toException $ CannotParsePostgres fp
-        Right (Just db0) -> go (db0 :: Map.Map Appname DBInfo)
+    createTree $ directory fp
+    e <- isFile fp
+    edb <- if e
+        then decodeFileEither $ encodeString fp
+        else return $ Right Map.empty
+    case edb of
+        Left ex -> throwIO ex
+        Right db -> go db
   where
     go db0 = do
         chan <- newChan
-        g0 <- newStdGen
-        forkKIO $ flip S.evalStateT (db0, g0) $ forever $ loop chan
-        return $ Right Plugin
+        g0 <- R.newStdGen
+        -- FIXME stop using the worker thread approach?
+        void $ forkIO $ flip S.evalStateT (db0, g0) $ forever $ loop chan
+        return Plugin
             { pluginGetEnv = \appname o -> do
                 case HMap.lookup "postgres" o of
                     Just (Bool True) -> do
@@ -125,16 +125,16 @@ load Settings{..} fp = do
                 Nothing -> do
                     let (dbi', g') = randomDBI g
                     let dbi = dbi'
-                            { dbiName = sanitize appname ++ dbiName dbi'
-                            , dbiUser = sanitize appname ++ dbiUser dbi'
+                            { dbiName = sanitize appname <> dbiName dbi'
+                            , dbiUser = sanitize appname <> dbiUser dbi'
                             }
-                    ex <- lift $ liftIO $ setupDBInfo dbi
+                    ex <- lift $ try $ setupDBInfo dbi
                     case ex of
                         Left e -> return $ Left e
                         Right () -> do
                             let db' = Map.insert appname dbi db
-                            ey <- lift $ liftIO $ do
-                                encodeFile (toString tmpfp) db'
+                            ey <- lift $ try $ do
+                                encodeFile (encodeString tmpfp) db'
                                 rename tmpfp fp
                             case ey of
                                 Left e -> return $ Left e
@@ -151,10 +151,8 @@ load Settings{..} fp = do
         | otherwise = '_'
 
 edbiToEnv :: Either SomeException DBInfo
-          -> KIO [(Text, Text)]
-edbiToEnv (Left e) = do
-    $logEx e
-    return []
+          -> IO [(Text, Text)]
+edbiToEnv (Left e) = throwIO e
 edbiToEnv (Right dbi) = return
     [ ("PGHOST", "localhost")
     , ("PGPORT", "5432")

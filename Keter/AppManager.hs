@@ -34,6 +34,7 @@ data AppId = AIBuiltin | AINamed Appname
 
 data AppState = ASRunning RunningApp
               | ASStarting !(Maybe RunningApp) (TVar (Maybe Action)) -- ^ the next one to try
+              | ASTerminated
 
 data RunningApp = RunningApp
 
@@ -68,25 +69,47 @@ perform am@AppManager {..} aid action = E.mask_ $ do
                     ASRunning runningApp -> do
                         tmnext <- newTVar Nothing
                         writeTVar tstate $ ASStarting (Just runningApp) tmnext
-                        return $ launchWorker am tstate action
-            Nothing -> do
-                case action of
-                    Reload _ -> do
-                        tmnext <- newTVar Nothing
-                        tstate <- newTVar $ ASStarting Nothing tmnext
-                        writeTVar apps $ Map.insert aid tstate m
-                        return $ launchWorker am tstate action
-                    Terminate -> return noWorker
+                        return $ launchWorker am tstate tmnext action
+                    ASTerminated -> onNotRunning
+            Nothing -> onNotRunning
     launchWorker'
   where
     noWorker = return ()
 
+    onNotRunning =
+        case action of
+            Reload _ -> do
+                tmnext <- newTVar Nothing
+                tstate <- newTVar $ ASStarting Nothing tmnext
+                modifyTVar apps $ Map.insert aid tstate
+                return $ launchWorker am tstate tmnext action
+            Terminate -> return noWorker
+
 launchWorker :: AppManager
              -> TVar AppState
+             -> TVar (Maybe Action)
              -> Action
              -> IO ()
-launchWorker AppManager {..} tstate action = void $ forkIO $ do
-    return () -- FIXME
+launchWorker AppManager {..} tstate tmnext action0 = void $ forkIO $ do
+    loop action0
+  where
+    loop action = do
+        mRunningApp <- processAction action
+        mnext <- atomically $ do
+            mnext <- readTVar tmnext
+            writeTVar tmnext Nothing
+            case mnext of
+                Nothing ->
+                    case mRunningApp of
+                        Nothing -> writeTVar tstate ASTerminated
+                        Just runningApp -> writeTVar tstate $ ASRunning runningApp
+                Just next -> writeTVar tstate $ ASStarting mRunningApp tmnext
+            return mnext
+        case mnext of
+            Nothing -> return ()
+            Just next -> loop action
+
+    processAction _ = return Nothing -- FIXME
 
 {- FIXME
             rest <-

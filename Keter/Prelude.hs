@@ -173,6 +173,7 @@ data LogMessage
     | ReceivedInotifyEvent T.Text
     | ProcessWaiting F.FilePath
     | OtherMessage T.Text
+    | ErrorStartingBundle T.Text E.SomeException
 
 instance P.Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ F.encodeString f
@@ -204,6 +205,12 @@ instance P.Show LogMessage where
     show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ T.unpack t
     show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ F.encodeString f
     show (OtherMessage t) = T.unpack t
+    show (ErrorStartingBundle name e) = P.concat
+        [ "Error occured when launching bundle "
+        , T.unpack name
+        , ": "
+        , P.show e
+        ]
 
 getIOLogger :: KIO (T.Text -> P.IO ())
 getIOLogger = KIO $ \f -> P.return $ f . OtherMessage

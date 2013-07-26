@@ -5,11 +5,17 @@
 {-# LANGUAGE RecordWildCards #-}
 module Keter.App
     ( App
+    , AppStartConfig (..)
+    , AppId (..)
+    , AppInput (..)
     , start
     , reload
+    , getTimestamp
     , Keter.App.terminate
     ) where
 
+import           System.Posix.Types      (EpochTime)
+import Control.Concurrent.STM (STM)
 import Prelude (IO, Eq, Ord, fst, snd, concat, mapM)
 import Keter.Prelude
 import Codec.Archive.TempTarball
@@ -30,6 +36,7 @@ import System.Posix.Types (UserID, GroupID)
 import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog, terminateMonitoredProcess, monitorProcess)
 import Data.Yaml.FilePath
 import qualified Prelude
+import Keter.PortPool (PortPool)
 
 data Command = Reload | Terminate
 newtype App = App (Command -> KIO ())
@@ -50,6 +57,28 @@ unpackBundle tf muid bundle appname = do
                 Left e -> throwIO $ InvalidConfigFile e
         return (dir, config)
 
+data AppStartConfig = AppStartConfig
+    { ascTempFolder :: !TempFolder
+    , ascSetuid :: !(Maybe (Text, (UserID, GroupID)))
+    , ascProcessTracker :: !ProcessTracker
+    , ascHostManager :: !HostManager
+    , ascPortPool :: !PortPool
+    , ascPlugins :: !Plugins
+    }
+
+data AppInput = AIBundle !FilePath !EpochTime
+              | AIData !BundleConfig
+
+data AppId = AIBuiltin | AINamed !Appname
+    deriving (Eq, Ord)
+
+start :: AppStartConfig
+      -> AppId
+      -> AppInput -- ^ if not provided, we'll extract from the relevant file
+      -> KIO (Either SomeException App)
+start _ _ _ = liftIO $ Prelude.error "Keter.App.start"
+
+    {-
 start :: TempFolder
       -> Maybe (Text, (UserID, GroupID))
       -> ProcessTracker
@@ -57,12 +86,11 @@ start :: TempFolder
       -> Plugins
       -> RotatingLog
       -> Appname
-      -> F.FilePath -- ^ app bundle
+      -> (Maybe BundleConfig)
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
 start tf muid processTracker portman plugins rlog appname bundle removeFromList = do
     Prelude.error "FIXME Keter.App.start"
-    {-
     chan <- newChan
     return (App $ writeChan chan, rest chan)
   where
@@ -214,11 +242,16 @@ testApp port = do
                     Right () -> return ()
                 return True
 
-reload :: App -> KIO ()
-reload (App f) = f Reload
+reload :: App -> AppInput -> KIO ()
+reload (App f) _fixme = f Reload
 
 terminate :: App -> KIO ()
 terminate (App f) = f Terminate
+
+-- | Get the modification time of the bundle file this app was launched from,
+-- if relevant.
+getTimestamp :: App -> STM (Maybe EpochTime)
+getTimestamp _ = return Nothing -- FIXME
 
 pluginsGetEnv :: Plugins -> Appname -> Object -> KIO [(Text, Text)]
 pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
@@ -230,3 +263,41 @@ pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
                 $ ReverseProxy.RPEntry r manager
     runKIO' $ mapM_ staticReverse (Set.toList kconfigReverseProxy)
     -}
+
+{- FIXME
+            rest <-
+                case Map.lookup appname appMap of
+                    Just (app, _time) -> do
+                        App.reload app
+                        etime <- liftIO $ modificationTime <$> getFileStatus (F.encodeString bundle)
+                        let time = either (P.const 0) id etime
+                        return (Map.insert appname (app, time) appMap, return ())
+                    Nothing -> do
+                        mlogger <- do
+                            let dirout = kconfigDir </> "log" </> fromText ("app-" ++ appname)
+                                direrr = dirout </> "err"
+                            erlog <- liftIO $ LogFile.openRotatingLog
+                                (F.encodeString dirout)
+                                LogFile.defaultMaxTotal
+                            case erlog of
+                                Left e -> do
+                                    $logEx e
+                                    return Nothing
+                                Right rlog -> return (Just rlog)
+                        let logger = fromMaybe LogFile.dummy mlogger
+                        (app, rest) <- App.start
+                            tf
+                            muid
+                            processTracker
+                            hostman
+                            plugins
+                            logger
+                            appname
+                            bundle
+                            (removeApp appname)
+                        etime <- liftIO $ modificationTime <$> getFileStatus (F.encodeString bundle)
+                        let time = either (P.const 0) id etime
+                        let appMap' = Map.insert appname (app, time) appMap
+                        return (appMap', rest)
+            rest
+            -}

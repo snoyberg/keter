@@ -11,6 +11,7 @@ module Keter.Main
 import Keter.Prelude hiding (getCurrentTime)
 import qualified Codec.Archive.TempTarball as TempFolder
 import qualified Keter.App as App
+import Keter.App (AppStartConfig (..))
 import Keter.Types
 import qualified Keter.HostManager as HostMan
 import qualified Keter.PortPool as PortPool
@@ -98,11 +99,22 @@ keter (F.decodeString -> input) mkPlugins = do
             manager
             (runKIOPrint . HostMan.lookupAction hostman)
 
-    appMan <- AppMan.initialize
-    let addApp bundle = AppMan.perform
-            appMan
-            (AppMan.AINamed $ getAppname bundle)
-            (AppMan.Reload AppMan.AIBundle)
+    let appStartConfig = AppStartConfig
+            { ascTempFolder = tf
+            , ascSetuid = muid
+            , ascProcessTracker = processTracker
+            , ascHostManager = hostman
+            , ascPortPool = portpool
+            , ascPlugins = plugins
+            }
+
+    appMan <- AppMan.initialize (AppMan.RunKIO runKIO') appStartConfig
+    let addApp bundle = do
+            etime <- modificationTime <$> getFileStatus (F.encodeString bundle)
+            AppMan.perform
+                appMan
+                (AppMan.AINamed $ getAppname bundle)
+                (AppMan.Reload $ AppMan.AIBundle bundle etime)
         terminateApp appname = AppMan.perform appMan (AppMan.AINamed appname) AppMan.Terminate
 
     let incoming = kconfigDir </> "incoming"
@@ -129,26 +141,12 @@ keter (F.decodeString -> input) mkPlugins = do
             Right fp -> when (isKeter fp) $ addApp $ incoming </> fp
 
     -- Install HUP handler for cases when inotify cannot be used.
-    {- FIXME
     _ <- flip (installHandler sigHUP) Nothing $ Catch $ do
-        actions <- do
-            bundles <- fmap (filter isKeter) $ F.listDirectory incoming
-            newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
-                time <- modificationTime <$> getFileStatus (F.encodeString bundle)
-                return (getAppname' $ F.encodeString bundle, (bundle, time))
-
-            current <- getAllApps appMan
-            let apps = Set.toList $ Set.fromList (Map.keys newMap) `Set.union` current
-            fmap catMaybes $ forM apps $ \appname -> return $
-                case (Set.member appname current, Map.lookup appname newMap) of
-                    (False, Nothing) -> Nothing -- should never happen
-                    (True, Nothing) -> Just $ terminateApp appname
-                    (False, Just (bundle, _)) -> Just $ runKIO' $ addApp bundle
-                    (Just (_, oldTime), Just (bundle, newTime))
-                        | newTime /= oldTime -> Just $ runKIO' $ addApp bundle
-                        | otherwise -> Nothing
-        P.sequence_ actions
-    -}
+        bundles <- fmap (filter isKeter) $ F.listDirectory incoming
+        newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
+            time <- modificationTime <$> getFileStatus (F.encodeString bundle)
+            return (getAppname bundle, (bundle, time))
+        AppMan.reloadAppList appMan newMap
 
     runKIO' $ forever $ threadDelay $ 60 * 1000 * 1000
   where

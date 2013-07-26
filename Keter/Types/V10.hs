@@ -119,6 +119,7 @@ data Stanza = StanzaStaticFiles StaticFilesConfig
             | StanzaRedirect RedirectConfig
             | StanzaWebApp WebAppConfig
             | StanzaReverseProxy ReverseProxyConfig
+            -- FIXME background job, console app
 
 -- | An action to be performed for a requested hostname.
 --

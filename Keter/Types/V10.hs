@@ -24,6 +24,7 @@ import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
 import Data.Maybe (fromMaybe)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
+import qualified Data.HashMap.Strict as HashMap
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
@@ -40,8 +41,9 @@ instance ToCurrent BundleConfig where
 
 instance ParseYamlFile BundleConfig where
     parseYamlFile basedir = withObject "Config" $ \o -> do
-        current o <|>
-            ((toCurrent :: V04.BundleConfig -> BundleConfig) <$> parseYamlFile basedir (Object o))
+        case HashMap.lookup "stanzas" o of
+            Nothing -> (toCurrent :: V04.BundleConfig -> BundleConfig) <$> parseYamlFile basedir (Object o)
+            Just _ -> current o
       where
         current o = BundleConfig
             <$> lookupBase basedir o "stanzas"
@@ -120,6 +122,7 @@ data Stanza port
     | StanzaWebApp (WebAppConfig port)
     | StanzaReverseProxy ReverseProxyConfig
             -- FIXME background job, console app
+    deriving Show
 
 -- | An action to be performed for a requested hostname.
 --
@@ -132,6 +135,7 @@ data ProxyAction = PAPort Port
                  | PAStatic StaticFilesConfig
                  | PARedirect RedirectConfig
                  | PAReverseProxy ReverseProxyConfig
+    deriving Show
 
 instance ParseYamlFile (Stanza ()) where
     parseYamlFile basedir = withObject "Stanza" $ \o -> do
@@ -149,6 +153,7 @@ data StaticFilesConfig = StaticFilesConfig
     , sfconfigListings :: !Bool
     -- FIXME basic auth
     }
+    deriving Show
 
 instance ToCurrent StaticFilesConfig where
     type Previous StaticFilesConfig = V04.StaticHost
@@ -169,6 +174,7 @@ data RedirectConfig = RedirectConfig
     , redirconfigStatus :: !Int
     , redirconfigActions :: !(Vector RedirectAction)
     }
+    deriving Show
 
 instance ToCurrent RedirectConfig where
     type Previous RedirectConfig = V04.Redirect
@@ -186,6 +192,7 @@ instance ParseYamlFile RedirectConfig where
         <*> o .: "actions"
 
 data RedirectAction = RedirectAction !SourcePath !RedirectDest
+    deriving Show
 
 instance FromJSON RedirectAction where
     parseJSON = withObject "RedirectAction" $ \o -> RedirectAction
@@ -194,9 +201,11 @@ instance FromJSON RedirectAction where
 
 data SourcePath = SPAny
                 | SPSpecific !Text
+    deriving Show
 
 data RedirectDest = RDUrl !Text
                   | RDPrefix !IsSecure !Host !Port
+    deriving Show
 
 instance FromJSON RedirectDest where
     parseJSON = withObject "RedirectDest" $ \o ->
@@ -218,6 +227,7 @@ data WebAppConfig port = WebAppConfig
     , waconfigSsl         :: !Bool
     , waconfigPort        :: !port
     }
+    deriving Show
 
 instance ToCurrent (WebAppConfig ()) where
     type Previous (WebAppConfig ()) = V04.AppConfig

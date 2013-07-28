@@ -70,6 +70,7 @@ data LogMessage
     | ProcessWaiting FilePath
     | OtherMessage Text
     | ErrorStartingBundle Text SomeException
+    | SanityChecksPassed
 
 instance Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ encodeString f
@@ -107,6 +108,7 @@ instance Show LogMessage where
         , ": "
         , show e
         ]
+    show SanityChecksPassed = "Sanity checks passed"
 
 data KeterException = CannotParsePostgres FilePath
                     | ExitCodeFailure FilePath ExitCode
@@ -114,6 +116,8 @@ data KeterException = CannotParsePostgres FilePath
                     | InvalidConfigFile Data.Yaml.ParseException
                     | InvalidKeterConfigFile !FilePath !Data.Yaml.ParseException
                     | CannotReserveHosts !AppId !(Map Host AppId)
+                    | FileNotExecutable !FilePath
+                    | ExecutableNotFound !FilePath
     deriving (Show, Typeable)
 instance Exception KeterException
 

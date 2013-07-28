@@ -29,7 +29,7 @@ import           Data.Text.Encoding.Error  (lenientDecode)
 import qualified Data.Vector               as V
 import           Data.Yaml
 import           Data.Yaml.FilePath
-import           Filesystem                (removeTree)
+import           Filesystem                (removeTree, isFile, canonicalizePath)
 import qualified Filesystem.Path.CurrentOS as F
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
@@ -37,6 +37,13 @@ import           Keter.Types
 import           Prelude                   hiding (FilePath)
 import           System.Posix.Types        (EpochTime)
 import           System.Posix.Types        (GroupID, UserID)
+import           System.Posix.Files (fileAccess)
+import System.IO (hClose)
+import qualified Network
+import Control.Exception (try, IOException)
+import Data.Maybe (fromMaybe)
+import Control.Concurrent (threadDelay)
+import System.Timeout (timeout)
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
@@ -45,6 +52,7 @@ data App = App
 
 data RunningWebApp = RunningWebApp
     { rwaProcess :: !MonitoredProcess
+    , rwaPort :: !Port
     }
 
 unpackBundle :: AppStartConfig
@@ -149,12 +157,30 @@ withRotatingLog AppStartConfig {..} aid = bracketOnError
             AIBuiltin -> "__builtin__"
             AINamed x -> F.fromText $ "app-" <> x
 
+withSanityChecks :: AppStartConfig -> BundleConfig -> IO a -> IO a
+withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
+    V.mapM_ go bconfigStanzas
+    ascLog SanityChecksPassed
+    f
+  where
+    go (StanzaWebApp WebAppConfig {..}) = do
+        exists <- isFile waconfigExec
+        if exists
+            then do
+                canExec <- fileAccess (F.encodeString waconfigExec) True False True
+                if canExec
+                    then return ()
+                    else throwIO $ FileNotExecutable waconfigExec
+            else throwIO $ ExecutableNotFound waconfigExec
+    go _ = return ()
+
 start :: AppStartConfig
       -> AppId
       -> AppInput
       -> IO App
 start asc aid input =
     withConfig asc aid input $ \newdir bconfig mmodtime ->
+    withSanityChecks asc bconfig $
     withReservations asc aid bconfig $ \webapps actions ->
     withRotatingLog asc aid $ \rlog ->
     withWebApps asc aid bconfig newdir rlog webapps $ \runningWebapps -> do
@@ -195,12 +221,13 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} dir rlog WebAppConfig {..
     let env = ("PORT", pack $ show waconfigPort)
             : ("APPROOT", (if waconfigSsl then "https://" else "http://") <> waconfigApprootHost)
             : otherEnv
+    exec <- canonicalizePath waconfigExec
     bracketOnError
         (monitorProcess
             (ascLog . OtherMessage . decodeUtf8With lenientDecode)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
-            (encodeUtf8 $ either id id $ F.toText waconfigExec)
+            (encodeUtf8 $ either id id $ F.toText exec)
             (encodeUtf8 $ either id id $ F.toText dir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
@@ -209,6 +236,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} dir rlog WebAppConfig {..
         $ \mp -> do
             return RunningWebApp
                 { rwaProcess = mp
+                , rwaPort = waconfigPort
                 }
   where
     name =
@@ -220,22 +248,25 @@ killWebApp :: RunningWebApp -> IO ()
 killWebApp = error "killWebApp"
 
 ensureAlive :: RunningWebApp -> IO ()
-ensureAlive = error "ensureAlive"
-{-
-testApp :: Port -> IO Bool
-testApp port = do
-    res <- timeout (90 * 1000 * 1000) testApp'
-    return $ fromMaybe False res
+ensureAlive RunningWebApp {..} = do
+    didAnswer <- testApp rwaPort
+    if didAnswer
+        then return ()
+        else error "ensureAlive failed"
   where
-    testApp' = do
-        threadDelay $ 2 * 1000 * 1000
-        eres <- try $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
-        case eres of
-            Left (_ :: IOException) -> testApp'
-            Right handle -> do
-                hClose handle
-                return True
--}
+    testApp :: Port -> IO Bool
+    testApp port = do
+        res <- timeout (90 * 1000 * 1000) testApp'
+        return $ fromMaybe False res
+      where
+        testApp' = do
+            threadDelay $ 2 * 1000 * 1000
+            eres <- try $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
+            case eres of
+                Left (_ :: IOException) -> testApp'
+                Right handle -> do
+                    hClose handle
+                    return True
 
     {-
 start :: TempFolder

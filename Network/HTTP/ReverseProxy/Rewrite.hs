@@ -151,7 +151,7 @@ data ReverseProxyConfig = ReverseProxyConfig
     , reverseTimeout :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
     , rewriteRequestRules :: Set RewriteRule
-    } deriving (Eq, Ord)
+    } deriving (Eq, Ord, Show)
 
 instance FromJSON ReverseProxyConfig where
     parseJSON (Object o) = ReverseProxyConfig
@@ -179,7 +179,7 @@ data RewriteRule = RewriteRule
     { ruleHeader :: Text
     , ruleRegex :: Text
     , ruleReplacement :: Text
-    } deriving (Eq, Ord)
+    } deriving (Eq, Ord, Show)
 
 instance FromJSON RewriteRule where
     parseJSON (Object o) = RewriteRule

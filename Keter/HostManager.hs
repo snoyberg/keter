@@ -11,6 +11,7 @@ module Keter.HostManager
     , forgetReservations
     , activateApp
     , deactivateApp
+    , reactivateApp
     , lookupAction
       -- * Initialize
     , start
@@ -101,7 +102,11 @@ activateApp :: HostManager
             -> Map.Map Host ProxyAction
             -> IO ()
 activateApp (HostManager mstate) app actions = atomicModifyIORef mstate $ \state0 ->
-    (Map.foldrWithKey activate state0 actions, ())
+    (activateHelper app state0 actions, ())
+
+activateHelper :: AppId -> HMState -> Map Host ProxyAction -> HMState
+activateHelper app =
+    Map.foldrWithKey activate
   where
     activate host action state =
         assert isOwnedByMe $ Map.insert hostBS (HVActive app action) state
@@ -118,7 +123,11 @@ deactivateApp :: HostManager
               -> Set Host
               -> IO ()
 deactivateApp (HostManager mstate) app hosts = atomicModifyIORef mstate $ \state0 ->
-    (Set.foldr deactivate state0 hosts, ())
+    (deactivateHelper app state0 hosts, ())
+
+deactivateHelper :: AppId -> HMState -> Set Host -> HMState
+deactivateHelper app =
+    Set.foldr deactivate
   where
     deactivate host state =
         assert isOwnedByMe $ Map.delete hostBS state
@@ -129,6 +138,14 @@ deactivateApp (HostManager mstate) app hosts = atomicModifyIORef mstate $ \state
                 Nothing -> False
                 Just (HVActive app' _) -> app == app'
                 Just HVReserved {} -> False
+
+reactivateApp :: HostManager
+              -> AppId
+              -> Map Host ProxyAction
+              -> Set Host
+              -> IO ()
+reactivateApp (HostManager mstate) app actions hosts = atomicModifyIORef mstate $ \state0 ->
+    (activateHelper app (deactivateHelper app state0 hosts) actions, ())
 
 lookupAction :: HostManager
              -> HostBS

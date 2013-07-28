@@ -12,12 +12,13 @@ module Keter.App
     ) where
 
 import           Codec.Archive.TempTarball
-import           Control.Applicative       ((<$>))
+import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))
-import           Control.Concurrent        (threadDelay)
+import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception         (bracketOnError, throwIO)
 import           Control.Exception         (IOException, try)
+import           Control.Monad             (void)
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             RotatingLog, monitorProcess,
@@ -48,11 +49,12 @@ import           System.Timeout            (timeout)
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
-    , appRunningWebApps :: ![RunningWebApp]
+    , appRunningWebApps :: !(TVar [RunningWebApp])
     , appId             :: !AppId
-    , appHosts          :: !(Set Host)
-    , appDir            :: !(Maybe FilePath)
+    , appHosts          :: !(TVar (Set Host))
+    , appDir            :: !(TVar (Maybe FilePath))
     , appAsc            :: !AppStartConfig
+    , appRlog           :: !RotatingLog
     }
 
 data RunningWebApp = RunningWebApp
@@ -184,22 +186,21 @@ start :: AppStartConfig
       -> AppInput
       -> IO App
 start asc aid input =
+    withRotatingLog asc aid $ \rlog ->
     withConfig asc aid input $ \newdir bconfig mmodtime ->
     withSanityChecks asc bconfig $
     withReservations asc aid bconfig $ \webapps actions ->
-    withRotatingLog asc aid $ \rlog ->
     withWebApps asc aid bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps
         activateApp (ascHostManager asc) aid actions
-        tmodtime <- newTVarIO mmodtime
-        return App
-            { appModTime = tmodtime
-            , appRunningWebApps = runningWebapps
-            , appId = aid
-            , appHosts = Map.keysSet actions
-            , appDir = newdir
-            , appAsc = asc
-            }
+        App
+            <$> newTVarIO mmodtime
+            <*> newTVarIO runningWebapps
+            <*> return aid
+            <*> newTVarIO (Map.keysSet actions)
+            <*> newTVarIO newdir
+            <*> return asc
+            <*> return rlog
 
 withWebApps :: AppStartConfig
             -> AppId
@@ -402,16 +403,44 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
     -}
 
 reload :: App -> AppInput -> IO ()
-reload = error "FIXME reload"
+reload App {..} input =
+    withConfig appAsc appId input $ \newdir bconfig mmodtime ->
+    withSanityChecks appAsc bconfig $
+    withReservations appAsc appId bconfig $ \webapps actions ->
+    withWebApps appAsc appId bconfig newdir appRlog webapps $ \runningWebapps -> do
+        mapM_ ensureAlive runningWebapps
+        readTVarIO appHosts >>= reactivateApp (ascHostManager appAsc) appId actions
+        (oldApps, oldDir) <- atomically $ do
+            oldApps <- readTVar appRunningWebApps
+            oldDir <- readTVar appDir
+            writeTVar appModTime mmodtime
+            writeTVar appRunningWebApps runningWebapps
+            writeTVar appHosts $ Map.keysSet actions
+            writeTVar appDir newdir
+            return (oldApps, oldDir)
+        void $ forkIO $ terminateHelper appAsc appId oldApps oldDir
 
 terminate :: App -> IO ()
 terminate App {..} = do
-    deactivateApp ascHostManager appId appHosts
+    readTVarIO appHosts >>= deactivateApp ascHostManager appId
+    apps <- readTVarIO appRunningWebApps
+    mdir <- readTVarIO appDir
+    terminateHelper appAsc appId apps mdir
+    LogFile.close appRlog
+  where
+    AppStartConfig {..} = appAsc
+
+terminateHelper :: AppStartConfig
+                -> AppId
+                -> [RunningWebApp]
+                -> Maybe FilePath
+                -> IO ()
+terminateHelper AppStartConfig {..} aid apps mdir = do
     threadDelay $ 20 * 1000 * 1000
-    ascLog $ TerminatingOldProcess appId
-    mapM_ killWebApp appRunningWebApps
+    ascLog $ TerminatingOldProcess aid
+    mapM_ killWebApp apps
     threadDelay $ 60 * 1000 * 1000
-    case appDir of
+    case mdir of
         Nothing -> return ()
         Just dir -> do
             ascLog $ RemovingOldFolder dir
@@ -419,13 +448,11 @@ terminate App {..} = do
             case res of
                 Left e -> $logEx ascLog e
                 Right () -> return ()
-  where
-    AppStartConfig {..} = appAsc
 
 -- | Get the modification time of the bundle file this app was launched from,
 -- if relevant.
 getTimestamp :: App -> STM (Maybe EpochTime)
-getTimestamp _ = return Nothing -- FIXME
+getTimestamp = readTVar . appModTime
 
 pluginsGetEnv :: Plugins -> Appname -> Object -> IO [(Text, Text)]
 pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps

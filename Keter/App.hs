@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 module Keter.App
@@ -16,8 +15,6 @@ module Keter.App
 
 import           System.Posix.Types      (EpochTime)
 import Control.Concurrent.STM (STM)
-import Prelude (IO, Eq, Ord, fst, snd, concat, mapM)
-import Keter.Prelude
 import Codec.Archive.TempTarball
 import Keter.Types
 import Keter.HostManager hiding (start)
@@ -27,7 +24,7 @@ import Data.Yaml
 import Control.Applicative ((<$>))
 import qualified Network
 import Data.Maybe (fromMaybe)
-import Control.Exception (throwIO)
+import Control.Exception (throwIO, try, IOException)
 import System.IO (hClose)
 import qualified Data.Set as Set
 import Data.Text.Encoding (encodeUtf8, decodeUtf8With)
@@ -35,20 +32,23 @@ import Data.Text.Encoding.Error (lenientDecode)
 import System.Posix.Types (UserID, GroupID)
 import Data.Conduit.Process.Unix (ProcessTracker, RotatingLog, terminateMonitoredProcess, monitorProcess)
 import Data.Yaml.FilePath
-import qualified Prelude
 import Keter.PortPool (PortPool)
+import Control.Concurrent (threadDelay)
+import System.Timeout (timeout)
+import Prelude hiding (FilePath)
 
 data Command = Reload | Terminate
-newtype App = App (Command -> KIO ())
+newtype App = App (Command -> IO ())
 
-unpackBundle :: TempFolder
+unpackBundle :: (LogMessage -> IO ())
+             -> TempFolder
              -> Maybe (UserID, GroupID)
-             -> F.FilePath
+             -> FilePath
              -> Appname
-             -> KIO (Either SomeException (FilePath, BundleConfig))
-unpackBundle tf muid bundle appname = do
+             -> IO (FilePath, BundleConfig)
+unpackBundle log tf muid bundle appname = do
     log $ UnpackingBundle bundle
-    liftIO $ unpackTempTar muid tf bundle appname $ \dir -> do
+    unpackTempTar muid tf bundle appname $ \dir -> do
         let configFP = dir F.</> "config" F.</> "keter.yaml"
         mconfig <- decodeFileRelative configFP
         config <-
@@ -75,8 +75,8 @@ data AppId = AIBuiltin | AINamed !Appname
 start :: AppStartConfig
       -> AppId
       -> AppInput -- ^ if not provided, we'll extract from the relevant file
-      -> KIO (Either SomeException App)
-start _ _ _ = liftIO $ Prelude.error "Keter.App.start"
+      -> IO App
+start _ _ _ = error "Keter.App.start"
 
     {-
 start :: TempFolder
@@ -225,27 +225,24 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                 Right () -> return ()
     -}
 
-testApp :: Port -> KIO Bool
+testApp :: Port -> IO Bool
 testApp port = do
     res <- timeout (90 * 1000 * 1000) testApp'
     return $ fromMaybe False res
   where
     testApp' = do
         threadDelay $ 2 * 1000 * 1000
-        eres <- liftIO $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
+        eres <- try $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
         case eres of
-            Left _ -> testApp'
+            Left (_ :: IOException) -> testApp'
             Right handle -> do
-                res <- liftIO $ hClose handle
-                case res of
-                    Left e -> $logEx e
-                    Right () -> return ()
+                hClose handle
                 return True
 
-reload :: App -> AppInput -> KIO ()
+reload :: App -> AppInput -> IO ()
 reload (App f) _fixme = f Reload
 
-terminate :: App -> KIO ()
+terminate :: App -> IO ()
 terminate (App f) = f Terminate
 
 -- | Get the modification time of the bundle file this app was launched from,
@@ -253,8 +250,8 @@ terminate (App f) = f Terminate
 getTimestamp :: App -> STM (Maybe EpochTime)
 getTimestamp _ = return Nothing -- FIXME
 
-pluginsGetEnv :: Plugins -> Appname -> Object -> KIO (Either SomeException [(Text, Text)])
-pluginsGetEnv ps app o = liftIO $ fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
+pluginsGetEnv :: Plugins -> Appname -> Object -> IO (Either SomeException [(Text, Text)])
+pluginsGetEnv ps app o = try $ fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
 
     {- FIXME handle static stanzas
     let staticReverse r = do

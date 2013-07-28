@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
 -- | A light-weight, minimalistic reverse HTTP proxy.
 module Keter.Proxy
     ( reverseProxy
@@ -7,27 +7,34 @@ module Keter.Proxy
     , TLSConfig (..)
     ) where
 
-import Prelude hiding ((++), FilePath)
-import Control.Monad.IO.Class (liftIO)
-import Data.ByteString (ByteString)
-import qualified Data.ByteString as S
-import qualified Data.ByteString.Char8 as S8
-import Network.HTTP.ReverseProxy (waiProxyToSettings, wpsSetIpHeader, SetIpHeader (..), ProxyDest (ProxyDest), WaiProxyResponse (..))
-import Network.Wai.Application.Static (defaultFileServerSettings, staticApp, ssListing)
-import WaiAppStatic.Listing (defaultListing)
-import qualified Network.Wai as Wai
-import Network.HTTP.Types (status301, status302, status303, status307, status404, status200, mkStatus)
+import           Blaze.ByteString.Builder          (copyByteString)
+import           Control.Monad.IO.Class            (liftIO)
+import qualified Data.ByteString                   as S
+import qualified Data.ByteString.Char8             as S8
+import           Data.Default
+import           Data.Monoid                       (mappend)
+import           Data.Text.Encoding                (encodeUtf8)
+import qualified Data.Vector                       as V
+import qualified Filesystem.Path.CurrentOS         as F
+import           Keter.Types
+import           Network.HTTP.Conduit              (Manager)
+import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
+                                                    SetIpHeader (..),
+                                                    WaiProxyResponse (..),
+                                                    waiProxyToSettings,
+                                                    wpsSetIpHeader)
 import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
-import Network.HTTP.Conduit (Manager)
-import qualified Network.Wai.Handler.Warp as Warp
-import qualified Network.Wai.Handler.WarpTLS as WarpTLS
-import Blaze.ByteString.Builder (copyByteString)
-import Data.Monoid (mappend)
-import Data.Default
-import Keter.Types
-import qualified Data.Vector as V
-import Data.Text.Encoding (encodeUtf8)
-import qualified Filesystem.Path.CurrentOS as F
+import           Network.HTTP.Types                (mkStatus, status200,
+                                                    status301, status302,
+                                                    status303, status307,
+                                                    status404)
+import qualified Network.Wai                       as Wai
+import           Network.Wai.Application.Static    (defaultFileServerSettings,
+                                                    ssListing, staticApp)
+import qualified Network.Wai.Handler.Warp          as Warp
+import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
+import           Prelude                           hiding (FilePath, (++))
+import           WaiAppStatic.Listing              (defaultListing)
 
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe ProxyAction)

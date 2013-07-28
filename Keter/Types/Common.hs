@@ -1,10 +1,30 @@
-{-# LANGUAGE TypeFamilies #-}
-module Keter.Types.Common where
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE TemplateHaskell    #-}
+{-# LANGUAGE TypeFamilies       #-}
+module Keter.Types.Common
+    ( module Keter.Types.Common
+    , FilePath
+    , Text
+    , ByteString
+    , Set
+    , Map
+    , Exception
+    , SomeException
+    ) where
 
-import           Data.Aeson      (Object)
-import           Data.ByteString (ByteString)
-import           Data.Text       (Text)
-import           Keter.Prelude   (KIO)
+import           Control.Exception          (Exception, SomeException)
+import           Data.Aeson                 (Object)
+import           Data.ByteString            (ByteString)
+import           Data.Map                   (Map)
+import           Data.Set                   (Set)
+import           Data.Text                  (Text, pack, unpack)
+import           Data.Typeable              (Typeable)
+import qualified Data.Yaml
+import           Filesystem.Path.CurrentOS  (FilePath, basename, encodeString,
+                                             toText)
+import qualified Language.Haskell.TH.Syntax as TH
+import           Prelude                    hiding (FilePath)
+import           System.Exit                (ExitCode)
 
 -- | Name of the application. Should just be the basename of the application
 -- file.
@@ -31,3 +51,78 @@ type Port = Int
 type Host = Text
 
 type HostBS = ByteString
+
+getAppname :: FilePath -> Text
+getAppname = either id id . toText . basename
+
+data LogMessage
+    = ProcessCreated FilePath
+    | InvalidBundle FilePath SomeException
+    | ProcessDidNotStart FilePath
+    | ExceptionThrown Text SomeException
+    | RemovingPort Int
+    | UnpackingBundle FilePath
+    | TerminatingApp Text
+    | FinishedReloading Text
+    | TerminatingOldProcess Text
+    | RemovingOldFolder FilePath
+    | ReceivedInotifyEvent Text
+    | ProcessWaiting FilePath
+    | OtherMessage Text
+    | ErrorStartingBundle Text SomeException
+
+instance Show LogMessage where
+    show (ProcessCreated f) = "Created process: " ++ encodeString f
+    show (InvalidBundle f e) = concat
+        [ "Unable to parse bundle file '"
+        , encodeString f
+        , "': "
+        , show e
+        ]
+    show (ProcessDidNotStart fp) = concat
+        [ "Could not start process within timeout period: "
+        , encodeString fp
+        ]
+    show (ExceptionThrown t e) = concat
+        [ unpack t
+        , ": "
+        , show e
+        ]
+    show (RemovingPort p) = "Port in use, removing from port pool: " ++ show p
+    show (UnpackingBundle b) = concat
+        [ "Unpacking bundle '"
+        , encodeString b
+        , "'"
+        ]
+    show (TerminatingApp t) = "Shutting down app: " ++ unpack t
+    show (FinishedReloading t) = "App finished reloading: " ++ unpack t
+    show (TerminatingOldProcess t) = "Sending old process TERM signal: " ++ unpack t
+    show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ encodeString fp
+    show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ unpack t
+    show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ encodeString f
+    show (OtherMessage t) = unpack t
+    show (ErrorStartingBundle name e) = concat
+        [ "Error occured when launching bundle "
+        , unpack name
+        , ": "
+        , show e
+        ]
+
+data KeterException = CannotParsePostgres FilePath
+                    | ExitCodeFailure FilePath ExitCode
+                    | NoPortsAvailable
+                    | InvalidConfigFile Data.Yaml.ParseException
+    deriving (Show, Typeable)
+instance Exception KeterException
+
+logEx :: TH.Q TH.Exp
+logEx = do
+    let showLoc TH.Loc { TH.loc_module = m, TH.loc_start = (l, c) } = concat
+            [ m
+            , ":"
+            , show l
+            , ":"
+            , show c
+            ]
+    loc <- fmap showLoc TH.qLocation
+    [|(. ExceptionThrown (pack $(TH.lift loc)))|]

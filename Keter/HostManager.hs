@@ -1,4 +1,3 @@
-{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -18,30 +17,26 @@ module Keter.HostManager
     ) where
 
 import           Control.Applicative
-import qualified Control.Concurrent.MVar as M
 import           Control.Exception       (assert)
-import           Data.ByteString.Char8   ()
 import           Data.Either             (partitionEithers)
 import qualified Data.Map                as Map
 import qualified Data.Set                as Set
 import           Data.Text.Encoding      (encodeUtf8)
-import           Keter.Prelude
 import           Keter.Types
-import           Prelude                 (null)
-import           Prelude                 (IO)
+import           Data.IORef
 
 type HMState = Map.Map HostBS HostValue
 
 data HostValue = HVActive !Appname !ProxyAction
                | HVReserved !Appname
 
-newtype HostManager = HostManager (MVar HMState) -- FIXME use an IORef instead
+newtype HostManager = HostManager (IORef HMState)
 
 type Conflicts = Map.Map Host Appname
 type Reservations = Set.Set Host
 
 start :: IO HostManager
-start = HostManager <$> M.newMVar Map.empty
+start = HostManager <$> newIORef Map.empty
 
 -- | Reserve the given hosts so that no other application may use them. Does
 -- not yet enable any action. The semantics are:
@@ -61,9 +56,9 @@ start = HostManager <$> M.newMVar Map.empty
 reserveHosts :: HostManager
              -> Appname
              -> Set.Set Host
-             -> KIO (Either Conflicts Reservations)
-reserveHosts (HostManager mstate) app hosts = modifyMVar mstate $ \entries0 ->
-    return $ case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
+             -> IO (Either Conflicts Reservations)
+reserveHosts (HostManager mstate) app hosts = atomicModifyIORef mstate $ \entries0 ->
+    case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
         ([], toReserve) ->
             (Set.foldr reserve entries0 $ Set.unions toReserve, Right Set.empty)
         (conflicts, _) -> (entries0, Left $ Map.fromList conflicts)
@@ -87,9 +82,9 @@ reserveHosts (HostManager mstate) app hosts = modifyMVar mstate $ \entries0 ->
 forgetReservations :: HostManager
                    -> Appname
                    -> Reservations
-                   -> KIO ()
-forgetReservations (HostManager mstate) app hosts = modifyMVar_ mstate $ \state0 ->
-    return $ Set.foldr forget state0 hosts
+                   -> IO ()
+forgetReservations (HostManager mstate) app hosts = atomicModifyIORef mstate $ \state0 ->
+    (Set.foldr forget state0 hosts, ())
   where
     forget host state =
         assert isReservedByMe $ Map.delete hostBS state
@@ -105,9 +100,9 @@ forgetReservations (HostManager mstate) app hosts = modifyMVar_ mstate $ \state0
 activateApp :: HostManager
             -> Appname
             -> Map.Map Host ProxyAction
-            -> KIO ()
-activateApp (HostManager mstate) app actions = modifyMVar_ mstate $ \state0 ->
-    return $ Map.foldrWithKey activate state0 actions
+            -> IO ()
+activateApp (HostManager mstate) app actions = atomicModifyIORef mstate $ \state0 ->
+    (Map.foldrWithKey activate state0 actions, ())
   where
     activate host action state =
         assert isOwnedByMe $ Map.insert hostBS (HVActive app action) state
@@ -122,7 +117,8 @@ activateApp (HostManager mstate) app actions = modifyMVar_ mstate $ \state0 ->
 lookupAction :: HostManager
              -> HostBS
              -> IO (Maybe ProxyAction)
-lookupAction (HostManager mstate) host = M.withMVar mstate $ \state ->
+lookupAction (HostManager mstate) host = do
+    state <- readIORef mstate
     return $ case Map.lookup host state of
         Nothing -> Nothing
         Just (HVActive _ action) -> Just action

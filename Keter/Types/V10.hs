@@ -3,14 +3,12 @@
 {-# LANGUAGE FlexibleContexts #-}
 module Keter.Types.V10 where
 
-import Data.Text (Text)
 import Data.Aeson (Object)
 import Keter.Types.Common
 import qualified Keter.Types.V04 as V04
 import Data.Yaml.FilePath
 import Data.Aeson (FromJSON (..), (.:), (.:?), Value (Object), withObject, (.!=))
 import Control.Applicative ((<$>), (<*>), pure, (<|>))
-import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Filesystem.Path.CurrentOS as F
 import Data.Default

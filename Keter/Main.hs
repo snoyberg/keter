@@ -1,5 +1,4 @@
 {-# LANGUAGE DeriveDataTypeable  #-}
-{-# LANGUAGE NoImplicitPrelude   #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -19,7 +18,6 @@ import           Keter.App                 (AppStartConfig (..))
 import qualified Keter.AppManager          as AppMan
 import qualified Keter.HostManager         as HostMan
 import qualified Keter.PortPool            as PortPool
-import           Keter.Prelude             hiding (getCurrentTime, runKIO)
 import qualified Keter.Proxy               as Proxy
 import           Keter.Types
 import           System.Posix.Files        (getFileStatus, modificationTime)
@@ -28,7 +26,6 @@ import           System.Posix.Signals      (Handler (Catch), installHandler,
 
 import           Control.Applicative       ((<$>))
 import           Control.Exception         (throwIO, try)
-import           Control.Exception         (Exception)
 import           Control.Monad             (forM)
 import           Data.Conduit.Process.Unix (initProcessTracker)
 import qualified Data.Map                  as Map
@@ -41,18 +38,20 @@ import           Data.Yaml                 (ParseException)
 import           Data.Yaml.FilePath
 import qualified Filesystem                as F
 import qualified Filesystem.Path.CurrentOS as F
-import qualified Keter.Prelude
+import Filesystem.Path.CurrentOS ((</>), hasExtension)
 import qualified Network.HTTP.Conduit      as HTTP (newManager)
-import           Prelude                   (IO)
-import qualified Prelude                   as P
 import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
+import Control.Monad (void, when)
+import Data.Default (def)
+import Prelude hiding (FilePath, log)
+import Filesystem (listDirectory, createTree)
 
-keter :: F.FilePath -- ^ root directory or config file
-      -> [F.FilePath -> P.IO Plugin]
-      -> P.IO ()
+keter :: FilePath -- ^ root directory or config file
+      -> [FilePath -> IO Plugin]
+      -> IO ()
 keter input mkPlugins = withManagers input mkPlugins $ \kc hostman appMan -> do
     launchInitial kc appMan
     startWatching kc appMan
@@ -74,34 +73,34 @@ withConfig input f = do
             else return def { kconfigDir = input }
     f config
 
-withRunner :: FilePath
-           -> (KeterConfig -> (forall a. KIO a -> IO a) -> IO b)
-           -> IO b
-withRunner fp f = withConfig fp $ \config -> do
+withLogger :: FilePath
+           -> (KeterConfig -> (LogMessage -> IO ()) -> IO a)
+           -> IO a
+withLogger fp f = withConfig fp $ \config -> do
     mainlog <- LogFile.openRotatingLog
         (F.encodeString $ (kconfigDir config) </> "log" </> "keter")
         LogFile.defaultMaxTotal
 
-    f config $ Keter.Prelude.runKIO $ \ml -> do
-            now <- getCurrentTime
-            let bs = encodeUtf8 $ T.concat
-                    [ T.take 22 $ show now
-                    , ": "
-                    , show ml
-                    , "\n"
-                    ]
-            LogFile.addChunk mainlog bs
+    f config $ \ml -> do
+        now <- getCurrentTime
+        let bs = encodeUtf8 $ T.pack $ concat
+                [ take 22 $ show now
+                , ": "
+                , show ml
+                , "\n"
+                ]
+        LogFile.addChunk mainlog bs
 
 withManagers :: FilePath
              -> [FilePath -> IO Plugin]
              -> (KeterConfig -> HostMan.HostManager -> AppMan.AppManager -> IO a)
              -> IO a
-withManagers input mkPlugins f = withRunner input $ \kc@KeterConfig {..} runKIO -> do
+withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> do
     processTracker <- initProcessTracker
     hostman <- HostMan.start
     portpool <- PortPool.start kconfigPortPool
     tf <- TempFolder.setup $ kconfigDir </> "temp"
-    plugins <- P.sequence $ map ($ kconfigDir) mkPlugins
+    plugins <- sequence $ map ($ kconfigDir) mkPlugins
     muid <-
         case kconfigSetuid of
             Nothing -> return Nothing
@@ -111,7 +110,7 @@ withManagers input mkPlugins f = withRunner input $ \kc@KeterConfig {..} runKIO 
                         Right (i, "") -> getUserEntryForID i
                         _ -> getUserEntryForName $ T.unpack t
                 case x of
-                    Left (_ :: SomeException) -> P.error $ T.unpack $ "Invalid user ID: " ++ t
+                    Left (_ :: SomeException) -> error $ "Invalid user ID: " ++ T.unpack t
                     Right ue -> return $ Just (T.pack $ userName ue, (userID ue, userGroupID ue))
 
     let appStartConfig = AppStartConfig
@@ -122,7 +121,7 @@ withManagers input mkPlugins f = withRunner input $ \kc@KeterConfig {..} runKIO 
             , ascPortPool = portpool
             , ascPlugins = plugins
             }
-    appMan <- AppMan.initialize (AppMan.RunKIO runKIO) appStartConfig
+    appMan <- AppMan.initialize log appStartConfig
     f kc hostman appMan
 
 data InvalidKeterConfigFile = InvalidKeterConfigFile !FilePath !ParseException
@@ -152,7 +151,7 @@ startWatching :: KeterConfig -> AppMan.AppManager -> IO ()
 startWatching kc@KeterConfig {..} appMan = do
     -- File system watching
     wm <- FSN.startManager
-    FSN.watchDir wm incoming (P.const True) $ \e ->
+    FSN.watchDir wm incoming (const True) $ \e ->
         let e' =
                 case e of
                     FSN.Removed fp _ -> Left fp
@@ -181,8 +180,8 @@ startListening KeterConfig {..} hostman = do
         (HostMan.lookupAction hostman)
 
 runAndBlock :: NonEmptyVector a
-            -> (a -> P.IO ())
-            -> P.IO ()
+            -> (a -> IO ())
+            -> IO ()
 runAndBlock (NonEmptyVector x0 v) f =
     loop l0 []
   where

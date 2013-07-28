@@ -13,7 +13,7 @@ import           Control.Applicative       ((<$>), (<*>))
 import           Control.Concurrent        (forkIO)
 import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar
-import           Control.Exception         (SomeException, throwIO, try)
+import           Control.Exception         (throwIO, try)
 import           Control.Monad             (void)
 import           Control.Monad             (forever, mzero, replicateM)
 import           Control.Monad.Trans.Class (lift)
@@ -22,14 +22,12 @@ import           Data.Default
 import qualified Data.HashMap.Strict       as HMap
 import qualified Data.Map                  as Map
 import           Data.Monoid               ((<>))
-import           Data.Text                 (Text)
 import qualified Data.Text                 as T
 import qualified Data.Text.Lazy            as TL
 import           Data.Text.Lazy.Builder    (fromText, toLazyText)
 import           Data.Yaml
 import           Filesystem                (createTree, isFile, rename)
-import           Filesystem.Path.CurrentOS (FilePath, directory, encodeString,
-                                            (<.>))
+import           Filesystem.Path.CurrentOS (directory, encodeString, (<.>))
 import           Keter.Types
 import           Prelude                   hiding (FilePath)
 import           System.Process            (readProcess)

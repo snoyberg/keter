@@ -7,11 +7,8 @@ import Prelude hiding (FilePath)
 import Data.Yaml.FilePath
 import Data.Aeson
 import Control.Applicative
-import Data.Text (Text)
-import Data.Set (Set)
 import qualified Data.Set as Set
 import qualified Filesystem.Path as F
-import Filesystem.Path (FilePath)
 import Data.Default
 import Data.String (fromString)
 import Data.Conduit.Network (HostPreference)

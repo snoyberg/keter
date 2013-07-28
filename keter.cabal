@@ -75,7 +75,6 @@ Library
                        Keter.AppManager
                        Keter.Main
                        Keter.PortPool
-                       Keter.Prelude
                        Keter.Proxy
                        Keter.HostManager
                        Network.HTTP.ReverseProxy.Rewrite

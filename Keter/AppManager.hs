@@ -8,7 +8,6 @@ module Keter.AppManager
     , AppId (..)
     , Action (..)
     , AppInput (..)
-    , RunKIO (..)
       -- * Actions
     , perform
     , reloadAppList
@@ -19,32 +18,29 @@ module Keter.AppManager
     ) where
 
 import           Control.Applicative
-import           Control.Concurrent      (forkIO)
-import           Control.Concurrent.MVar (MVar, newMVar, withMVar)
+import           Control.Concurrent        (forkIO)
+import           Control.Concurrent.MVar   (MVar, newMVar, withMVar)
 import           Control.Concurrent.STM
-import qualified Control.Exception       as E
-import           Control.Monad           (void)
-import           Data.Map                (Map)
-import qualified Data.Map                as Map
-import           Data.Maybe              (mapMaybe)
-import           Data.Maybe              (catMaybes)
-import           Data.Set                (Set)
-import qualified Data.Set                as Set
-import           System.Posix.Types      (EpochTime)
-import           Keter.App               (App, AppId (..), AppInput (..),
-                                          AppStartConfig)
-import qualified Keter.App               as App
-import           Keter.Prelude           (KIO, getAppname)
-import qualified Keter.Prelude           as KP
-import           Keter.Types
-import System.Posix.Files (modificationTime, getFileStatus)
+import qualified Control.Exception         as E
+import           Control.Monad             (void)
+import qualified Data.Map                  as Map
+import           Data.Maybe                (mapMaybe)
+import           Data.Maybe                (catMaybes)
+import qualified Data.Set                  as Set
 import qualified Filesystem.Path.CurrentOS as F
+import           Keter.App                 (App, AppId (..), AppInput (..),
+                                            AppStartConfig)
+import qualified Keter.App                 as App
+import           Keter.Types
+import           Prelude                   hiding (FilePath, log)
+import           System.Posix.Files        (getFileStatus, modificationTime)
+import           System.Posix.Types        (EpochTime)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
-    , runKIO         :: !RunKIO
     , appStartConfig :: !AppStartConfig
     , mutex          :: !(MVar ())
+    , log            :: !(LogMessage -> IO ())
     }
 
 data AppState = ASRunning App
@@ -56,14 +52,14 @@ data AppState = ASRunning App
 
 data Action = Reload AppInput | Terminate
 
-newtype RunKIO = RunKIO { unRunKIO :: forall a. KIO a -> IO a }
-
-initialize :: RunKIO -> AppStartConfig -> IO AppManager
-initialize runKIO' asc = AppManager
+initialize :: (LogMessage -> IO ())
+           -> AppStartConfig
+           -> IO AppManager
+initialize log' asc = AppManager
     <$> newTVarIO Map.empty
-    <*> return runKIO'
     <*> return asc
     <*> newMVar ()
+    <*> return log'
 
 -- | Reset which apps are running.
 --
@@ -73,7 +69,7 @@ initialize runKIO' asc = AppManager
 --
 -- * Any app listed here that is not currently running will be started.
 reloadAppList :: AppManager
-              -> Map Appname (KP.FilePath, EpochTime)
+              -> Map Appname (FilePath, EpochTime)
               -> IO ()
 reloadAppList am@AppManager {..} newApps = withMVar mutex $ const $ do
     actions <- atomically $ do
@@ -219,36 +215,38 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
             return mnext
         case mnext of
             Nothing -> return ()
-            Just next -> loop mRunningApp action
+            Just next -> loop mRunningApp next
 
     processAction Nothing Terminate = return Nothing
     processAction (Just app) Terminate = do
-        unRunKIO runKIO $ App.terminate app
+        App.terminate app
         return Nothing
-    processAction Nothing (Reload input) = unRunKIO runKIO $ do
-        eres <- App.start appStartConfig appid input
+    processAction Nothing (Reload input) = do
+        eres <- E.try $ App.start appStartConfig appid input
         case eres of
             Left e -> do
                 let name =
                         case appid of
                             AIBuiltin -> "<builtin>"
                             AINamed x -> x
-                KP.log $ KP.ErrorStartingBundle name e
+                log $ ErrorStartingBundle name e
                 return Nothing
             Right app -> return $ Just app
-    processAction (Just app) (Reload input) = unRunKIO runKIO $ do
+    processAction (Just app) (Reload input) = do
         App.reload app input
         -- reloading will /always/ result in a valid app, either the old one
         -- will continue running or the new one will replace it.
         return $ Just app
 
+addApp :: AppManager -> FilePath -> IO ()
 addApp appMan bundle = do
     (input, action) <- getInputForBundle bundle
-    etime <- modificationTime <$> getFileStatus (F.encodeString bundle)
     perform appMan input action
 
+getInputForBundle :: FilePath -> IO (AppId, Action)
 getInputForBundle bundle = do
     time <- modificationTime <$> getFileStatus (F.encodeString bundle)
     return (AINamed $ getAppname bundle, Reload $ AIBundle bundle time)
 
+terminateApp :: AppManager -> Appname -> IO ()
 terminateApp appMan appname = perform appMan (AINamed appname) Terminate

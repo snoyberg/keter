@@ -245,7 +245,8 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} dir rlog WebAppConfig {..
             AINamed x -> x
 
 killWebApp :: RunningWebApp -> IO ()
-killWebApp = error "killWebApp"
+killWebApp RunningWebApp {..} = do
+    terminateMonitoredProcess rwaProcess
 
 ensureAlive :: RunningWebApp -> IO ()
 ensureAlive RunningWebApp {..} = do

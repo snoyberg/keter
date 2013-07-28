@@ -10,6 +10,7 @@ module Keter.HostManager
     , reserveHosts
     , forgetReservations
     , activateApp
+    , deactivateApp
     , lookupAction
       -- * Initialize
     , start
@@ -111,6 +112,23 @@ activateApp (HostManager mstate) app actions = atomicModifyIORef mstate $ \state
                 Nothing -> False
                 Just (HVReserved app') -> app == app'
                 Just (HVActive app' _) -> app == app'
+
+deactivateApp :: HostManager
+              -> AppId
+              -> Set Host
+              -> IO ()
+deactivateApp (HostManager mstate) app hosts = atomicModifyIORef mstate $ \state0 ->
+    (Set.foldr deactivate state0 hosts, ())
+  where
+    deactivate host state =
+        assert isOwnedByMe $ Map.delete hostBS state
+      where
+        hostBS = encodeUtf8 host
+        isOwnedByMe =
+            case Map.lookup hostBS state of
+                Nothing -> False
+                Just (HVActive app' _) -> app == app'
+                Just HVReserved {} -> False
 
 lookupAction :: HostManager
              -> HostBS

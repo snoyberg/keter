@@ -14,13 +14,16 @@ module Keter.App
 import           Codec.Archive.TempTarball
 import           Control.Applicative       ((<$>))
 import           Control.Arrow             ((***))
+import           Control.Concurrent        (threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception         (bracketOnError, throwIO)
+import           Control.Exception         (IOException, try)
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             RotatingLog, monitorProcess,
                                             terminateMonitoredProcess)
 import qualified Data.Map                  as Map
+import           Data.Maybe                (fromMaybe)
 import           Data.Monoid               ((<>))
 import qualified Data.Set                  as Set
 import           Data.Text                 (pack)
@@ -29,30 +32,32 @@ import           Data.Text.Encoding.Error  (lenientDecode)
 import qualified Data.Vector               as V
 import           Data.Yaml
 import           Data.Yaml.FilePath
-import           Filesystem                (removeTree, isFile, canonicalizePath)
+import           Filesystem                (canonicalizePath, isFile,
+                                            removeTree)
 import qualified Filesystem.Path.CurrentOS as F
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
 import           Keter.Types
+import qualified Network
 import           Prelude                   hiding (FilePath)
+import           System.IO                 (hClose)
+import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime)
 import           System.Posix.Types        (GroupID, UserID)
-import           System.Posix.Files (fileAccess)
-import System.IO (hClose)
-import qualified Network
-import Control.Exception (try, IOException)
-import Data.Maybe (fromMaybe)
-import Control.Concurrent (threadDelay)
-import System.Timeout (timeout)
+import           System.Timeout            (timeout)
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
     , appRunningWebApps :: ![RunningWebApp]
+    , appId             :: !AppId
+    , appHosts          :: !(Set Host)
+    , appDir            :: !(Maybe FilePath)
+    , appAsc            :: !AppStartConfig
     }
 
 data RunningWebApp = RunningWebApp
     { rwaProcess :: !MonitoredProcess
-    , rwaPort :: !Port
+    , rwaPort    :: !Port
     }
 
 unpackBundle :: AppStartConfig
@@ -89,13 +94,13 @@ data AppStartConfig = AppStartConfig
 withConfig :: AppStartConfig
            -> AppId
            -> AppInput
-           -> (FilePath -> BundleConfig -> Maybe EpochTime -> IO a)
+           -> (Maybe FilePath -> BundleConfig -> Maybe EpochTime -> IO a)
            -> IO a
-withConfig _asc _aid (AIData bconfig) f = f "/tmp" bconfig Nothing
+withConfig _asc _aid (AIData bconfig) f = f Nothing bconfig Nothing
 withConfig asc aid (AIBundle fp modtime) f = bracketOnError
     (unpackBundle asc fp aid)
     (\(newdir, _) -> removeTree newdir)
-    $ \(newdir, bconfig) -> f newdir bconfig (Just modtime)
+    $ \(newdir, bconfig) -> f (Just newdir) bconfig (Just modtime)
 
 withReservations :: AppStartConfig
                  -> AppId
@@ -190,33 +195,37 @@ start asc aid input =
         return App
             { appModTime = tmodtime
             , appRunningWebApps = runningWebapps
+            , appId = aid
+            , appHosts = Map.keysSet actions
+            , appDir = newdir
+            , appAsc = asc
             }
 
 withWebApps :: AppStartConfig
             -> AppId
             -> BundleConfig
-            -> FilePath
+            -> Maybe FilePath
             -> RotatingLog
             -> [WebAppConfig Port]
             -> ([RunningWebApp] -> IO a)
             -> IO a
-withWebApps asc aid bconfig dir rlog configs0 f =
+withWebApps asc aid bconfig mdir rlog configs0 f =
     loop configs0 id
   where
     loop [] front = f $ front []
     loop (c:cs) front = bracketOnError
-        (launchWebApp asc aid bconfig dir rlog c)
+        (launchWebApp asc aid bconfig mdir rlog c)
         killWebApp
         (\rwa -> loop cs (front . (rwa:)))
 
 launchWebApp :: AppStartConfig
              -> AppId
              -> BundleConfig
-             -> FilePath
+             -> Maybe FilePath
              -> RotatingLog
              -> WebAppConfig Port
              -> IO RunningWebApp
-launchWebApp AppStartConfig {..} aid BundleConfig {..} dir rlog WebAppConfig {..} = do
+launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigRaw
     let env = ("PORT", pack $ show waconfigPort)
             : ("APPROOT", (if waconfigSsl then "https://" else "http://") <> waconfigApprootHost)
@@ -228,11 +237,13 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} dir rlog WebAppConfig {..
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ either id id $ F.toText exec)
-            (encodeUtf8 $ either id id $ F.toText dir)
+            (maybe "/tmp" (encodeUtf8 . either id id . F.toText) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
             rlog)
-        terminateMonitoredProcess
+        (\mp -> do
+            putStrLn "terminating monitored process"
+            terminateMonitoredProcess mp)
         $ \mp -> do
             return RunningWebApp
                 { rwaProcess = mp
@@ -388,24 +399,28 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
                                                 loop chan dirOld configOld mprocPortOld
       where
         terminateOld = forkKIO $ do
-            threadDelay $ 20 * 1000 * 1000
-            log $ TerminatingOldProcess appname
-            case mprocPortOld of
-                Nothing -> return ()
-                Just (processOld, _) -> void $ liftIO $ terminateMonitoredProcess processOld
-            threadDelay $ 60 * 1000 * 1000
-            log $ RemovingOldFolder dirOld
-            res <- liftIO $ removeTree dirOld
-            case res of
-                Left e -> $logEx e
-                Right () -> return ()
     -}
 
 reload :: App -> AppInput -> IO ()
-reload = error "FIXME"
+reload = error "FIXME reload"
 
 terminate :: App -> IO ()
-terminate = error "FIXME"
+terminate App {..} = do
+    deactivateApp ascHostManager appId appHosts
+    threadDelay $ 20 * 1000 * 1000
+    ascLog $ TerminatingOldProcess appId
+    mapM_ killWebApp appRunningWebApps
+    threadDelay $ 60 * 1000 * 1000
+    case appDir of
+        Nothing -> return ()
+        Just dir -> do
+            ascLog $ RemovingOldFolder dir
+            res <- try $ removeTree dir
+            case res of
+                Left e -> $logEx ascLog e
+                Right () -> return ()
+  where
+    AppStartConfig {..} = appAsc
 
 -- | Get the modification time of the bundle file this app was launched from,
 -- if relevant.

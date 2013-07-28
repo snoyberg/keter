@@ -64,7 +64,7 @@ data LogMessage
     | UnpackingBundle FilePath
     | TerminatingApp Text
     | FinishedReloading Text
-    | TerminatingOldProcess Text
+    | TerminatingOldProcess AppId
     | RemovingOldFolder FilePath
     | ReceivedInotifyEvent Text
     | ProcessWaiting FilePath
@@ -97,7 +97,8 @@ instance Show LogMessage where
         ]
     show (TerminatingApp t) = "Shutting down app: " ++ unpack t
     show (FinishedReloading t) = "App finished reloading: " ++ unpack t
-    show (TerminatingOldProcess t) = "Sending old process TERM signal: " ++ unpack t
+    show (TerminatingOldProcess (AINamed t)) = "Sending old process TERM signal: " ++ unpack t
+    show (TerminatingOldProcess AIBuiltin) = "Sending old process TERM signal: builtin"
     show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ encodeString fp
     show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ unpack t
     show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ encodeString f

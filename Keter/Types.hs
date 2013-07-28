@@ -16,5 +16,6 @@ import Keter.Types.V10 as X
     , RedirectAction (..)
     , SourcePath (..)
     , ListeningPort (..)
+    , AppInput (..)
     )
 import Network.HTTP.ReverseProxy.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))

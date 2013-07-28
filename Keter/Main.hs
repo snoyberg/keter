@@ -33,8 +33,6 @@ import qualified Data.Text                 as T
 import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
-import           Data.Typeable             (Typeable)
-import           Data.Yaml                 (ParseException)
 import           Data.Yaml.FilePath
 import qualified Filesystem                as F
 import qualified Filesystem.Path.CurrentOS as F
@@ -120,13 +118,11 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
             , ascHostManager = hostman
             , ascPortPool = portpool
             , ascPlugins = plugins
+            , ascLog = log
+            , ascKeterConfig = kc
             }
     appMan <- AppMan.initialize log appStartConfig
     f kc hostman appMan
-
-data InvalidKeterConfigFile = InvalidKeterConfigFile !FilePath !ParseException
-    deriving (Show, Typeable)
-instance Exception InvalidKeterConfigFile
 
 launchInitial :: KeterConfig -> AppMan.AppManager -> IO ()
 launchInitial kc@KeterConfig {..} appMan = do
@@ -136,8 +132,8 @@ launchInitial kc@KeterConfig {..} appMan = do
 
     unless (V.null kconfigBuiltinStanzas) $ AppMan.perform
         appMan
-        AppMan.AIBuiltin
-        (AppMan.Reload $ AppMan.AIData $ BundleConfig kconfigBuiltinStanzas mempty)
+        AIBuiltin
+        (AppMan.Reload $ AIData $ BundleConfig kconfigBuiltinStanzas mempty)
   where
     incoming = getIncoming kc
 

@@ -5,9 +5,7 @@
 module Keter.AppManager
     ( -- * Types
       AppManager
-    , AppId (..)
     , Action (..)
-    , AppInput (..)
       -- * Actions
     , perform
     , reloadAppList
@@ -28,8 +26,7 @@ import           Data.Maybe                (mapMaybe)
 import           Data.Maybe                (catMaybes)
 import qualified Data.Set                  as Set
 import qualified Filesystem.Path.CurrentOS as F
-import           Keter.App                 (App, AppId (..), AppInput (..),
-                                            AppStartConfig)
+import           Keter.App                 (App, AppStartConfig)
 import qualified Keter.App                 as App
 import           Keter.Types
 import           Prelude                   hiding (FilePath, log)
@@ -205,7 +202,7 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
                     case mRunningApp of
                         Nothing -> writeTVar tstate ASTerminated
                         Just runningApp -> writeTVar tstate $ ASRunning runningApp
-                Just next -> do
+                Just _next -> do
                     tmtimestamp <- newTVar $
                         case action of
                             Reload (AIBundle _fp timestamp) -> Just timestamp

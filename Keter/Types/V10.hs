@@ -1,8 +1,11 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 module Keter.Types.V10 where
 
+import Prelude hiding (FilePath)
+import           System.Posix.Types      (EpochTime)
 import Data.Aeson (Object)
 import Keter.Types.Common
 import qualified Keter.Types.V04 as V04
@@ -23,7 +26,7 @@ import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 
 data BundleConfig = BundleConfig
-    { bconfigStanzas :: !(Vector Stanza)
+    { bconfigStanzas :: !(Vector (Stanza ()))
     , bconfigRaw     :: !Object -- ^ used for plugins
     }
 
@@ -66,7 +69,7 @@ data KeterConfig = KeterConfig
     , kconfigPortPool :: V04.PortSettings
     , kconfigListeners :: !(NonEmptyVector ListeningPort)
     , kconfigSetuid :: Maybe Text
-    , kconfigBuiltinStanzas :: !(V.Vector Stanza)
+    , kconfigBuiltinStanzas :: !(V.Vector (Stanza ()))
     , kconfigIpFromHeader :: Bool
     }
 
@@ -111,10 +114,11 @@ instance ParseYamlFile KeterConfig where
             <*> return V.empty
             <*> o .:? "ip-from-header" .!= False
 
-data Stanza = StanzaStaticFiles StaticFilesConfig
-            | StanzaRedirect RedirectConfig
-            | StanzaWebApp WebAppConfig
-            | StanzaReverseProxy ReverseProxyConfig
+data Stanza port
+    = StanzaStaticFiles StaticFilesConfig
+    | StanzaRedirect RedirectConfig
+    | StanzaWebApp (WebAppConfig port)
+    | StanzaReverseProxy ReverseProxyConfig
             -- FIXME background job, console app
 
 -- | An action to be performed for a requested hostname.
@@ -129,7 +133,7 @@ data ProxyAction = PAPort Port
                  | PARedirect RedirectConfig
                  | PAReverseProxy ReverseProxyConfig
 
-instance ParseYamlFile Stanza where
+instance ParseYamlFile (Stanza ()) where
     parseYamlFile basedir = withObject "Stanza" $ \o -> do
         typ <- o .: "type"
         case typ of
@@ -206,25 +210,27 @@ instance FromJSON RedirectDest where
 
 type IsSecure = Bool
 
-data WebAppConfig = WebAppConfig
+data WebAppConfig port = WebAppConfig
     { waconfigExec        :: !F.FilePath
     , waconfigArgs        :: !(Vector Text)
     , waconfigApprootHost :: !Text -- ^ primary host, used for approot
     , waconfigHosts       :: !(Set Text) -- ^ all hosts, not including the approot host
     , waconfigSsl         :: !Bool
+    , waconfigPort        :: !port
     }
 
-instance ToCurrent WebAppConfig where
-    type Previous WebAppConfig = V04.AppConfig
+instance ToCurrent (WebAppConfig ()) where
+    type Previous (WebAppConfig ()) = V04.AppConfig
     toCurrent (V04.AppConfig exec args host ssl hosts _raw) = WebAppConfig
         { waconfigExec = exec
         , waconfigArgs = V.fromList args
         , waconfigApprootHost = host
         , waconfigHosts = hosts
         , waconfigSsl = ssl
+        , waconfigPort = ()
         }
 
-instance ParseYamlFile WebAppConfig where
+instance ParseYamlFile (WebAppConfig ()) where
     parseYamlFile basedir = withObject "WebAppConfig" $ \o -> do
         (ahost, hosts) <-
             (do
@@ -241,3 +247,7 @@ instance ParseYamlFile WebAppConfig where
             <*> return ahost
             <*> return hosts
             <*> o .:? "ssl" .!= False
+            <*> return ()
+
+data AppInput = AIBundle !FilePath !EpochTime
+              | AIData !BundleConfig

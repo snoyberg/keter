@@ -112,6 +112,8 @@ data KeterException = CannotParsePostgres FilePath
                     | ExitCodeFailure FilePath ExitCode
                     | NoPortsAvailable
                     | InvalidConfigFile Data.Yaml.ParseException
+                    | InvalidKeterConfigFile !FilePath !Data.Yaml.ParseException
+                    | CannotReserveHosts !AppId !(Map Host AppId)
     deriving (Show, Typeable)
 instance Exception KeterException
 
@@ -126,3 +128,6 @@ logEx = do
             ]
     loc <- fmap showLoc TH.qLocation
     [|(. ExceptionThrown (pack $(TH.lift loc)))|]
+
+data AppId = AIBuiltin | AINamed !Appname
+    deriving (Eq, Ord, Show)

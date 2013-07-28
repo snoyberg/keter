@@ -6,7 +6,6 @@ module Keter.HostManager
     ( -- * Types
       HostManager
     , Reservations
-    , Conflicts
       -- * Actions
     , reserveHosts
     , forgetReservations
@@ -17,7 +16,7 @@ module Keter.HostManager
     ) where
 
 import           Control.Applicative
-import           Control.Exception       (assert)
+import           Control.Exception       (assert, throwIO)
 import           Data.Either             (partitionEithers)
 import qualified Data.Map                as Map
 import qualified Data.Set                as Set
@@ -27,12 +26,11 @@ import           Data.IORef
 
 type HMState = Map.Map HostBS HostValue
 
-data HostValue = HVActive !Appname !ProxyAction
-               | HVReserved !Appname
+data HostValue = HVActive !AppId !ProxyAction
+               | HVReserved !AppId
 
 newtype HostManager = HostManager (IORef HMState)
 
-type Conflicts = Map.Map Host Appname
 type Reservations = Set.Set Host
 
 start :: IO HostManager
@@ -54,25 +52,25 @@ start = HostManager <$> newIORef Map.empty
 -- 4. Otherwise, the hosts which were reserved are returned as @Right@. This
 --    does /not/ include previously active hosts.
 reserveHosts :: HostManager
-             -> Appname
+             -> AppId
              -> Set.Set Host
-             -> IO (Either Conflicts Reservations)
-reserveHosts (HostManager mstate) app hosts = atomicModifyIORef mstate $ \entries0 ->
+             -> IO Reservations
+reserveHosts (HostManager mstate) aid hosts = either (throwIO . CannotReserveHosts aid) return =<< atomicModifyIORef mstate (\entries0 ->
     case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
         ([], toReserve) ->
             (Set.foldr reserve entries0 $ Set.unions toReserve, Right Set.empty)
-        (conflicts, _) -> (entries0, Left $ Map.fromList conflicts)
+        (conflicts, _) -> (entries0, Left $ Map.fromList conflicts))
   where
     checkHost entries0 host =
         case Map.lookup (encodeUtf8 host) entries0 of
             Nothing -> Right $ Set.singleton host
-            Just (HVReserved app') -> assert (app /= app')
-                                    $ Left (host, app')
-            Just (HVActive app' _)
-                | app == app' -> Right Set.empty
-                | otherwise   -> Left (host, app')
+            Just (HVReserved aid') -> assert (aid /= aid')
+                                    $ Left (host, aid')
+            Just (HVActive aid' _)
+                | aid == aid' -> Right Set.empty
+                | otherwise   -> Left (host, aid')
 
-    hvres = HVReserved app
+    hvres = HVReserved aid
     reserve host es =
         assert (Map.notMember hostBS es) $ Map.insert hostBS hvres es
       where
@@ -80,7 +78,7 @@ reserveHosts (HostManager mstate) app hosts = atomicModifyIORef mstate $ \entrie
 
 -- | Forget previously made reservations.
 forgetReservations :: HostManager
-                   -> Appname
+                   -> AppId
                    -> Reservations
                    -> IO ()
 forgetReservations (HostManager mstate) app hosts = atomicModifyIORef mstate $ \state0 ->
@@ -98,7 +96,7 @@ forgetReservations (HostManager mstate) app hosts = atomicModifyIORef mstate $ \
 
 -- | Activate a new app. Note that you /must/ first reserve the hostnames you'll be using.
 activateApp :: HostManager
-            -> Appname
+            -> AppId
             -> Map.Map Host ProxyAction
             -> IO ()
 activateApp (HostManager mstate) app actions = atomicModifyIORef mstate $ \state0 ->

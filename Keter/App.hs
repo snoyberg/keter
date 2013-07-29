@@ -54,7 +54,7 @@ data App = App
     , appHosts          :: !(TVar (Set Host))
     , appDir            :: !(TVar (Maybe FilePath))
     , appAsc            :: !AppStartConfig
-    , appRlog           :: !RotatingLog
+    , appRlog           :: !(TVar (Maybe RotatingLog))
     }
 
 data RunningWebApp = RunningWebApp
@@ -152,11 +152,20 @@ withActions asc bconfig f =
 
 withRotatingLog :: AppStartConfig
                 -> AppId
-                -> (RotatingLog -> IO a)
+                -> Maybe (TVar (Maybe RotatingLog))
+                -> ((TVar (Maybe RotatingLog)) -> RotatingLog -> IO a)
                 -> IO a
-withRotatingLog AppStartConfig {..} aid = bracketOnError
-    (LogFile.openRotatingLog (F.encodeString dir) LogFile.defaultMaxTotal)
-    LogFile.close
+withRotatingLog asc aid Nothing f = do
+    var <- newTVarIO Nothing
+    withRotatingLog asc aid (Just var) f
+withRotatingLog AppStartConfig {..} aid (Just var) f = do
+    mrlog <- readTVarIO var
+    case mrlog of
+        Nothing -> bracketOnError
+            (LogFile.openRotatingLog (F.encodeString dir) LogFile.defaultMaxTotal)
+            LogFile.close
+            (f var)
+        Just rlog ->  f var rlog
   where
     dir = kconfigDir ascKeterConfig F.</> "log" F.</> name
     name =
@@ -186,7 +195,7 @@ start :: AppStartConfig
       -> AppInput
       -> IO App
 start asc aid input =
-    withRotatingLog asc aid $ \rlog ->
+    withRotatingLog asc aid Nothing $ \trlog rlog ->
     withConfig asc aid input $ \newdir bconfig mmodtime ->
     withSanityChecks asc bconfig $
     withReservations asc aid bconfig $ \webapps actions ->
@@ -200,7 +209,7 @@ start asc aid input =
             <*> newTVarIO (Map.keysSet actions)
             <*> newTVarIO newdir
             <*> return asc
-            <*> return rlog
+            <*> return trlog
 
 withWebApps :: AppStartConfig
             -> AppId
@@ -404,10 +413,11 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
 
 reload :: App -> AppInput -> IO ()
 reload App {..} input =
+    withRotatingLog appAsc appId (Just appRlog) $ \_ rlog ->
     withConfig appAsc appId input $ \newdir bconfig mmodtime ->
     withSanityChecks appAsc bconfig $
     withReservations appAsc appId bconfig $ \webapps actions ->
-    withWebApps appAsc appId bconfig newdir appRlog webapps $ \runningWebapps -> do
+    withWebApps appAsc appId bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps
         readTVarIO appHosts >>= reactivateApp (ascHostManager appAsc) appId actions
         (oldApps, oldDir) <- atomically $ do
@@ -422,11 +432,23 @@ reload App {..} input =
 
 terminate :: App -> IO ()
 terminate App {..} = do
-    readTVarIO appHosts >>= deactivateApp ascHostManager appId
-    apps <- readTVarIO appRunningWebApps
-    mdir <- readTVarIO appDir
-    terminateHelper appAsc appId apps mdir
-    LogFile.close appRlog
+    (hosts, apps, mdir, rlog) <- atomically $ do
+        hosts <- readTVar appHosts
+        apps <- readTVar appRunningWebApps
+        mdir <- readTVar appDir
+        rlog <- readTVar appRlog
+
+        writeTVar appModTime Nothing
+        writeTVar appRunningWebApps []
+        writeTVar appHosts Set.empty
+        writeTVar appDir Nothing
+        writeTVar appRlog Nothing
+
+        return (hosts, apps, mdir, rlog)
+
+    deactivateApp ascHostManager appId hosts
+    void $ forkIO $ terminateHelper appAsc appId apps mdir
+    maybe (return ()) LogFile.close rlog
   where
     AppStartConfig {..} = appAsc
 

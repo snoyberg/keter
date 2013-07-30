@@ -236,10 +236,10 @@ launchWebApp :: AppStartConfig
              -> WebAppConfig Port
              -> IO RunningWebApp
 launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} = do
-    otherEnv <- pluginsGetEnv ascPlugins name bconfigRaw
+    otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
     let env = ("PORT", pack $ show waconfigPort)
             : ("APPROOT", (if waconfigSsl then "https://" else "http://") <> waconfigApprootHost)
-            : otherEnv
+            : Map.toList waconfigEnvironment ++ otherEnv
     exec <- canonicalizePath waconfigExec
     bracketOnError
         (monitorProcess

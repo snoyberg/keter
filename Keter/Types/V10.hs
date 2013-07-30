@@ -25,19 +25,27 @@ import Data.Maybe (fromMaybe)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import qualified Data.HashMap.Strict as HashMap
+import qualified Data.Map as Map
+import Data.Aeson ((.=), Value (Bool), object)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
-    , bconfigRaw     :: !Object -- ^ used for plugins
+    , bconfigPlugins :: !Object -- ^ settings used for plugins
     }
 
 instance ToCurrent BundleConfig where
     type Previous BundleConfig = V04.BundleConfig
-    toCurrent (V04.BundleConfig webapp statics redirs) = BundleConfig (V.concat
-        [ maybe V.empty V.singleton $ fmap (StanzaWebApp . toCurrent) webapp
-        , V.fromList $ map (StanzaStaticFiles . toCurrent) $ Set.toList statics
-        , V.fromList $ map (StanzaRedirect . toCurrent) $ Set.toList redirs
-        ]) (maybe mempty V04.configRaw webapp)
+    toCurrent (V04.BundleConfig webapp statics redirs) = BundleConfig
+        { bconfigStanzas = V.concat
+            [ maybe V.empty V.singleton $ fmap (StanzaWebApp . toCurrent) webapp
+            , V.fromList $ map (StanzaStaticFiles . toCurrent) $ Set.toList statics
+            , V.fromList $ map (StanzaRedirect . toCurrent) $ Set.toList redirs
+            ]
+        , bconfigPlugins =
+            case webapp >>= HashMap.lookup "postgres" . V04.configRaw of
+                Just (Bool True) -> HashMap.singleton "postgres" (Bool True)
+                _ -> HashMap.empty
+        }
 
 instance ParseYamlFile BundleConfig where
     parseYamlFile basedir = withObject "Config" $ \o -> do
@@ -117,10 +125,10 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "ip-from-header" .!= False
 
 data Stanza port
-    = StanzaStaticFiles StaticFilesConfig
-    | StanzaRedirect RedirectConfig
-    | StanzaWebApp (WebAppConfig port)
-    | StanzaReverseProxy ReverseProxyConfig
+    = StanzaStaticFiles !StaticFilesConfig
+    | StanzaRedirect !RedirectConfig
+    | StanzaWebApp !(WebAppConfig port)
+    | StanzaReverseProxy !ReverseProxyConfig
             -- FIXME background job, console app
     deriving Show
 
@@ -222,6 +230,7 @@ type IsSecure = Bool
 data WebAppConfig port = WebAppConfig
     { waconfigExec        :: !F.FilePath
     , waconfigArgs        :: !(Vector Text)
+    , waconfigEnvironment :: !(Map Text Text)
     , waconfigApprootHost :: !Text -- ^ primary host, used for approot
     , waconfigHosts       :: !(Set Text) -- ^ all hosts, not including the approot host
     , waconfigSsl         :: !Bool
@@ -234,6 +243,7 @@ instance ToCurrent (WebAppConfig ()) where
     toCurrent (V04.AppConfig exec args host ssl hosts _raw) = WebAppConfig
         { waconfigExec = exec
         , waconfigArgs = V.fromList args
+        , waconfigEnvironment = Map.empty
         , waconfigApprootHost = host
         , waconfigHosts = hosts
         , waconfigSsl = ssl
@@ -254,6 +264,7 @@ instance ParseYamlFile (WebAppConfig ()) where
         WebAppConfig
             <$> lookupBase basedir o "exec"
             <*> o .:? "args" .!= V.empty
+            <*> o .:? "env" .!= Map.empty
             <*> return ahost
             <*> return hosts
             <*> o .:? "ssl" .!= False

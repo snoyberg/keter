@@ -110,8 +110,8 @@ withReservations :: AppStartConfig
                  -> ([WebAppConfig Port] -> Map Host ProxyAction -> IO a)
                  -> IO a
 withReservations asc aid bconfig f = withActions asc bconfig $ \wacs actions -> bracketOnError
-    (reserveHosts (ascHostManager asc) aid $ Map.keysSet actions)
-    (forgetReservations (ascHostManager asc) aid)
+    (reserveHosts (ascLog asc) (ascHostManager asc) aid $ Map.keysSet actions)
+    (forgetReservations (ascLog asc) (ascHostManager asc) aid)
     (const $ f wacs actions)
 
 withActions :: AppStartConfig
@@ -201,7 +201,7 @@ start asc aid input =
     withReservations asc aid bconfig $ \webapps actions ->
     withWebApps asc aid bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps
-        activateApp (ascHostManager asc) aid actions
+        activateApp (ascLog asc) (ascHostManager asc) aid actions
         App
             <$> newTVarIO mmodtime
             <*> newTVarIO runningWebapps
@@ -419,7 +419,7 @@ reload App {..} input =
     withReservations appAsc appId bconfig $ \webapps actions ->
     withWebApps appAsc appId bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps
-        readTVarIO appHosts >>= reactivateApp (ascHostManager appAsc) appId actions
+        readTVarIO appHosts >>= reactivateApp (ascLog appAsc) (ascHostManager appAsc) appId actions
         (oldApps, oldDir) <- atomically $ do
             oldApps <- readTVar appRunningWebApps
             oldDir <- readTVar appDir
@@ -446,7 +446,7 @@ terminate App {..} = do
 
         return (hosts, apps, mdir, rlog)
 
-    deactivateApp ascHostManager appId hosts
+    deactivateApp ascLog ascHostManager appId hosts
     void $ forkIO $ terminateHelper appAsc appId apps mdir
     maybe (return ()) LogFile.close rlog
   where

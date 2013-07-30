@@ -50,9 +50,9 @@ import Filesystem (listDirectory, createTree)
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
       -> IO ()
-keter input mkPlugins = withManagers input mkPlugins $ \kc hostman appMan -> do
+keter input mkPlugins = withManagers input mkPlugins $ \kc hostman appMan log -> do
     launchInitial kc appMan
-    startWatching kc appMan
+    startWatching kc appMan log
     startListening kc hostman
 
 -- | Load up Keter config.
@@ -91,7 +91,7 @@ withLogger fp f = withConfig fp $ \config -> do
 
 withManagers :: FilePath
              -> [FilePath -> IO Plugin]
-             -> (KeterConfig -> HostMan.HostManager -> AppMan.AppManager -> IO a)
+             -> (KeterConfig -> HostMan.HostManager -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO a)
              -> IO a
 withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> do
     processTracker <- initProcessTracker
@@ -122,7 +122,7 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
             , ascKeterConfig = kc
             }
     appMan <- AppMan.initialize log appStartConfig
-    f kc hostman appMan
+    f kc hostman appMan log
 
 launchInitial :: KeterConfig -> AppMan.AppManager -> IO ()
 launchInitial kc@KeterConfig {..} appMan = do
@@ -143,17 +143,23 @@ getIncoming kc = kconfigDir kc </> "incoming"
 isKeter :: FilePath -> Bool
 isKeter fp = hasExtension fp "keter"
 
-startWatching :: KeterConfig -> AppMan.AppManager -> IO ()
-startWatching kc@KeterConfig {..} appMan = do
+startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO ()
+startWatching kc@KeterConfig {..} appMan log = do
     -- File system watching
     wm <- FSN.startManager
-    FSN.watchDir wm incoming (const True) $ \e ->
-        let e' =
-                case e of
-                    FSN.Removed fp _ -> Left fp
-                    FSN.Added fp _ -> Right fp
-                    FSN.Modified fp _ -> Right fp
-         in case e' of
+    FSN.watchDir wm incoming (const True) $ \e -> do
+        e' <-
+            case e of
+                FSN.Removed fp _ -> do
+                    log $ WatchedFile "removed" fp
+                    return $ Left fp
+                FSN.Added fp _ -> do
+                    log $ WatchedFile "added" fp
+                    return $ Right fp
+                FSN.Modified fp _ -> do
+                    log $ WatchedFile "modified" fp
+                    return $ Right fp
+        case e' of
             Left fp -> when (isKeter fp) $ AppMan.terminateApp appMan $ getAppname fp
             Right fp -> when (isKeter fp) $ AppMan.addApp appMan $ incoming </> fp
 

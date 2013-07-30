@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE ViewPatterns        #-}
 module Keter.HostManager
     ( -- * Types
       HostManager
@@ -18,13 +19,13 @@ module Keter.HostManager
     ) where
 
 import           Control.Applicative
-import           Control.Exception       (assert, throwIO)
-import           Data.Either             (partitionEithers)
-import qualified Data.Map                as Map
-import qualified Data.Set                as Set
-import           Data.Text.Encoding      (encodeUtf8)
-import           Keter.Types
+import           Control.Exception   (assert, throwIO)
+import           Data.Either         (partitionEithers)
 import           Data.IORef
+import qualified Data.Map            as Map
+import qualified Data.Set            as Set
+import           Data.Text.Encoding  (encodeUtf8)
+import           Keter.Types
 
 type HMState = Map.Map HostBS HostValue
 
@@ -53,14 +54,17 @@ start = HostManager <$> newIORef Map.empty
 --
 -- 4. Otherwise, the hosts which were reserved are returned as @Right@. This
 --    does /not/ include previously active hosts.
-reserveHosts :: HostManager
+reserveHosts :: (LogMessage -> IO ())
+             -> HostManager
              -> AppId
              -> Set.Set Host
              -> IO Reservations
-reserveHosts (HostManager mstate) aid hosts = either (throwIO . CannotReserveHosts aid) return =<< atomicModifyIORef mstate (\entries0 ->
+reserveHosts log (HostManager mstate) aid hosts = do
+  log $ ReservingHosts aid hosts
+  either (throwIO . CannotReserveHosts aid) return =<< atomicModifyIORef mstate (\entries0 ->
     case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
-        ([], toReserve) ->
-            (Set.foldr reserve entries0 $ Set.unions toReserve, Right Set.empty)
+        ([], Set.unions -> toReserve) ->
+            (Set.foldr reserve entries0 toReserve, Right toReserve)
         (conflicts, _) -> (entries0, Left $ Map.fromList conflicts))
   where
     checkHost entries0 host =
@@ -79,12 +83,15 @@ reserveHosts (HostManager mstate) aid hosts = either (throwIO . CannotReserveHos
         hostBS = encodeUtf8 host
 
 -- | Forget previously made reservations.
-forgetReservations :: HostManager
+forgetReservations :: (LogMessage -> IO ())
+                   -> HostManager
                    -> AppId
                    -> Reservations
                    -> IO ()
-forgetReservations (HostManager mstate) app hosts = atomicModifyIORef mstate $ \state0 ->
-    (Set.foldr forget state0 hosts, ())
+forgetReservations log (HostManager mstate) app hosts = do
+    log $ ForgetingReservations app hosts
+    atomicModifyIORef mstate $ \state0 ->
+        (Set.foldr forget state0 hosts, ())
   where
     forget host state =
         assert isReservedByMe $ Map.delete hostBS state
@@ -97,12 +104,15 @@ forgetReservations (HostManager mstate) app hosts = atomicModifyIORef mstate $ \
                 Just HVActive{} -> False
 
 -- | Activate a new app. Note that you /must/ first reserve the hostnames you'll be using.
-activateApp :: HostManager
+activateApp :: (LogMessage -> IO ())
+            -> HostManager
             -> AppId
             -> Map.Map Host ProxyAction
             -> IO ()
-activateApp (HostManager mstate) app actions = atomicModifyIORef mstate $ \state0 ->
-    (activateHelper app state0 actions, ())
+activateApp log (HostManager mstate) app actions = do
+    log $ ActivatingApp app $ Map.keysSet actions
+    atomicModifyIORef mstate $ \state0 ->
+        (activateHelper app state0 actions, ())
 
 activateHelper :: AppId -> HMState -> Map Host ProxyAction -> HMState
 activateHelper app =
@@ -118,12 +128,15 @@ activateHelper app =
                 Just (HVReserved app') -> app == app'
                 Just (HVActive app' _) -> app == app'
 
-deactivateApp :: HostManager
+deactivateApp :: (LogMessage -> IO ())
+              -> HostManager
               -> AppId
               -> Set Host
               -> IO ()
-deactivateApp (HostManager mstate) app hosts = atomicModifyIORef mstate $ \state0 ->
-    (deactivateHelper app state0 hosts, ())
+deactivateApp log (HostManager mstate) app hosts = do
+    log $ DeactivatingApp app hosts
+    atomicModifyIORef mstate $ \state0 ->
+        (deactivateHelper app state0 hosts, ())
 
 deactivateHelper :: AppId -> HMState -> Set Host -> HMState
 deactivateHelper app =
@@ -139,13 +152,16 @@ deactivateHelper app =
                 Just (HVActive app' _) -> app == app'
                 Just HVReserved {} -> False
 
-reactivateApp :: HostManager
+reactivateApp :: (LogMessage -> IO ())
+              -> HostManager
               -> AppId
               -> Map Host ProxyAction
               -> Set Host
               -> IO ()
-reactivateApp (HostManager mstate) app actions hosts = atomicModifyIORef mstate $ \state0 ->
-    (activateHelper app (deactivateHelper app state0 hosts) actions, ())
+reactivateApp log (HostManager mstate) app actions hosts = do
+    log $ ReactivatingApp app hosts (Map.keysSet actions)
+    atomicModifyIORef mstate $ \state0 ->
+        (activateHelper app (deactivateHelper app state0 hosts) actions, ())
 
 lookupAction :: HostManager
              -> HostBS

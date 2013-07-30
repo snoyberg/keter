@@ -17,6 +17,7 @@ import           Data.Aeson                 (Object)
 import           Data.ByteString            (ByteString)
 import           Data.Map                   (Map)
 import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
 import           Data.Text                  (Text, pack, unpack)
 import           Data.Typeable              (Typeable)
 import qualified Data.Yaml
@@ -71,6 +72,12 @@ data LogMessage
     | OtherMessage Text
     | ErrorStartingBundle Text SomeException
     | SanityChecksPassed
+    | ReservingHosts AppId (Set Host)
+    | ForgetingReservations AppId (Set Host)
+    | ActivatingApp AppId (Set Host)
+    | DeactivatingApp AppId (Set Host)
+    | ReactivatingApp AppId (Set Host) (Set Host)
+    | WatchedFile Text FilePath
 
 instance Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ encodeString f
@@ -110,6 +117,25 @@ instance Show LogMessage where
         , show e
         ]
     show SanityChecksPassed = "Sanity checks passed"
+    show (ReservingHosts app hosts) = "Reserving hosts for app " ++ show app ++ ": " ++ unwords (map unpack $ Set.toList hosts)
+    show (ForgetingReservations app hosts) = "Forgeting host reservations for app " ++ show app ++ ": " ++ unwords (map unpack $ Set.toList hosts)
+    show (ActivatingApp app hosts) = "Activating app " ++ show app ++ " with hosts: " ++ unwords (map unpack $ Set.toList hosts)
+    show (DeactivatingApp app hosts) = "Deactivating app " ++ show app ++ " with hosts: " ++ unwords (map unpack $ Set.toList hosts)
+    show (ReactivatingApp app old new) = concat
+        [ "Reactivating app "
+        , show app
+        , ".  Old hosts: "
+        , unwords (map unpack $ Set.toList old)
+        , ". New hosts: "
+        , unwords (map unpack $ Set.toList new)
+        , "."
+        ]
+    show (WatchedFile action fp) = concat
+        [ "Watched file "
+        , unpack action
+        , ": "
+        , encodeString fp
+        ]
 
 data KeterException = CannotParsePostgres FilePath
                     | ExitCodeFailure FilePath ExitCode
@@ -135,4 +161,7 @@ logEx = do
     [|(. ExceptionThrown (pack $(TH.lift loc)))|]
 
 data AppId = AIBuiltin | AINamed !Appname
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord)
+instance Show AppId where
+    show AIBuiltin = "/builtin/"
+    show (AINamed t) = unpack t

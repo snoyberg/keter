@@ -10,7 +10,7 @@ import Data.Aeson (Object)
 import Keter.Types.Common
 import qualified Keter.Types.V04 as V04
 import Data.Yaml.FilePath
-import Data.Aeson (FromJSON (..), (.:), (.:?), Value (Object), withObject, (.!=))
+import Data.Aeson (FromJSON (..), (.:), (.:?), Value (Object, String), withObject, (.!=))
 import Control.Applicative ((<$>), (<*>), pure, (<|>))
 import qualified Data.Set as Set
 import qualified Filesystem.Path.CurrentOS as F
@@ -27,6 +27,7 @@ import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import qualified Data.HashMap.Strict as HashMap
 import qualified Data.Map as Map
 import Data.Aeson ((.=), Value (Bool), object)
+import Data.Word (Word)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
@@ -129,7 +130,8 @@ data Stanza port
     | StanzaRedirect !RedirectConfig
     | StanzaWebApp !(WebAppConfig port)
     | StanzaReverseProxy !ReverseProxyConfig
-            -- FIXME background job, console app
+    | StanzaBackground !BackgroundConfig
+            -- FIXME console app
     deriving Show
 
 -- | An action to be performed for a requested hostname.
@@ -153,6 +155,7 @@ instance ParseYamlFile (Stanza ()) where
             "redirect" -> fmap StanzaRedirect $ parseYamlFile basedir $ Object o
             "webapp" -> fmap StanzaWebApp $ parseYamlFile basedir $ Object o
             "reverse-proxy" -> fmap StanzaReverseProxy $ parseJSON $ Object o
+            "background" -> fmap StanzaBackground $ parseYamlFile basedir $ Object o
             _ -> fail $ "Unknown stanza type: " ++ typ
 
 data StaticFilesConfig = StaticFilesConfig
@@ -272,3 +275,27 @@ instance ParseYamlFile (WebAppConfig ()) where
 
 data AppInput = AIBundle !FilePath !EpochTime
               | AIData !BundleConfig
+
+data BackgroundConfig = BackgroundConfig
+    { bgconfigExec :: !F.FilePath
+    , bgconfigArgs :: !(Vector Text)
+    , bgconfigEnvironment :: !(Map Text Text)
+    , bgconfigRestartCount :: !RestartCount
+    , bgconfigRestartDelaySeconds :: !Word
+    }
+    deriving Show
+
+data RestartCount = UnlimitedRestarts | LimitedRestarts !Word
+    deriving Show
+
+instance FromJSON RestartCount where
+    parseJSON (String "unlimited") = return UnlimitedRestarts
+    parseJSON v = fmap LimitedRestarts $ parseJSON v
+
+instance ParseYamlFile BackgroundConfig where
+    parseYamlFile basedir = withObject "BackgroundConfig" $ \o -> BackgroundConfig
+        <$> lookupBase basedir o "exec"
+        <*> o .:? "args" .!= V.empty
+        <*> o .:? "env" .!= Map.empty
+        <*> o .:? "restart-count" .!= UnlimitedRestarts
+        <*> o .:? "restart-delay-seconds" .!= 5

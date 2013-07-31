@@ -17,5 +17,7 @@ import Keter.Types.V10 as X
     , SourcePath (..)
     , ListeningPort (..)
     , AppInput (..)
+    , BackgroundConfig (..)
+    , RestartCount (..)
     )
 import Network.HTTP.ReverseProxy.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))

@@ -18,11 +18,12 @@ import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception         (bracketOnError, throwIO)
 import           Control.Exception         (IOException, try)
-import           Control.Monad             (void)
+import           Control.Monad             (void, when)
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             RotatingLog, monitorProcess,
                                             terminateMonitoredProcess)
+import           Data.IORef
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
 import           Data.Monoid               ((<>))
@@ -50,6 +51,7 @@ import           System.Timeout            (timeout)
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
     , appRunningWebApps :: !(TVar [RunningWebApp])
+    , appBackgroundApps :: !(TVar [RunningBackgroundApp])
     , appId             :: !AppId
     , appHosts          :: !(TVar (Set Host))
     , appDir            :: !(TVar (Maybe FilePath))
@@ -60,6 +62,10 @@ data App = App
 data RunningWebApp = RunningWebApp
     { rwaProcess :: !MonitoredProcess
     , rwaPort    :: !Port
+    }
+
+newtype RunningBackgroundApp = RunningBackgroundApp
+    { rbaProcess             :: MonitoredProcess
     }
 
 unpackBundle :: AppStartConfig
@@ -107,48 +113,51 @@ withConfig asc aid (AIBundle fp modtime) f = bracketOnError
 withReservations :: AppStartConfig
                  -> AppId
                  -> BundleConfig
-                 -> ([WebAppConfig Port] -> Map Host ProxyAction -> IO a)
+                 -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host ProxyAction -> IO a)
                  -> IO a
-withReservations asc aid bconfig f = withActions asc bconfig $ \wacs actions -> bracketOnError
+withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs actions -> bracketOnError
     (reserveHosts (ascLog asc) (ascHostManager asc) aid $ Map.keysSet actions)
     (forgetReservations (ascLog asc) (ascHostManager asc) aid)
-    (const $ f wacs actions)
+    (const $ f wacs backs actions)
 
 withActions :: AppStartConfig
             -> BundleConfig
-            -> ([WebAppConfig Port] -> Map Host ProxyAction -> IO a)
+            -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host ProxyAction -> IO a)
             -> IO a
 withActions asc bconfig f =
-    loop (V.toList $ bconfigStanzas bconfig) [] Map.empty
+    loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty
   where
-    loop [] wacs actions = f wacs actions
-    loop (StanzaWebApp wac:stanzas) wacs actions = bracketOnError
+    loop [] wacs backs actions = f wacs backs actions
+    loop (StanzaWebApp wac:stanzas) wacs backs actions = bracketOnError
         (getPort (ascLog asc) (ascPortPool asc) >>= either throwIO return)
         (releasePort (ascPortPool asc))
         (\port -> loop
             stanzas
             (wac { waconfigPort = port } : wacs)
+            backs
             (Map.unions $ actions : map (\host -> Map.singleton host $ PAPort port) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
-    loop (StanzaStaticFiles sfc:stanzas) wacs actions0 =
-        loop stanzas wacs actions
+    loop (StanzaStaticFiles sfc:stanzas) wacs backs actions0 =
+        loop stanzas wacs backs actions
       where
         actions = Map.unions
                 $ actions0
                 : map (\host -> Map.singleton host $ PAStatic sfc)
                   (Set.toList (sfconfigHosts sfc))
-    loop (StanzaRedirect red:stanzas) wacs actions0 =
-        loop stanzas wacs actions
+    loop (StanzaRedirect red:stanzas) wacs backs actions0 =
+        loop stanzas wacs backs actions
       where
         actions = Map.unions
                 $ actions0
                 : map (\host -> Map.singleton host $ PARedirect red)
                   (Set.toList (redirconfigHosts red))
-    loop (StanzaReverseProxy rev:stanzas) wacs actions0 =
-        loop stanzas wacs actions
+    loop (StanzaReverseProxy rev:stanzas) wacs backs actions0 =
+        loop stanzas wacs backs actions
       where
         actions = Map.insert (reversingHost rev) (PAReverseProxy rev) actions0
+    loop (StanzaBackground back:stanzas) wacs backs actions =
+        loop stanzas wacs (back:backs) actions
 
 withRotatingLog :: AppStartConfig
                 -> AppId
@@ -179,16 +188,19 @@ withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
     ascLog SanityChecksPassed
     f
   where
-    go (StanzaWebApp WebAppConfig {..}) = do
-        exists <- isFile waconfigExec
+    go (StanzaWebApp WebAppConfig {..}) = isExec waconfigExec
+    go (StanzaBackground BackgroundConfig {..}) = isExec bgconfigExec
+    go _ = return ()
+
+    isExec fp = do
+        exists <- isFile fp
         if exists
             then do
-                canExec <- fileAccess (F.encodeString waconfigExec) True False True
+                canExec <- fileAccess (F.encodeString fp) True False True
                 if canExec
                     then return ()
-                    else throwIO $ FileNotExecutable waconfigExec
-            else throwIO $ ExecutableNotFound waconfigExec
-    go _ = return ()
+                    else throwIO $ FileNotExecutable fp
+            else throwIO $ ExecutableNotFound fp
 
 start :: AppStartConfig
       -> AppId
@@ -198,18 +210,30 @@ start asc aid input =
     withRotatingLog asc aid Nothing $ \trlog rlog ->
     withConfig asc aid input $ \newdir bconfig mmodtime ->
     withSanityChecks asc bconfig $
-    withReservations asc aid bconfig $ \webapps actions ->
+    withReservations asc aid bconfig $ \webapps backs actions ->
+    withBackgroundApps asc aid bconfig newdir rlog backs $ \runningBacks ->
     withWebApps asc aid bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps
         activateApp (ascLog asc) (ascHostManager asc) aid actions
         App
             <$> newTVarIO mmodtime
             <*> newTVarIO runningWebapps
+            <*> newTVarIO runningBacks
             <*> return aid
             <*> newTVarIO (Map.keysSet actions)
             <*> newTVarIO newdir
             <*> return asc
             <*> return trlog
+
+bracketedMap :: (a -> (b -> IO c) -> IO c)
+             -> ([b] -> IO c)
+             -> [a]
+             -> IO c
+bracketedMap with inside =
+    loop id
+  where
+    loop front [] = inside $ front []
+    loop front (c:cs) = with c $ \x -> loop (front . (x:)) cs
 
 withWebApps :: AppStartConfig
             -> AppId
@@ -220,13 +244,9 @@ withWebApps :: AppStartConfig
             -> ([RunningWebApp] -> IO a)
             -> IO a
 withWebApps asc aid bconfig mdir rlog configs0 f =
-    loop configs0 id
+    bracketedMap alloc f configs0
   where
-    loop [] front = f $ front []
-    loop (c:cs) front = bracketOnError
-        (launchWebApp asc aid bconfig mdir rlog c)
-        killWebApp
-        (\rwa -> loop cs (front . (rwa:)))
+    alloc = launchWebApp asc aid bconfig mdir rlog
 
 launchWebApp :: AppStartConfig
              -> AppId
@@ -234,8 +254,9 @@ launchWebApp :: AppStartConfig
              -> Maybe FilePath
              -> RotatingLog
              -> WebAppConfig Port
-             -> IO RunningWebApp
-launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} = do
+             -> (RunningWebApp -> IO a)
+             -> IO a
+launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} f = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
     let env = ("PORT", pack $ show waconfigPort)
             : ("APPROOT", (if waconfigSsl then "https://" else "http://") <> waconfigApprootHost)
@@ -250,15 +271,13 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             (maybe "/tmp" (encodeUtf8 . either id id . F.toText) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            rlog)
-        (\mp -> do
-            putStrLn "terminating monitored process"
-            terminateMonitoredProcess mp)
-        $ \mp -> do
-            return RunningWebApp
-                { rwaProcess = mp
-                , rwaPort = waconfigPort
-                }
+            rlog
+            (const $ return True))
+        terminateMonitoredProcess
+        $ \mp -> f RunningWebApp
+            { rwaProcess = mp
+            , rwaPort = waconfigPort
+            }
   where
     name =
         case aid of
@@ -289,6 +308,69 @@ ensureAlive RunningWebApp {..} = do
                 Right handle -> do
                     hClose handle
                     return True
+
+withBackgroundApps :: AppStartConfig
+                   -> AppId
+                   -> BundleConfig
+                   -> Maybe FilePath
+                   -> RotatingLog
+                   -> [BackgroundConfig]
+                   -> ([RunningBackgroundApp] -> IO a)
+                   -> IO a
+withBackgroundApps asc aid bconfig mdir rlog configs f =
+    bracketedMap alloc f configs
+  where
+    alloc = launchBackgroundApp asc aid bconfig mdir rlog
+
+launchBackgroundApp :: AppStartConfig
+                    -> AppId
+                    -> BundleConfig
+                    -> Maybe FilePath
+                    -> RotatingLog
+                    -> BackgroundConfig
+                    -> (RunningBackgroundApp -> IO a)
+                    -> IO a
+launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlog BackgroundConfig {..} f = do
+    otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
+    let env = Map.toList bgconfigEnvironment ++ otherEnv
+    exec <- canonicalizePath bgconfigExec
+
+    let delay = threadDelay $ fromIntegral $ bgconfigRestartDelaySeconds * 1000 * 1000
+    shouldRestart <-
+        case bgconfigRestartCount of
+            UnlimitedRestarts -> return $ do
+                delay
+                return True
+            LimitedRestarts maxCount -> do
+                icount <- newIORef 0
+                return $ do
+                    res <- atomicModifyIORef icount $ \count ->
+                        (count + 1, count >= maxCount)
+                    when res delay
+                    return res
+
+    bracketOnError
+        (monitorProcess
+            (ascLog . OtherMessage . decodeUtf8With lenientDecode)
+            ascProcessTracker
+            (encodeUtf8 . fst <$> ascSetuid)
+            (encodeUtf8 $ either id id $ F.toText exec)
+            (maybe "/tmp" (encodeUtf8 . either id id . F.toText) mdir)
+            (map encodeUtf8 $ V.toList bgconfigArgs)
+            (map (encodeUtf8 *** encodeUtf8) env)
+            rlog
+            (const shouldRestart))
+        terminateMonitoredProcess
+        (f . RunningBackgroundApp)
+  where
+    name =
+        case aid of
+            AIBuiltin -> "__builtin__"
+            AINamed x -> x
+
+killBackgroundApp :: RunningBackgroundApp -> IO ()
+killBackgroundApp RunningBackgroundApp {..} = do
+    terminateMonitoredProcess rbaProcess
 
     {-
 start :: TempFolder
@@ -416,38 +498,44 @@ reload App {..} input =
     withRotatingLog appAsc appId (Just appRlog) $ \_ rlog ->
     withConfig appAsc appId input $ \newdir bconfig mmodtime ->
     withSanityChecks appAsc bconfig $
-    withReservations appAsc appId bconfig $ \webapps actions ->
+    withReservations appAsc appId bconfig $ \webapps backs actions ->
+    withBackgroundApps appAsc appId bconfig newdir rlog backs $ \runningBacks ->
     withWebApps appAsc appId bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps
         readTVarIO appHosts >>= reactivateApp (ascLog appAsc) (ascHostManager appAsc) appId actions
-        (oldApps, oldDir) <- atomically $ do
+        (oldApps, oldBacks, oldDir) <- atomically $ do
             oldApps <- readTVar appRunningWebApps
+            oldBacks <- readTVar appBackgroundApps
             oldDir <- readTVar appDir
+
             writeTVar appModTime mmodtime
             writeTVar appRunningWebApps runningWebapps
+            writeTVar appBackgroundApps runningBacks
             writeTVar appHosts $ Map.keysSet actions
             writeTVar appDir newdir
-            return (oldApps, oldDir)
-        void $ forkIO $ terminateHelper appAsc appId oldApps oldDir
+            return (oldApps, oldBacks, oldDir)
+        void $ forkIO $ terminateHelper appAsc appId oldApps oldBacks oldDir
 
 terminate :: App -> IO ()
 terminate App {..} = do
-    (hosts, apps, mdir, rlog) <- atomically $ do
+    (hosts, apps, backs, mdir, rlog) <- atomically $ do
         hosts <- readTVar appHosts
         apps <- readTVar appRunningWebApps
+        backs <- readTVar appBackgroundApps
         mdir <- readTVar appDir
         rlog <- readTVar appRlog
 
         writeTVar appModTime Nothing
         writeTVar appRunningWebApps []
+        writeTVar appBackgroundApps []
         writeTVar appHosts Set.empty
         writeTVar appDir Nothing
         writeTVar appRlog Nothing
 
-        return (hosts, apps, mdir, rlog)
+        return (hosts, apps, backs, mdir, rlog)
 
     deactivateApp ascLog ascHostManager appId hosts
-    void $ forkIO $ terminateHelper appAsc appId apps mdir
+    void $ forkIO $ terminateHelper appAsc appId apps backs mdir
     maybe (return ()) LogFile.close rlog
   where
     AppStartConfig {..} = appAsc
@@ -455,12 +543,14 @@ terminate App {..} = do
 terminateHelper :: AppStartConfig
                 -> AppId
                 -> [RunningWebApp]
+                -> [RunningBackgroundApp]
                 -> Maybe FilePath
                 -> IO ()
-terminateHelper AppStartConfig {..} aid apps mdir = do
+terminateHelper AppStartConfig {..} aid apps backs mdir = do
     threadDelay $ 20 * 1000 * 1000
     ascLog $ TerminatingOldProcess aid
     mapM_ killWebApp apps
+    mapM_ killBackgroundApp backs
     threadDelay $ 60 * 1000 * 1000
     case mdir of
         Nothing -> return ()

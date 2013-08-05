@@ -115,6 +115,37 @@ redirects:
       to: www.yesodweb.com
 ```
 
+Keter as well supports wildcard subdomains and exceptions, as in this example
+configuration:
+
+```yaml
+exec: ../com.example.app
+args:
+    - Hello World 1
+host: www.example.com
+extra-hosts:
+    - "*.example.com"
+    - foo.bar.example.com
+static-hosts:
+    - host: static.example.com
+      root: ../static
+redirects:
+    - from: example.com
+      to: www.example.com
+```
+
+Due to YAML parsing, wildcard hostnames will need to be quoted as above.
+Wildcard hostnames are not recursive, so `foo.bar.example.com` must be
+explicitly added as an extra hostname in the above example, or
+alternatively, `*.*.example.com` would cover all host names two levels
+deep. It would not cover host names only one level deep, such as
+`qux.example.com`. In this manner, wildcard hostnames correspond to the
+manner in which SSL certificates are handled per RFC2818. Wildcards may
+be used in only one level of a hostname, as in `foo.*.example.com`.
+
+Full RFC2818 compliance is not present - `f*.example.com` will not be
+handled as a wildcard with a prefix.
+
 A sample Bash script for producing a Keter bundle is:
 
 ```bash

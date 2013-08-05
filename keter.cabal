@@ -1,10 +1,12 @@
 Name:                keter
-Version:             0.4.0
+Version:             0.4.1
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
     .
     Release history:
+    .
+    [0.4.1] Permit use of wildcard subdomains and exceptions to wildcards. Convert internal strings to use Data.Text in more places. (Although internationalized domain names are not supported unless entered in punycode in configuration files.)
     .
     [0.4.0] Switch to fsnotify to get cross-platform support. No longer using raw proxies, but instead WAI proxies.
     .
@@ -19,6 +21,8 @@ Maintainer:          michael@snoyman.com
 Category:            Web, Yesod
 Build-type:          Simple
 Cabal-version:       >=1.8
+
+Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
 
 Library
   Build-depends:       base                      >= 4             && < 5
@@ -66,6 +70,7 @@ Library
                        Keter.App
                        Keter.Main
                        Keter.Prelude
+                       Keter.LabelMap
                        Keter.LogFile
                        Keter.Logger
                        Keter.Proxy
@@ -81,6 +86,21 @@ Executable keter
   Build-depends:       base, keter
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
+
+Executable hello
+  Main-is:             hello.hs
+  hs-source-dirs:      incoming/foo
+  Build-depends:       base
+                     , keter
+                     , warp
+                     , wai
+                     , wai-extra
+                     , http-types
+                     , bytestring
+                     , directory
+                     , data-default
+                     , transformers
+  ghc-options:         -threaded -Wall
 
 source-repository head
   type:     git

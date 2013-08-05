@@ -13,3 +13,4 @@ incoming/foo/hello
 log/
 .cabal-sandbox/
 cabal.sandbox.config
+*.sublime-*

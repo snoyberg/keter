@@ -25,21 +25,17 @@ module Keter.PortManager
 import Keter.Prelude
 import qualified Control.Monad.Trans.State as S
 import Control.Monad.Trans.Class (lift)
-import qualified Data.Map as Map
 import Control.Monad (forever, mzero, mplus)
 import Data.ByteString.Char8 ()
 import qualified Network
-import qualified Data.ByteString as S
-import Data.Text.Encoding (encodeUtf8)
 import Data.Yaml (FromJSON (parseJSON), Value (Object))
 import Control.Applicative ((<$>))
-import qualified Keter.ReverseProxy as ReverseProxy (RPEntry)
 
--- | A port for an individual app to listen on.
-type Port = Int
+import qualified Keter.LabelMap as LabelMap (insert, delete, lookup, empty)
+import Keter.LabelMap hiding (insert, delete, lookup, empty) 
 
 -- | A virtual host we want to serve content from.
-type Host = String
+type Host = Text
 
 data Command = GetPort (Either SomeException Port -> KIO ())
              | ReleasePort Port
@@ -47,7 +43,7 @@ data Command = GetPort (Either SomeException Port -> KIO ())
              | RemoveEntry Host
              | AddDefaultEntry PortEntry
              | RemoveDefaultEntry
-             | LookupPort S.ByteString (Maybe PortEntry -> KIO ())
+             | LookupPort Host (Maybe PortEntry -> KIO ())
 
 -- | An abstract type which can accept commands and sends them to a background
 -- nginx thread.
@@ -57,12 +53,22 @@ newtype PortManager = PortManager (Command -> KIO ())
 -- See: <http://www.yesodweb.com/book/settings-types>.
 data Settings = Settings
     { portRange :: [Port]
-      -- ^ Which ports to assign to apps. Default: 4000-4999
+      -- ^ Which ports to assign to apps. Defaults to unassigned ranges from IANA
     }
 
 instance Default Settings where
     def = Settings
-        { portRange = [4000..4999]
+        -- Top 10 Largest IANA unassigned port ranges with no unauthorized uses known 
+        { portRange = [43124..44320]
+                      ++ [28120..29166]
+                      ++ [45967..46997]
+                      ++ [28241..29117]
+                      ++ [40001..40840]
+                      ++ [29170..29998]
+                      ++ [38866..39680]
+                      ++ [43442..44122]
+                      ++ [41122..41793]
+                      ++ [35358..36000]
         }
 
 instance FromJSON Settings where
@@ -106,27 +112,28 @@ start Settings{..} = do
                 lift $ f eport
             ReleasePort p ->
                 S.modify $ \ns -> ns { nsRecycled = p : nsRecycled ns }
-            AddEntry h e -> change $ Map.insert (encodeUtf8 h) e
-            RemoveEntry h -> change $ Map.delete $ encodeUtf8 h
+            AddEntry h e -> change $ LabelMap.insert h e
+            RemoveEntry h -> change $ LabelMap.delete h
             AddDefaultEntry e -> S.modify $ \ns -> ns { nsDefault = Just e }
             RemoveDefaultEntry -> S.modify $ \ns -> ns { nsDefault = Nothing }
             LookupPort h f -> do
                 NState {..} <- S.get
-                lift $ f $ mplus (Map.lookup h nsEntries) nsDefault
+                lift $ f $ mplus (LabelMap.lookup h nsEntries) nsDefault
     return $ Right $ PortManager $ writeChan chan
   where
     change f = do
         ns <- S.get
         let entries = f $ nsEntries ns
         S.put $ ns { nsEntries = entries }
-    freshState = NState portRange [] Map.empty Nothing
+    freshState = NState portRange [] LabelMap.empty Nothing
 
 data NState = NState
     { nsAvail :: [Port]
     , nsRecycled :: [Port]
-    , nsEntries :: Map.Map S.ByteString PortEntry
+    , nsEntries :: LabelMap
     , nsDefault :: Maybe PortEntry
     }
+
 
 -- | Gets an unassigned port number.
 getPort :: PortManager -> KIO (Either SomeException Port)
@@ -151,15 +158,13 @@ addEntry (PortManager f) h p = f $ case h of
     "*" -> AddDefaultEntry p
     _   -> AddEntry h p
 
-data PortEntry = PEPort Port | PEStatic FilePath | PERedirect S.ByteString | PEReverseProxy ReverseProxy.RPEntry
-
 -- | Remove an entry from the configuration and reload nginx.
 removeEntry :: PortManager -> Host -> KIO ()
 removeEntry (PortManager f) h = f $ case h of
     "*" -> RemoveDefaultEntry
     _   -> RemoveEntry h
 
-lookupPort :: PortManager -> S.ByteString -> KIO (Maybe PortEntry)
+lookupPort :: PortManager -> Text -> KIO (Maybe PortEntry)
 lookupPort (PortManager f) h = do
     x <- newEmptyMVar
     f $ LookupPort h $ \p -> putMVar x p

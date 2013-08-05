@@ -38,7 +38,6 @@ import qualified Data.Conduit.List as CL
 import System.Posix.IO (fdWriteBuf, closeFd, FdOption (CloseOnExec), setFdOption, createFile)
 import Foreign.Ptr (castPtr)
 import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
-import Data.Text.Encoding (encodeUtf8)
 import System.Posix.Types (UserID, GroupID)
 import System.Posix.Files (setOwnerAndGroup, setFdOwnerAndGroup)
 import Control.Monad (unless)
@@ -49,7 +48,7 @@ data AppConfig = AppConfig
     , configHost :: Text
     , configPostgres :: Bool
     , configSsl :: Bool
-    , configExtraHosts :: Set String
+    , configExtraHosts :: Set Text
     }
 
 instance FromJSON AppConfig where
@@ -76,7 +75,7 @@ instance FromJSON Config where
     parseJSON _ = fail "Wanted an object"
 
 data StaticHost = StaticHost
-    { shHost :: String
+    { shHost :: Text
     , shRoot :: FilePath
     }
     deriving (Eq, Ord)
@@ -244,7 +243,7 @@ start tf muid processTracker portman postgres logger appname bundle removeFromLi
             Right (dir, config) -> do
                 let common = do
                         mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
-                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
+                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect redTo)) $ Set.toList $ configRedirects config
                 case configApp config of
                     Nothing -> do
                         common
@@ -297,7 +296,7 @@ start tf muid processTracker portman postgres logger appname bundle removeFromLi
                             Right port -> do
                                 let common = do
                                         mapM_ (\StaticHost{..} -> addEntry portman shHost (PEStatic shRoot)) $ Set.toList $ configStaticHosts config
-                                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ encodeUtf8 redTo)) $ Set.toList $ configRedirects config
+                                        mapM_ (\Redirect{..} -> addEntry portman redFrom (PERedirect $ redTo)) $ Set.toList $ configRedirects config
                                 case configApp config of
                                     Nothing -> do
                                         common

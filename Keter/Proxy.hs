@@ -12,6 +12,8 @@ import Prelude hiding ((++), FilePath)
 import Control.Monad.IO.Class (liftIO)
 import Data.ByteString (ByteString)
 import Keter.PortManager (PortEntry (..))
+import Data.Text (Text)
+import Data.Text.Encoding (encodeUtf8, decodeASCII)
 import qualified Data.ByteString as S
 import qualified Data.ByteString.Lazy as L
 import Keter.SSL
@@ -27,8 +29,9 @@ import Blaze.ByteString.Builder (copyByteString)
 import Data.Monoid (mappend)
 import Data.Default
 
+
 -- | Mapping from virtual hostname to port number.
-type PortLookup = ByteString -> IO (Maybe PortEntry)
+type PortLookup = Text -> IO (Maybe PortEntry)
 
 reverseProxy :: Bool -> Manager -> Warp.Settings -> PortLookup -> IO ()
 reverseProxy useHeader manager settings = Warp.runSettings settings . withClient useHeader manager
@@ -57,9 +60,9 @@ withClient useHeader manager portLookup =
             Just (PERedirect host) -> return $ WPRResponse $ redirectApp host req
             Just (PEReverseProxy rpentry) -> fmap WPRResponse $ ReverseProxy.simpleReverseProxy rpentry req
       where
-        mhost = lookup "host" $ Wai.requestHeaders req
+        mhost = fmap decodeASCII $ lookup "host" $ Wai.requestHeaders req
 
-redirectApp :: ByteString -> Wai.Request -> Wai.Response
+redirectApp :: Text -> Wai.Request -> Wai.Response
 redirectApp host req = Wai.responseLBS
     status301
     [("Location", dest)]
@@ -67,16 +70,16 @@ redirectApp host req = Wai.responseLBS
   where
     dest = S.concat
         [ "http://"
-        , host
+        , encodeUtf8 host
         , Wai.rawPathInfo req
         , Wai.rawQueryString req
         ]
 
-toResponse :: Maybe ByteString -> Wai.Response
+toResponse :: Maybe Text -> Wai.Response
 toResponse mhost = Wai.ResponseBuilder
     status200
     [("Content-Type", "text/html; charset=utf-8")]
-    $ case mhost of
+    $ case fmap encodeUtf8 mhost of
         Nothing -> copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
         Just host ->
             copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"

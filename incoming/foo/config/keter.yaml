@@ -5,6 +5,8 @@ host: tealc-mint
 extra-hosts:
     - pong
     - www.mysite.com
+    - "*.example.com"
+    - baz.example.com
 static-hosts:
     - host: foobar
       root: ..
@@ -12,6 +14,10 @@ static-hosts:
       root: ../../
     - host: unsafe2
       root: /home
+    - host: qux.example.com
+      root: ..
 redirects:
     - from: mysite.com
       to: www.mysite.com
+    - from: foobar.example.com
+      to: foo.example.com

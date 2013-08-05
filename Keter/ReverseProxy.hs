@@ -49,7 +49,7 @@ data ReverseProxyConfig = ReverseProxyConfig
     , reverseTimeout :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
     , rewriteRequestRules :: Set RewriteRule
-    } deriving (Eq, Ord)
+    } deriving (Show, Eq, Ord)
 
 instance FromJSON ReverseProxyConfig where
     parseJSON (Object o) = ReverseProxyConfig
@@ -77,7 +77,7 @@ data RewriteRule = RewriteRule
     { ruleHeader :: Text
     , ruleRegex :: Text
     , ruleReplacement :: Text
-    } deriving (Eq, Ord)
+    } deriving (Show, Eq, Ord)
 
 instance FromJSON RewriteRule where
     parseJSON (Object o) = RewriteRule
@@ -90,6 +90,9 @@ data RPEntry = RPEntry
     { config :: ReverseProxyConfig
     , httpManager :: Manager
     }
+
+instance Show RPEntry where
+  show x = "RPEntry { config = " ++ (show $ config x) ++ " }"
 
 getGroup :: MatchText String -> Int -> String
 getGroup matches i = fst $ matches ! i

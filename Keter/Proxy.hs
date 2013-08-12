@@ -117,12 +117,15 @@ redirectApp RedirectConfig {..} req =
             i   -> mkStatus i $ S8.pack $ show i
 
     mkUrl (RDUrl url) = encodeUtf8 url
-    mkUrl (RDPrefix isSecure host port) = S.concat
+    mkUrl (RDPrefix isSecure host mport) = S.concat
         [ if isSecure then "https://" else "http://"
         , encodeUtf8 host
-        , if (isSecure && port == 443) || (not isSecure && port == 80)
-            then ""
-            else S8.pack $ ':' : show port
+        , case mport of
+            Nothing -> ""
+            Just port
+                | isSecure && port == 443 -> ""
+                | not isSecure && port == 80 -> ""
+                | otherwise -> S8.pack $ ':' : show port
         , Wai.rawPathInfo req
         , Wai.rawQueryString req
         ]

@@ -193,7 +193,7 @@ instance ToCurrent RedirectConfig where
         { redirconfigHosts = Set.singleton from
         , redirconfigStatus = 301
         , redirconfigActions = V.singleton $ RedirectAction SPAny
-                             $ RDPrefix False to 80
+                             $ RDPrefix False to Nothing
         }
 
 instance ParseYamlFile RedirectConfig where
@@ -215,7 +215,7 @@ data SourcePath = SPAny
     deriving Show
 
 data RedirectDest = RDUrl !Text
-                  | RDPrefix !IsSecure !Host !Port
+                  | RDPrefix !IsSecure !Host !(Maybe Port)
     deriving Show
 
 instance FromJSON RedirectDest where

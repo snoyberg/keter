@@ -34,6 +34,7 @@ Library
                      , zlib
                      , network
                      , time
+                     , lifted-base               >= 0.2           && < 0.3
                      , tar                       >= 0.4
                      , template-haskell
                      , blaze-builder             >= 0.3           && < 0.4

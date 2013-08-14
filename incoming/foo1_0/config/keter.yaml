@@ -1,0 +1,25 @@
+stanzas:
+    - type: webapp
+      exec: ../hello
+      args:
+        - Hello World 2
+      env:
+        FROM_KETER_CONFIG: foo bar baz
+      hosts:
+        - keter1_0
+        - pong1_0
+
+    - type: static-files
+      host: foobar
+      root: ..
+      directory-listing: true
+
+    - type: static-files
+      host: unsafe1_1_0
+      root: ../../
+
+    - type: static-files
+      host: unsafe2_1_0
+      root: /home
+
+postgres: true

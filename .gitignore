@@ -10,6 +10,7 @@ temp/
 *.keter
 test/app
 incoming/foo/hello
+incoming/foo1_0/hello
 log/
 .cabal-sandbox/
 cabal.sandbox.config

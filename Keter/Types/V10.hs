@@ -2,11 +2,12 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RecordWildCards #-}
 module Keter.Types.V10 where
 
 import Prelude hiding (FilePath)
 import           System.Posix.Types      (EpochTime)
-import Data.Aeson (Object)
+import Data.Aeson (Object, ToJSON (..))
 import Keter.Types.Common
 import qualified Keter.Types.V04 as V04
 import Data.Yaml.FilePath
@@ -21,7 +22,7 @@ import Data.Vector (Vector)
 import qualified Data.Vector as V
 import Data.Monoid (mempty)
 import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, catMaybes)
 import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import qualified Data.HashMap.Strict as HashMap
@@ -49,14 +50,20 @@ instance ToCurrent BundleConfig where
         }
 
 instance ParseYamlFile BundleConfig where
-    parseYamlFile basedir = withObject "Config" $ \o -> do
+    parseYamlFile basedir = withObject "BundleConfig" $ \o -> do
         case HashMap.lookup "stanzas" o of
             Nothing -> (toCurrent :: V04.BundleConfig -> BundleConfig) <$> parseYamlFile basedir (Object o)
             Just _ -> current o
       where
         current o = BundleConfig
             <$> lookupBase basedir o "stanzas"
-            <*> pure o
+            <*> o .:? "plugins" .!= HashMap.empty
+
+instance ToJSON BundleConfig where
+    toJSON BundleConfig {..} = object
+        [ "stanzas" .= bconfigStanzas
+        , "plugins" .= bconfigPlugins
+        ]
 
 data ListeningPort = LPSecure !HostPreference !Port !F.FilePath !F.FilePath
                    | LPInsecure !HostPreference !Port
@@ -158,6 +165,18 @@ instance ParseYamlFile (Stanza ()) where
             "background" -> fmap StanzaBackground $ parseYamlFile basedir $ Object o
             _ -> fail $ "Unknown stanza type: " ++ typ
 
+instance ToJSON (Stanza ()) where
+    toJSON (StanzaStaticFiles x) = addStanzaType "static-files" x
+    toJSON (StanzaRedirect x) = addStanzaType "redirect" x
+    toJSON (StanzaWebApp x) = addStanzaType "webapp" x
+    toJSON (StanzaReverseProxy x) = addStanzaType "reverse-proxy" x
+    toJSON (StanzaBackground x) = addStanzaType "background" x
+
+addStanzaType t x =
+    case toJSON x of
+        Object o -> Object $ HashMap.insert "type" t o
+        v -> v
+
 data StaticFilesConfig = StaticFilesConfig
     { sfconfigRoot     :: !F.FilePath
     , sfconfigHosts    :: !(Set Host)
@@ -179,6 +198,13 @@ instance ParseYamlFile StaticFilesConfig where
         <$> lookupBase basedir o "root"
         <*> (o .: "hosts" <|> (Set.singleton <$> (o .: "host")))
         <*> o .:? "directory-listing" .!= False
+
+instance ToJSON StaticFilesConfig where
+    toJSON StaticFilesConfig {..} = object
+        [ "root" .= F.encodeString sfconfigRoot
+        , "hosts" .= sfconfigHosts
+        , "directory-listing" .= sfconfigListings
+        ]
 
 data RedirectConfig = RedirectConfig
     { redirconfigHosts :: !(Set Host)
@@ -202,6 +228,13 @@ instance ParseYamlFile RedirectConfig where
         <*> o .:? "status" .!= 303
         <*> o .: "actions"
 
+instance ToJSON RedirectConfig where
+    toJSON RedirectConfig {..} = object
+        [ "hosts" .= redirconfigHosts
+        , "status" .= redirconfigStatus
+        , "actions" .= redirconfigActions
+        ]
+
 data RedirectAction = RedirectAction !SourcePath !RedirectDest
     deriving Show
 
@@ -209,6 +242,15 @@ instance FromJSON RedirectAction where
     parseJSON = withObject "RedirectAction" $ \o -> RedirectAction
         <$> (maybe SPAny SPSpecific <$> (o .:? "path"))
         <*> parseJSON (Object o)
+
+instance ToJSON RedirectAction where
+    toJSON (RedirectAction path dest) =
+        case toJSON dest of
+            Object o ->
+                case path of
+                    SPAny -> Object o
+                    SPSpecific x -> Object $ HashMap.insert "path" (String x) o
+            v -> v
 
 data SourcePath = SPAny
                 | SPSpecific !Text
@@ -226,7 +268,17 @@ instance FromJSON RedirectDest where
         prefix o = RDPrefix
             <$> o .:? "secure" .!= False
             <*> o .: "host"
-            <*> o .: "port"
+            <*> o .:? "port"
+
+instance ToJSON RedirectDest where
+    toJSON (RDUrl url) = object ["url" .= url]
+    toJSON (RDPrefix secure host mport) = object $ catMaybes
+        [ Just $ "secure" .= secure
+        , Just $ "host" .= host
+        , case mport of
+            Nothing -> Nothing
+            Just port -> Just $ "port" .= port
+        ]
 
 type IsSecure = Bool
 
@@ -273,6 +325,15 @@ instance ParseYamlFile (WebAppConfig ()) where
             <*> o .:? "ssl" .!= False
             <*> return ()
 
+instance ToJSON (WebAppConfig ()) where
+    toJSON WebAppConfig {..} = object
+        [ "exec" .= F.encodeString waconfigExec
+        , "args" .= waconfigArgs
+        , "env" .= waconfigEnvironment
+        , "hosts" .= (waconfigApprootHost : Set.toList waconfigHosts)
+        , "ssl" .= waconfigSsl
+        ]
+
 data AppInput = AIBundle !FilePath !EpochTime
               | AIData !BundleConfig
 
@@ -299,3 +360,14 @@ instance ParseYamlFile BackgroundConfig where
         <*> o .:? "env" .!= Map.empty
         <*> o .:? "restart-count" .!= UnlimitedRestarts
         <*> o .:? "restart-delay-seconds" .!= 5
+
+instance ToJSON BackgroundConfig where
+    toJSON BackgroundConfig {..} = object $ catMaybes
+        [ Just $ "exec" .= F.encodeString bgconfigExec
+        , Just $ "args" .= bgconfigArgs
+        , Just $ "env" .= bgconfigEnvironment
+        , case bgconfigRestartCount of
+            UnlimitedRestarts -> Nothing
+            LimitedRestarts count -> Just $ "restart-count" .= count
+        , Just $ "restart-delay-seconds" .= bgconfigRestartDelaySeconds
+        ]

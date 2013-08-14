@@ -1,4 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 module Network.HTTP.ReverseProxy.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
@@ -164,6 +165,17 @@ instance FromJSON ReverseProxyConfig where
         <*> o .:? "rewrite-request" .!= Set.empty
     parseJSON _ = fail "Wanted an object"
 
+instance ToJSON ReverseProxyConfig where
+    toJSON ReverseProxyConfig {..} = object
+        [ "reversed-host" .= reversedHost
+        , "reversed-port" .= reversedPort
+        , "reversing-host" .= reversingHost
+        , "ssl" .= reverseUseSSL
+        , "timeout" .= reverseTimeout
+        , "rewrite-response" .= rewriteResponseRules
+        , "rewrite-request" .= rewriteRequestRules
+        ]
+
 instance Default ReverseProxyConfig where
     def = ReverseProxyConfig
         { reversedHost = ""
@@ -187,3 +199,10 @@ instance FromJSON RewriteRule where
         <*> o .: "from"
         <*> o .: "to"
     parseJSON _ = fail "Wanted an object"
+
+instance ToJSON RewriteRule where
+    toJSON RewriteRule {..} = object
+        [ "header" .= ruleHeader
+        , "from" .= ruleRegex
+        , "to" .= ruleReplacement
+        ]

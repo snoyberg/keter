@@ -21,6 +21,7 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.Text as Text
 import Data.Text (Text)
+import Data.List (drop)
 import qualified Keter.ReverseProxy as ReverseProxy (RPEntry)
 
 import Debug.Trace (trace)
@@ -85,6 +86,16 @@ data LabelEntry = Assigned   PortEntry LabelMap
                 | Unassigned LabelMap
     deriving (Show)
 
+hostToLabels :: Text -> [Text]
+hostToLabels h =
+  if Text.null h
+  then []
+  else 
+    if Text.last h == '.'
+    then drop 1 $ labels
+    else labels
+  where labels = reverse . Text.splitOn "." $ h
+
 lemap :: (LabelMap -> LabelMap) -> LabelEntry -> LabelEntry
 lemap f (Assigned e m) = Assigned e (f m)
 lemap f (Unassigned m) = Unassigned (f m)
@@ -101,7 +112,7 @@ insert h e m = trace
        ++"  with result      " ++ (show result)
        )
        result
-    where result = insertTree (reverse . Text.splitOn "." $ h) e m
+    where result = insertTree (hostToLabels h) e m
 -- insert = insertTree . reverse . Text.splitOn "."
 
 insertTree :: [Text] -> PortEntry -> LabelMap -> LabelMap
@@ -151,7 +162,7 @@ delete h m = trace
        )
 
        result
-    where result = deleteTree (reverse . Text.splitOn "." $ h) m
+    where result = deleteTree (hostToLabels h) m
 -- delete = deleteTree . reverse . Text.splitOn "."
 
 deleteTree :: [Text] -> LabelMap -> LabelMap
@@ -190,7 +201,7 @@ lookup h m = trace
        ++"  and found          " ++ (show result)
        )
        result
-    where result = (lookupTree (reverse . Text.splitOn "." $ h) m)
+    where result = (lookupTree (hostToLabels h) m)
 -- lookup = lookupTree . reverse . Text.splitOn "."
 
 lookupTree :: [Text] -> LabelMap -> Maybe PortEntry

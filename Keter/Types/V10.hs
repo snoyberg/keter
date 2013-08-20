@@ -121,9 +121,11 @@ instance Default KeterConfig where
 
 instance ParseYamlFile KeterConfig where
     parseYamlFile basedir = withObject "KeterConfig" $ \o ->
-        current o <|>
-            ((toCurrent :: V04.KeterConfig -> KeterConfig) <$> parseYamlFile basedir (Object o))
+        case HashMap.lookup "listeners" o of
+            Just _ -> current o
+            Nothing -> old o <|> current o
       where
+        old o = (toCurrent :: V04.KeterConfig -> KeterConfig) <$> parseYamlFile basedir (Object o)
         current o = KeterConfig
             <$> lookupBase basedir o "root"
             <*> o .:? "port-manager" .!= def

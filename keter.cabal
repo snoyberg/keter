@@ -63,6 +63,8 @@ Library
                      , mtl
                      , warp
                      , warp-tls
+                     -- Build error with entropy 0.2.2.2
+                     , entropy                   < 0.2.2.2        || > 0.2.2.2
   Exposed-Modules:     Keter.Process
                        Keter.ProcessTracker
                        Keter.Postgres

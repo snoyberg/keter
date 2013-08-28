@@ -17,6 +17,7 @@ import qualified Data.ByteString.Lazy as L
 import Keter.SSL
 import Network.HTTP.ReverseProxy (waiProxyToSettings, wpsSetIpHeader, SetIpHeader (..), ProxyDest (ProxyDest), WaiProxyResponse (..))
 import Network.Wai.Application.Static (defaultFileServerSettings, staticApp)
+import Network.Wai.Middleware.Gzip
 import qualified Network.Wai as Wai
 import Network.HTTP.Types (status301, status200)
 import qualified Keter.ReverseProxy as ReverseProxy
@@ -25,16 +26,20 @@ import qualified Network.Wai.Handler.Warp as Warp
 import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import Blaze.ByteString.Builder (copyByteString)
 import Data.Monoid (mappend)
-import Data.Default
 
 -- | Mapping from virtual hostname to port number.
 type PortLookup = ByteString -> IO (Maybe PortEntry)
 
-reverseProxy :: Bool -> Manager -> Warp.Settings -> PortLookup -> IO ()
-reverseProxy useHeader manager settings = Warp.runSettings settings . withClient useHeader manager
+reverseProxy :: Bool -> [Wai.Middleware] -> Manager -> Warp.Settings -> PortLookup -> IO ()
+reverseProxy useHeader wares manager settings =
+        Warp.runSettings settings . insertMiddleware wares . withClient useHeader manager
 
-reverseProxySsl :: Bool -> Manager -> WarpTLS.TLSSettings -> Warp.Settings -> PortLookup -> IO ()
-reverseProxySsl useHeader manager tsettings settings = WarpTLS.runTLS tsettings settings . withClient useHeader manager
+reverseProxySsl :: Bool -> [Wai.Middleware] -> Manager -> WarpTLS.TLSSettings -> Warp.Settings -> PortLookup -> IO ()
+reverseProxySsl useHeader wares manager tsettings settings =
+        WarpTLS.runTLS tsettings settings . insertMiddleware wares . withClient useHeader manager
+
+insertMiddleware :: [Wai.Middleware] -> Wai.Middleware
+insertMiddleware = foldl (.) id
 
 withClient :: Bool -- ^ use incoming request header for IP address
            -> Manager

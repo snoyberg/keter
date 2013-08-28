@@ -4,9 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Keter.Main
-    ( keter
-    ) where
+module Keter.Main where
 
 import Keter.Prelude hiding (getCurrentTime)
 import qualified Keter.TempFolder as TempFolder
@@ -38,9 +36,17 @@ import Data.Maybe (fromMaybe, catMaybes)
 import Data.Yaml (decodeFile, FromJSON (parseJSON), Value (Object), (.:), (.:?), (.!=))
 import Control.Applicative ((<$>), (<*>))
 import Data.String (fromString)
+import qualified Network.Wai.Middleware.AcceptOverride as AcceptOverride
+import qualified Network.Wai.Middleware.Autohead as Autohead
+import qualified Network.Wai.Middleware.Gzip as Gzip
+import qualified Network.Wai.Middleware.Jsonp as Jsonp
+import qualified Network.Wai.Middleware.MethodOverride as MethodOverride
+import qualified Network.Wai.Middleware.MethodOverridePost as MethodOverridePost
+import qualified Network.Wai.Middleware.RequestLogger as RequestLogger
 import System.Posix.User (userID, userGroupID, getUserEntryForName, getUserEntryForID, userName)
 import qualified Data.Text.Read
 import Data.Set (Set)
+import qualified Network.Wai as Wai
 import qualified Data.Set as Set
 import qualified Network.HTTP.Conduit as HTTP (newManager)
 import qualified Network.Wai.Handler.Warp as Warp
@@ -54,6 +60,7 @@ data Config = Config
     , configSetuid :: Maybe Text
     , configReverseProxy :: Set ReverseProxy.ReverseProxyConfig
     , configIpFromHeader :: Bool
+    , configMiddlewares :: [Wai.Middleware]
     }
 
 instance Default Config where
@@ -66,6 +73,7 @@ instance Default Config where
         , configSetuid = Nothing
         , configReverseProxy = Set.empty
         , configIpFromHeader = False
+        , configMiddlewares = []
         }
 
 instance FromJSON Config where
@@ -78,6 +86,19 @@ instance FromJSON Config where
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
         <*> o .:? "ip-from-header" .!= False
+        <*> (fmap lookupMiddleware <$> o .:? "middleware") .!= []
+        where lookupMiddleware :: [Text] -> [Wai.Middleware]
+              lookupMiddleware (x:xs) = go x:lookupMiddleware xs
+                where
+                    go "gzip" = Gzip.gzip def
+                    go "accept-override" = AcceptOverride.acceptOverride
+                    go "autohead" = Autohead.autohead
+                    go "jsonp" = Jsonp.jsonp
+                    go "method-override" = MethodOverride.methodOverride
+                    go "method-override-post" = MethodOverridePost.methodOverridePost
+                    go "request-logger" = RequestLogger.logStdout
+                    go m = P.error $ "Unsupported middleware: " ++ T.unpack m
+              lookupMiddleware [] = []
     parseJSON _ = mzero
 
 keter :: P.FilePath -- ^ root directory or config file
@@ -122,6 +143,7 @@ keter input' = do
     manager <- HTTP.newManager def
     _ <- forkIO $ Proxy.reverseProxy
             configIpFromHeader
+            configMiddlewares
             manager
             Warp.defaultSettings
                 { Warp.settingsPort = configPort
@@ -133,6 +155,7 @@ keter input' = do
         Just (Proxy.setDir dir -> (s, ts)) -> do
             _ <- forkIO $ Proxy.reverseProxySsl
                     configIpFromHeader
+                    configMiddlewares
                     manager
                     ts
                     s

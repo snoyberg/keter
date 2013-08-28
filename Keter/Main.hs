@@ -4,7 +4,9 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-module Keter.Main where
+module Keter.Main
+    ( keter
+    ) where
 
 import Keter.Prelude hiding (getCurrentTime)
 import qualified Keter.TempFolder as TempFolder

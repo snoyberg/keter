@@ -26,10 +26,12 @@ import qualified Data.Map            as Map
 import qualified Data.Set            as Set
 import           Data.Text.Encoding  (encodeUtf8)
 import           Keter.Types
+import           Keter.LabelMap      (LabelMap)
+import qualified Keter.LabelMap      as LabelMap
 
 type HMState = Map.Map HostBS HostValue
 
-data HostValue = HVActive !AppId !ProxyAction
+data HostValue = HVActive   !AppId !ProxyAction
                | HVReserved !AppId
 
 newtype HostManager = HostManager (IORef HMState)

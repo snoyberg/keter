@@ -70,17 +70,21 @@ reserveHosts log (HostManager mstate) aid hosts = do
         (conflicts, _) -> (entries0, Left $ Map.fromList conflicts))
   where
     checkHost entries0 host =
-        case LabelMap.lookup (encodeUtf8 host) entries0 of
-            Nothing -> Right $ Set.singleton host
-            Just (HVReserved aid') -> assert (aid /= aid')
-                                    $ Left (host, aid')
-            Just (HVActive aid' _)
-                | aid == aid' -> Right Set.empty
-                | otherwise   -> Left (host, aid')
+        case LabelMap.labelAssigned hostBS entries0 of
+            False -> Right $ Set.singleton host
+            True  -> 
+              case LabelMap.lookup hostBS entries0 of
+                Nothing -> Right $ Set.singleton host
+                Just (HVReserved aid') -> assert (aid /= aid')
+                                        $ Left (host, aid')
+                Just (HVActive aid' _)
+                    | aid == aid' -> Right Set.empty
+                    | otherwise   -> Left (host, aid')
+      where hostBS = encodeUtf8 host
 
     hvres = HVReserved aid
     reserve host es =
-        assert (LabelMap.notMember hostBS es) $ LabelMap.insert hostBS hvres es
+        assert (not $ LabelMap.labelAssigned hostBS es) $ LabelMap.insert hostBS hvres es
       where
         hostBS = encodeUtf8 host
 
@@ -99,7 +103,7 @@ forgetReservations log (HostManager mstate) app hosts = do
         assert isReservedByMe $ LabelMap.delete hostBS state
       where
         hostBS = encodeUtf8 host
-        isReservedByMe =
+        isReservedByMe = LabelMap.labelAssigned hostBS state &&
             case LabelMap.lookup hostBS state of
                 Nothing -> False
                 Just (HVReserved app') -> app == app'
@@ -124,7 +128,7 @@ activateHelper app =
         assert isOwnedByMe $ LabelMap.insert hostBS (HVActive app action) state
       where
         hostBS = encodeUtf8 host
-        isOwnedByMe =
+        isOwnedByMe = LabelMap.labelAssigned hostBS state &&
             case LabelMap.lookup hostBS state of
                 Nothing -> False
                 Just (HVReserved app') -> app == app'
@@ -148,7 +152,7 @@ deactivateHelper app =
         assert isOwnedByMe $ LabelMap.delete hostBS state
       where
         hostBS = encodeUtf8 host
-        isOwnedByMe =
+        isOwnedByMe = LabelMap.labelAssigned hostBS state &&
             case LabelMap.lookup hostBS state of
                 Nothing -> False
                 Just (HVActive app' _) -> app == app'

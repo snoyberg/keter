@@ -10,15 +10,18 @@ module Keter.LabelMap
     , insert
     , delete
     , lookup
-    , notMember
+    , labelAssigned
     , empty
     ) where
 
 import Prelude hiding (lookup)
+import Data.Maybe (isJust)
 import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString (ByteString)
+
+import Debug.Trace
 
 type LabelTree a = Map ByteString (LabelEntry a)
 
@@ -65,10 +68,15 @@ data LabelMap a = EmptyLabelMap
                 | Static         !(LabelTree a)
                 | Wildcard       !(LabelEntry a)
                 | WildcardExcept !(LabelEntry a) !(LabelTree a)
+    deriving (Show)
 
 -- | Indicates whether a given label in the
 data LabelEntry a = Assigned   !a !(LabelMap a)
                   | Unassigned    !(LabelMap a)
+
+instance Show (LabelEntry a) where
+    show (Assigned _ m) = "Assigned _ (" ++ show m ++ ")"
+    show (Unassigned m) = "Unassigned (" ++ show m ++ ")"
 
 hostToLabels :: ByteString -> [ByteString]
 hostToLabels h =
@@ -88,8 +96,18 @@ labelEntryMap :: LabelEntry a -> LabelMap a
 labelEntryMap (Assigned _ m) = m
 labelEntryMap (Unassigned m) = m
 
+getPortEntry :: LabelEntry a -> Maybe a
+getPortEntry (Assigned e _) = Just e
+getPortEntry (Unassigned _) = Nothing
+
 insert :: ByteString -> a -> LabelMap a -> LabelMap a
-insert h e m = insertTree (hostToLabels h) e m
+insert h e m = trace
+       ( "Inserting hostname " ++ (show h) ++ "\n"
+       ++"  into tree        " ++ (show m) ++ "\n"
+       ++"  with result      " ++ (show result)
+       )
+       result
+    where result = insertTree (hostToLabels h) e m
 
 insertTree :: [ByteString] -> a -> LabelMap a -> LabelMap a
 insertTree []    _ _ = error "Cannot assign empty label in hostname."
@@ -131,7 +149,13 @@ insertTree (l:ls)   e (WildcardExcept w t) =
         Just le -> WildcardExcept w (Map.insert l (lemap (insertTree ls e) le) t)
 
 delete :: ByteString -> LabelMap a -> LabelMap a
-delete h m = deleteTree (hostToLabels h) m
+delete h m = trace
+       ( "Deleting hostname  " ++ (show h) ++ "\n"
+       ++"  into tree        " ++ (show m) ++ "\n"
+       ++"  with result      " ++ (show result)
+       )
+       result
+    where result = deleteTree (hostToLabels h) m
 
 deleteTree :: [ByteString] -> LabelMap a -> LabelMap a
 deleteTree [] _ = error "Cannot assign empty label in hostname."
@@ -163,19 +187,25 @@ deleteTree (l:ls) (WildcardExcept w t) =
         Just le             -> WildcardExcept w (Map.insert l (lemap (deleteTree ls) le) t)
 
 lookup :: ByteString -> LabelMap a -> Maybe a
-lookup h m = lookupTree (hostToLabels h) m
+lookup h m = trace
+       ( "Looking up hostname  " ++ (show h) ++ "\n"
+       ++"  in tree            " ++ (show m) ++ "\n"
+       ++"  and found entry?   " ++ (show $ isJust result)
+       )
+       result
+    where result = (lookupTree (hostToLabels h) m)
 
 lookupTree :: [ByteString] -> LabelMap a -> Maybe a
 lookupTree [] _ = Nothing
 
 lookupTree _ EmptyLabelMap = Nothing
 
-lookupTree [l] (Static t)   = labelToMaybePortEntry $ Map.lookup l t
-lookupTree [_] (Wildcard w) = labelToMaybePortEntry . Just $ w
+lookupTree [l] (Static t)   = Map.lookup l t >>= getPortEntry
+lookupTree [_] (Wildcard w) = getPortEntry $ w
 lookupTree [l] (WildcardExcept w t) =
-    case labelToMaybePortEntry $ Map.lookup l t of
+    case Map.lookup l t >>= getPortEntry of
         Just e  -> Just e
-        Nothing -> labelToMaybePortEntry . Just $ w
+        Nothing -> getPortEntry w
 
 lookupTree (l:ls) (Static t) =
     case Map.lookup l t of
@@ -184,19 +214,62 @@ lookupTree (l:ls) (Static t) =
 lookupTree (_:ls) (Wildcard w) = lookupTree ls $ labelEntryMap w
 lookupTree (l:ls) (WildcardExcept w t) =
     case Map.lookup l t of
-        Just le -> lookupTree ls $ labelEntryMap le
+        Just le -> 
+            case lookupTree ls $ labelEntryMap le of
+                Just  e -> Just e
+                Nothing -> lookupTree ls $ labelEntryMap w
         Nothing -> lookupTree ls $ labelEntryMap w
 
-notMember :: ByteString -> LabelMap a -> Bool
-notMember h m =
-    case lookup h m of
-        Just _  -> False
-        Nothing -> True 
+-- This function is similar to lookup but it determines strictly
+-- whether or not a record to be inserted would override an existing
+-- entry exactly. i.e.: When inserting *.example.com, this function
+-- will return true for precisely *.example.com, but not foo.example.com.
+--
+-- This is so that different keter applications may establish ownership
+-- over different subdomains, including exceptions to a wildcard. 
+--
+-- This function *does not* test whether or not a given input would
+-- resolve to an existing host. In the above example, given only an
+-- inserted *.example.com, foo.example.com would route to the wildcard.
+-- Even so, labelAssigned will return false, foo.example.com has not
+-- been explicitly assigned.
+labelAssigned :: ByteString -> LabelMap a -> Bool
+labelAssigned h m = trace
+       ( "Checking label assignment for " ++ (show h) ++ "\n"
+       ++"  in tree            " ++ (show m) ++ "\n"
+       ++"  and found?         " ++ (show result)
+       )
+       result
+    where result = memberTree (hostToLabels h) m
 
-labelToMaybePortEntry :: Maybe (LabelEntry a) -> Maybe a
-labelToMaybePortEntry (Just (Assigned e _)) = Just e
-labelToMaybePortEntry (Just (Unassigned _)) = Nothing
-labelToMaybePortEntry Nothing               = Nothing
+memberTree :: [ByteString] -> LabelMap a -> Bool
+memberTree [] _ = False
+
+memberTree ["*"] (Static _)   = False
+memberTree [l]   (Static t)   = isJust $ Map.lookup l t >>= getPortEntry
+
+memberTree ["*"] (Wildcard _) = True
+memberTree [_]   (Wildcard _) = False
+
+memberTree ["*"] (WildcardExcept w _) = isJust $ getPortEntry w
+memberTree [l]   (WildcardExcept _ t) = isJust $ Map.lookup l t >>= getPortEntry
+
+memberTree ("*":_) (Static _) = False
+memberTree (l:ls)  (Static t) =
+    case Map.lookup l t of
+        Just le -> memberTree ls $ labelEntryMap le
+        Nothing -> False
+
+memberTree ("*":ls) (Wildcard w) = memberTree ls $ labelEntryMap w
+memberTree (_:_)    (Wildcard _) = False
+
+memberTree ("*":ls) (WildcardExcept w _) = memberTree ls $ labelEntryMap w
+memberTree (l:ls)   (WildcardExcept _ t) =
+    case Map.lookup l t of
+        Just le -> memberTree ls $ labelEntryMap le
+        Nothing -> False
+
+memberTree _ EmptyLabelMap = False
 
 empty :: LabelMap a
 empty = EmptyLabelMap

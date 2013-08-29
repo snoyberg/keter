@@ -10,16 +10,17 @@ module Keter.LabelMap
     , insert
     , delete
     , lookup
+    , notMember
     , empty
     ) where
 
 import Prelude hiding (lookup)
 import qualified Data.Map as Map
 import Data.Map (Map)
-import qualified Data.Text as Text
-import Data.Text (Text)
+import qualified Data.ByteString.Char8 as BS
+import Data.ByteString (ByteString)
 
-type LabelTree a = Map Text (LabelEntry a)
+type LabelTree a = Map ByteString (LabelEntry a)
 
 -- | A data structure for storing a hierarchical set of domain labels
 -- from TLD down, supporting wildcards.
@@ -69,15 +70,15 @@ data LabelMap a = EmptyLabelMap
 data LabelEntry a = Assigned   !a !(LabelMap a)
                   | Unassigned    !(LabelMap a)
 
-hostToLabels :: Text -> [Text]
+hostToLabels :: ByteString -> [ByteString]
 hostToLabels h =
-  if Text.null h
+  if BS.null h
   then []
   else 
-    if Text.last h == '.'
+    if BS.last h == '.'
     then drop 1 $ labels
     else labels
-  where labels = reverse . Text.splitOn "." $ h
+  where labels = reverse . BS.split '.' $ h
 
 lemap :: (LabelMap a -> LabelMap a) -> LabelEntry a -> LabelEntry a
 lemap f (Assigned e m) = Assigned e (f m)
@@ -87,11 +88,10 @@ labelEntryMap :: LabelEntry a -> LabelMap a
 labelEntryMap (Assigned _ m) = m
 labelEntryMap (Unassigned m) = m
 
-insert :: Text -> a -> LabelMap a -> LabelMap a
+insert :: ByteString -> a -> LabelMap a -> LabelMap a
 insert h e m = insertTree (hostToLabels h) e m
--- insert = insertTree . reverse . Text.splitOn "."
 
-insertTree :: [Text] -> a -> LabelMap a -> LabelMap a
+insertTree :: [ByteString] -> a -> LabelMap a -> LabelMap a
 insertTree []    _ _ = error "Cannot assign empty label in hostname."
 
 insertTree ["*"] e EmptyLabelMap = Wildcard (Assigned e EmptyLabelMap)
@@ -130,11 +130,10 @@ insertTree (l:ls)   e (WildcardExcept w t) =
         Nothing -> WildcardExcept w (Map.insert l (Unassigned (insertTree ls e EmptyLabelMap)) t)
         Just le -> WildcardExcept w (Map.insert l (lemap (insertTree ls e) le) t)
 
-delete :: Text -> LabelMap a -> LabelMap a
+delete :: ByteString -> LabelMap a -> LabelMap a
 delete h m = deleteTree (hostToLabels h) m
--- delete = deleteTree . reverse . Text.splitOn "."
 
-deleteTree :: [Text] -> LabelMap a -> LabelMap a
+deleteTree :: [ByteString] -> LabelMap a -> LabelMap a
 deleteTree [] _ = error "Cannot assign empty label in hostname."
 
 deleteTree _ EmptyLabelMap = EmptyLabelMap
@@ -163,11 +162,10 @@ deleteTree (l:ls) (WildcardExcept w t) =
         Nothing            -> WildcardExcept w t
         Just le             -> WildcardExcept w (Map.insert l (lemap (deleteTree ls) le) t)
 
-lookup :: Text -> LabelMap a -> Maybe a
+lookup :: ByteString -> LabelMap a -> Maybe a
 lookup h m = lookupTree (hostToLabels h) m
--- lookup = lookupTree . reverse . Text.splitOn "."
 
-lookupTree :: [Text] -> LabelMap a -> Maybe a
+lookupTree :: [ByteString] -> LabelMap a -> Maybe a
 lookupTree [] _ = Nothing
 
 lookupTree _ EmptyLabelMap = Nothing
@@ -188,6 +186,12 @@ lookupTree (l:ls) (WildcardExcept w t) =
     case Map.lookup l t of
         Just le -> lookupTree ls $ labelEntryMap le
         Nothing -> lookupTree ls $ labelEntryMap w
+
+notMember :: ByteString -> LabelMap a -> Bool
+notMember h m =
+    case lookup h m of
+        Just _  -> False
+        Nothing -> True 
 
 labelToMaybePortEntry :: Maybe (LabelEntry a) -> Maybe a
 labelToMaybePortEntry (Just (Assigned e _)) = Just e

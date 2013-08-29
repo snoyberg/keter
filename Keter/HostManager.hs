@@ -29,7 +29,7 @@ import           Keter.Types
 import           Keter.LabelMap      (LabelMap)
 import qualified Keter.LabelMap      as LabelMap
 
-type HMState = Map.Map HostBS HostValue
+type HMState = LabelMap HostValue
 
 data HostValue = HVActive   !AppId !ProxyAction
                | HVReserved !AppId
@@ -39,7 +39,7 @@ newtype HostManager = HostManager (IORef HMState)
 type Reservations = Set.Set Host
 
 start :: IO HostManager
-start = HostManager <$> newIORef Map.empty
+start = HostManager <$> newIORef LabelMap.empty
 
 -- | Reserve the given hosts so that no other application may use them. Does
 -- not yet enable any action. The semantics are:
@@ -70,7 +70,7 @@ reserveHosts log (HostManager mstate) aid hosts = do
         (conflicts, _) -> (entries0, Left $ Map.fromList conflicts))
   where
     checkHost entries0 host =
-        case Map.lookup (encodeUtf8 host) entries0 of
+        case LabelMap.lookup (encodeUtf8 host) entries0 of
             Nothing -> Right $ Set.singleton host
             Just (HVReserved aid') -> assert (aid /= aid')
                                     $ Left (host, aid')
@@ -80,7 +80,7 @@ reserveHosts log (HostManager mstate) aid hosts = do
 
     hvres = HVReserved aid
     reserve host es =
-        assert (Map.notMember hostBS es) $ Map.insert hostBS hvres es
+        assert (LabelMap.notMember hostBS es) $ LabelMap.insert hostBS hvres es
       where
         hostBS = encodeUtf8 host
 
@@ -96,11 +96,11 @@ forgetReservations log (HostManager mstate) app hosts = do
         (Set.foldr forget state0 hosts, ())
   where
     forget host state =
-        assert isReservedByMe $ Map.delete hostBS state
+        assert isReservedByMe $ LabelMap.delete hostBS state
       where
         hostBS = encodeUtf8 host
         isReservedByMe =
-            case Map.lookup hostBS state of
+            case LabelMap.lookup hostBS state of
                 Nothing -> False
                 Just (HVReserved app') -> app == app'
                 Just HVActive{} -> False
@@ -121,11 +121,11 @@ activateHelper app =
     Map.foldrWithKey activate
   where
     activate host action state =
-        assert isOwnedByMe $ Map.insert hostBS (HVActive app action) state
+        assert isOwnedByMe $ LabelMap.insert hostBS (HVActive app action) state
       where
         hostBS = encodeUtf8 host
         isOwnedByMe =
-            case Map.lookup hostBS state of
+            case LabelMap.lookup hostBS state of
                 Nothing -> False
                 Just (HVReserved app') -> app == app'
                 Just (HVActive app' _) -> app == app'
@@ -145,11 +145,11 @@ deactivateHelper app =
     Set.foldr deactivate
   where
     deactivate host state =
-        assert isOwnedByMe $ Map.delete hostBS state
+        assert isOwnedByMe $ LabelMap.delete hostBS state
       where
         hostBS = encodeUtf8 host
         isOwnedByMe =
-            case Map.lookup hostBS state of
+            case LabelMap.lookup hostBS state of
                 Nothing -> False
                 Just (HVActive app' _) -> app == app'
                 Just HVReserved {} -> False
@@ -170,7 +170,7 @@ lookupAction :: HostManager
              -> IO (Maybe ProxyAction)
 lookupAction (HostManager mstate) host = do
     state <- readIORef mstate
-    return $ case Map.lookup host state of
+    return $ case LabelMap.lookup host state of
         Nothing -> Nothing
         Just (HVActive _ action) -> Just action
         Just (HVReserved _) -> Nothing

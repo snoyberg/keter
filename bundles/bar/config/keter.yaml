@@ -1,0 +1,10 @@
+# bar
+static-hosts:
+    - host: bar.example.com
+      root: ../static
+    - host: bar.*.example.com
+      root: ../static
+    - host: bar.*.*.example.com
+      root: ../static
+    - host: bar.*.*.*.example.com
+      root: ../static

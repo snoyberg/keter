@@ -47,6 +47,9 @@ data RPEntry = RPEntry
     , httpManager :: Manager
     }
 
+instance Show RPEntry where
+  show x = "RPEntry { config = " ++ (show $ config x) ++ " }"
+
 getGroup :: MatchText String -> Int -> String
 getGroup matches i = fst $ matches ! i
 

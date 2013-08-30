@@ -1,0 +1,10 @@
+# foo
+static-hosts:
+    - host: foo.example.com
+      root: ../static
+    - host: foo.*.example.com
+      root: ../static
+    - host: foo.*.*.example.com
+      root: ../static
+    - host: foo.*.*.*.example.com
+      root: ../static

@@ -1,0 +1,10 @@
+# qux
+static-hosts:
+    - host: qux.example.com
+      root: ../static
+    - host: qux.*.example.com
+      root: ../static
+    - host: qux.*.*.example.com
+      root: ../static
+    - host: qux.*.*.*.example.com
+      root: ../static

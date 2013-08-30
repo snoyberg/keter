@@ -1,0 +1,10 @@
+# baz
+static-hosts:
+    - host: baz.example.com
+      root: ../static
+    - host: baz.*.example.com
+      root: ../static
+    - host: baz.*.*.example.com
+      root: ../static
+    - host: baz.*.*.*.example.com
+      root: ../static

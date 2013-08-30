@@ -2,7 +2,7 @@
 
 pushd `dirname $0`
 
-for foo in {0..1}
+for foo in {0..2}
 do
 
   if [[ "$foo" -eq "1" ]]; then
@@ -12,7 +12,7 @@ do
     rm /opt/keter/incoming/foo.keter -f
   fi
 
-  for bar in {0..1}
+  for bar in {0..2}
   do
     if [[ "$bar" -eq "1" ]]; then
       cp ./bar.keter /opt/keter/incoming/
@@ -21,7 +21,7 @@ do
       rm /opt/keter/incoming/bar.keter -f
     fi
 
-    for baz in {0..1}
+    for baz in {0..2}
     do
       if [[ "$baz" -eq "1" ]]; then
         cp ./baz.keter /opt/keter/incoming/
@@ -30,7 +30,7 @@ do
         rm /opt/keter/incoming/baz.keter -f
       fi
       
-      for qux in {0..1}
+      for qux in {0..2}
       do
         if [[ "$qux" -eq "1" ]]; then
           cp ./qux.keter /opt/keter/incoming/

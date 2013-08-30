@@ -148,6 +148,28 @@ insertTree (l:ls)   e (WildcardExcept w t) =
         Nothing -> WildcardExcept w (Map.insert l (Unassigned (insertTree ls e EmptyLabelMap)) t)
         Just le -> WildcardExcept w (Map.insert l (lemap (insertTree ls e) le) t)
 
+cleanup :: LabelMap a -> LabelMap a
+cleanup EmptyLabelMap = EmptyLabelMap
+cleanup m@(Static t) =
+    case Map.null (Map.filter p t) of
+        True  -> EmptyLabelMap
+        False -> m
+    where 
+        p (Unassigned EmptyLabelMap) = False
+        p _ = True
+
+cleanup m@(Wildcard w) =
+    case w of
+        Unassigned EmptyLabelMap -> EmptyLabelMap
+        _ -> m
+
+cleanup m@(WildcardExcept w t) =
+    case (w, Map.null t) of
+        (Unassigned EmptyLabelMap, True)  -> EmptyLabelMap
+        (Unassigned EmptyLabelMap, False) -> Static t
+        (_,                        True)  -> Wildcard w
+        (_,                        False) -> m
+
 delete :: ByteString -> LabelMap a -> LabelMap a
 delete h m = trace
        ( "Deleting hostname  " ++ (show h) ++ "\n"
@@ -163,25 +185,25 @@ deleteTree [] _ = error "Cannot assign empty label in hostname."
 deleteTree _ EmptyLabelMap = EmptyLabelMap
 
 deleteTree ["*"] (Static t) = Static t
-deleteTree [l]   (Static t) = Static (Map.delete l t)
+deleteTree [l]   (Static t) = cleanup $ Static (Map.delete l t)
 
-deleteTree ["*"] (Wildcard w) = Wildcard (Unassigned (labelEntryMap w))
+deleteTree ["*"] (Wildcard w) = cleanup $ Wildcard (Unassigned (labelEntryMap w))
 deleteTree [_] (Wildcard w) = Wildcard w
 
-deleteTree ["*"] (WildcardExcept w t) = WildcardExcept (Unassigned (labelEntryMap w)) t
-deleteTree [l] (WildcardExcept w t) = WildcardExcept w (Map.delete l t)
+deleteTree ["*"] (WildcardExcept w t) = cleanup $ WildcardExcept (Unassigned (labelEntryMap w)) t
+deleteTree [l] (WildcardExcept w t) = cleanup $ WildcardExcept w (Map.delete l t)
 
 deleteTree ("*":_) (Static t) = Static t
-deleteTree (l:ls)  (Static t) =
+deleteTree (l:ls)  (Static t) = cleanup $
     case Map.lookup l t of
         Nothing -> Static t
         Just le -> Static (Map.insert l (lemap (deleteTree ls) le) t)
 
-deleteTree ("*":ls) (Wildcard w) = Wildcard (lemap (deleteTree ls) w)
+deleteTree ("*":ls) (Wildcard w) = cleanup $ Wildcard (lemap (deleteTree ls) w)
 deleteTree (_:_)    (Wildcard w) = Wildcard w
 
-deleteTree ("*":ls) (WildcardExcept w t) = WildcardExcept (lemap (deleteTree ls) w) t
-deleteTree (l:ls) (WildcardExcept w t) =
+deleteTree ("*":ls) (WildcardExcept w t) = cleanup $ WildcardExcept (lemap (deleteTree ls) w) t
+deleteTree (l:ls) (WildcardExcept w t) = cleanup $
     case Map.lookup l t of
         Nothing            -> WildcardExcept w t
         Just le             -> WildcardExcept w (Map.insert l (lemap (deleteTree ls) le) t)

@@ -21,8 +21,6 @@ import Data.Map (Map)
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString (ByteString)
 
-import Debug.Trace
-
 type LabelTree a = Map ByteString (LabelEntry a)
 
 -- | A data structure for storing a hierarchical set of domain labels
@@ -101,13 +99,14 @@ getPortEntry (Assigned e _) = Just e
 getPortEntry (Unassigned _) = Nothing
 
 insert :: ByteString -> a -> LabelMap a -> LabelMap a
-insert h e m = trace
-       ( "Inserting hostname " ++ (show h) ++ "\n"
-       ++"  into tree        " ++ (show m) ++ "\n"
-       ++"  with result      " ++ (show result)
-       )
-       result
-    where result = insertTree (hostToLabels h) e m
+insert h e m = insertTree (hostToLabels h) e m
+--insert h e m = trace
+--       ( "Inserting hostname " ++ (show h) ++ "\n"
+--       ++"  into tree        " ++ (show m) ++ "\n"
+--       ++"  with result      " ++ (show result)
+--       )
+--       result
+--    where result = insertTree (hostToLabels h) e m
 
 insertTree :: [ByteString] -> a -> LabelMap a -> LabelMap a
 insertTree []    _ _ = error "Cannot assign empty label in hostname."
@@ -171,13 +170,14 @@ cleanup m@(WildcardExcept w t) =
         (_,                        False) -> m
 
 delete :: ByteString -> LabelMap a -> LabelMap a
-delete h m = trace
-       ( "Deleting hostname  " ++ (show h) ++ "\n"
-       ++"  into tree        " ++ (show m) ++ "\n"
-       ++"  with result      " ++ (show result)
-       )
-       result
-    where result = deleteTree (hostToLabels h) m
+delete h m = deleteTree (hostToLabels h) m
+--delete h m = trace
+--       ( "Deleting hostname  " ++ (show h) ++ "\n"
+--       ++"  into tree        " ++ (show m) ++ "\n"
+--       ++"  with result      " ++ (show result)
+--       )
+--       result
+--    where result = deleteTree (hostToLabels h) m
 
 deleteTree :: [ByteString] -> LabelMap a -> LabelMap a
 deleteTree [] _ = error "Cannot assign empty label in hostname."
@@ -209,13 +209,14 @@ deleteTree (l:ls) (WildcardExcept w t) = cleanup $
         Just le             -> WildcardExcept w (Map.insert l (lemap (deleteTree ls) le) t)
 
 lookup :: ByteString -> LabelMap a -> Maybe a
-lookup h m = trace
-       ( "Looking up hostname  " ++ (show h) ++ "\n"
-       ++"  in tree            " ++ (show m) ++ "\n"
-       ++"  and found entry?   " ++ (show $ isJust result)
-       )
-       result
-    where result = (lookupTree (hostToLabels h) m)
+lookup h m = lookupTree (hostToLabels h) m
+--lookup h m = trace
+--       ( "Looking up hostname  " ++ (show h) ++ "\n"
+--       ++"  in tree            " ++ (show m) ++ "\n"
+--       ++"  and found entry?   " ++ (show $ isJust result)
+--       )
+--       result
+--    where result = (lookupTree (hostToLabels h) m)
 
 lookupTree :: [ByteString] -> LabelMap a -> Maybe a
 lookupTree [] _ = Nothing
@@ -256,13 +257,14 @@ lookupTree (l:ls) (WildcardExcept w t) =
 -- Even so, labelAssigned will return false, foo.example.com has not
 -- been explicitly assigned.
 labelAssigned :: ByteString -> LabelMap a -> Bool
-labelAssigned h m = trace
-       ( "Checking label assignment for " ++ (show h) ++ "\n"
-       ++"  in tree            " ++ (show m) ++ "\n"
-       ++"  and found?         " ++ (show result)
-       )
-       result
-    where result = memberTree (hostToLabels h) m
+labelAssigned h m = memberTree (hostToLabels h) m
+--labelAssigned h m = trace
+--       ( "Checking label assignment for " ++ (show h) ++ "\n"
+--       ++"  in tree            " ++ (show m) ++ "\n"
+--       ++"  and found?         " ++ (show result)
+--       )
+--       result
+--    where result = memberTree (hostToLabels h) m
 
 memberTree :: [ByteString] -> LabelMap a -> Bool
 memberTree [] _ = False

@@ -1,10 +1,12 @@
 Name:                keter
-Version:             1.0.0
+Version:             1.0.1
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
     .
     Release history:
+    .
+    [1.0.1] Permit use of wildcard subdomains and exceptions to wildcards. Convert internal strings to use Data.Text in more places. (Although internationalized domain names are not supported unless entered in punycode in configuration files.)
     .
     [1.0.0] Significant overhaul. We now support monitoring of much more arbitrary jobs (e.g., background tasks), have a proper plugin system (PostgreSQL is no longer a required component), and have a much better system for tracking hostname mapping changes.
     .
@@ -21,6 +23,8 @@ Maintainer:          michael@snoyman.com
 Category:            Web, Yesod
 Build-type:          Simple
 Cabal-version:       >=1.8
+
+Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
 
 Library
   Build-depends:       base                      >= 4             && < 5
@@ -73,6 +77,7 @@ Library
                        Keter.Types.Common
                        Keter.App
                        Keter.AppManager
+                       Keter.LabelMap
                        Keter.Main
                        Keter.PortPool
                        Keter.Proxy
@@ -88,6 +93,21 @@ Executable keter
   Build-depends:       base, keter, system-filepath, data-default
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
+
+Executable hello
+  Main-is:             hello.hs
+  hs-source-dirs:      incoming/foo
+  Build-depends:       base
+                     , keter
+                     , warp
+                     , wai
+                     , wai-extra
+                     , http-types
+                     , bytestring
+                     , directory
+                     , data-default
+                     , transformers
+  ghc-options:         -threaded -Wall
 
 source-repository head
   type:     git

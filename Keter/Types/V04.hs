@@ -127,12 +127,22 @@ instance ParseYamlFile TLSConfig where
 -- See: <http://www.yesodweb.com/book/settings-types>.
 data PortSettings = PortSettings
     { portRange :: [Port]
-      -- ^ Which ports to assign to apps. Default: 4000-4999
+      -- ^ Which ports to assign to apps. Defaults to unassigned ranges from IANA
     }
 
 instance Default PortSettings where
     def = PortSettings
-        { portRange = [4000..4999]
+        -- Top 10 Largest IANA unassigned port ranges with no unauthorized uses known 
+        { portRange = [43124..44320]
+                      ++ [28120..29166]
+                      ++ [45967..46997]
+                      ++ [28241..29117]
+                      ++ [40001..40840]
+                      ++ [29170..29998]
+                      ++ [38866..39680]
+                      ++ [43442..44122]
+                      ++ [41122..41793]
+                      ++ [35358..36000]
         }
 
 instance FromJSON PortSettings where

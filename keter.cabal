@@ -24,7 +24,7 @@ Category:            Web, Yesod
 Build-type:          Simple
 Cabal-version:       >=1.8
 
-Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
+--Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
 
 Library
   Build-depends:       base                      >= 4             && < 5
@@ -108,6 +108,7 @@ Executable hello
                      , data-default
                      , transformers
   ghc-options:         -threaded -Wall
+  buildable: False
 
 source-repository head
   type:     git

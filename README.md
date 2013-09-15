@@ -31,38 +31,8 @@ This would look something like:
     sudo mkdir -p /opt/keter/bin
     sudo cp ~/.cabal/bin/keter /opt/keter/bin
 
-Third, create a Keter config file:
-
-```yaml
-# /opt/keter/etc/keter-config.yaml
-root: ..
-# host: host to bind to
-# port: port to listen on
-# setuid: myname
-# ssl:
-#   host:
-#   port:
-#   key:
-#   certificate:
-# reverse-proxy:
-#  - reversed-host: some-internal-site
-#    reversed-port: 80
-#    reversing-host: internal.example.com
-#    ssl: whether the reversed host uses SSL (defaults to False)
-#    # response headers can be rewritten as follows:
-#    rewrite-response:
-#      - header: Location
-#        from: ^http://internal-service.example.com
-#        to: https://service.example.com
-#    # request headers can be rewritten as well, though less likely
-#    # to be used.
-#    rewrite-request:
-#      - header: X-SomeApplicationHeader
-#        from: ^https://internal-service.example.com
-#        to: http://service.example.com
-# # Header rewriting supports POSIX regular expressions in the "from" and
-# # supports referencing matched groups in the "to" with "\1", "\2", ...
-```
+Third, create a Keter config file. You can view a sample at
+https://github.com/snoyberg/keter/blob/master/etc/keter-config.yaml.
 
 Fourth, set up an Upstart job to start `keter` when your system boots.
 
@@ -91,29 +61,8 @@ folder to your user account, so that you can deploy without `sudo`ing.
 
 An application needs to be set up as a keter bundle. This is a GZIPed tarball
 with a `.keter` filename extension and which has one special file:
-`config/keter.yaml`. A sample file is:
-
-```yaml
-exec: ../dist/build/yesodweb/yesodweb
-args:
-    - production
-host: www.yesodweb.com # can replace with "*" to be the default app
-ssl: false # true would use https scheme for approot
-
-# Additional hosts your app will listen on, without affecting approot.
-extra-hosts:
-    - www1.yesodweb.com
-
-# Static file hosts. Keter handles the serving for you.
-static-hosts:
-    - host: static.yesodweb.com
-      root: ../static # relative to config file, just like the executable
-
-# Host name redirects.
-redirects:
-    - from: yesodweb.com
-      to: www.yesodweb.com
-```
+`config/keter.yaml`. A sample file is available at
+https://github.com/snoyberg/keter/blob/master/incoming/foo1_0/config/keter.yaml.
 
 Keter as well supports wildcard subdomains and exceptions, as in this example
 configuration:

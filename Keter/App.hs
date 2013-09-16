@@ -345,7 +345,7 @@ launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlog Backgrou
                 icount <- newIORef 0
                 return $ do
                     res <- atomicModifyIORef icount $ \count ->
-                        (count + 1, count >= maxCount)
+                        (count + 1, count < maxCount)
                     when res delay
                     return res
 

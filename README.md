@@ -11,6 +11,13 @@ Do get Keter up-and-running quickly on an Ubuntu system, run:
 and build Keter from source and get it running with a
 default configuration.
 
+_This approach is not recommended for a production system_. We do not recommend
+installing a full GHC toolchain on a production server, nor running such ad-hoc
+scripts. This is intended to provide a quick way to play with Keter, especially
+for temporary virtual machines. For a production system, we recommend building
+the `keter` binary on a separate system, and tracking it via a package manager
+or similar strategy.
+
 ## Setup
 
 Instructions are for an Ubuntu system. Eventually, I hope to provide a PPA for
@@ -115,3 +122,10 @@ In order to deploy, you simply copy the keter bundle to `/opt/keter/incoming`.
 To update an app, copy in the new version. The old process will only be
 terminated after the new process has started answering requests. To stop an
 application, delete the file from incoming.
+
+## Known issues
+
+* There are reports of Keter not working behind an nginx reverse proxy. From
+  the reports, this appears to be a limitation in nginx's implementation, not a
+  problem with Keter. Keter works fine behind other reverse proxies, including
+  Apache and Amazon ELB.

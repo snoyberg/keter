@@ -70,6 +70,7 @@ Library
                      , vector
                      , stm
                      , async
+                     , lifted-base
   Exposed-Modules:     Keter.Plugin.Postgres
                        Keter.Types
                        Keter.Types.V04

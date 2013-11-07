@@ -27,7 +27,7 @@ import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import           Network.HTTP.Types                (mkStatus, status200,
                                                     status301, status302,
                                                     status303, status307,
-                                                    status404)
+                                                    status404, status500)
 import qualified Network.Wai                       as Wai
 import           Network.Wai.Application.Static    (defaultFileServerSettings,
                                                     ssListing, staticApp)
@@ -35,6 +35,7 @@ import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
+import System.Timeout.Lifted (timeout)
 
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe ProxyAction)
@@ -59,13 +60,25 @@ withClient :: Bool -- ^ use incoming request header for IP address
            -> HostLookup
            -> Wai.Application
 withClient useHeader manager portLookup =
-    waiProxyToSettings getDest def
+    timeBound (5 * 60 * 1000 * 1000) . waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
                 then SIHFromHeader
                 else SIHFromSocket
         } manager
   where
+    -- FIXME This is a temporary workaround for
+    -- https://github.com/snoyberg/keter/issues/29. After some research, it
+    -- seems like Warp is behaving properly here. I'm still not certain why the
+    -- http call (from http-conduit) inside waiProxyToSettings could ever block
+    -- infinitely without the server it's connecting to going down, so that
+    -- requires more research. Meanwhile, this prevents the file descriptor
+    -- leak from occurring.
+    timeBound us f = do
+        mres <- timeout us f
+        case mres of
+            Just res -> return res
+            Nothing -> return $ Wai.responseLBS status500 [] "timeBound"
     getDest req =
         case lookup "host" $ Wai.requestHeaders req of
             Nothing -> return $ WPRResponse missingHostResponse

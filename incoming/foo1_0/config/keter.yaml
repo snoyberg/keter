@@ -22,4 +22,9 @@ stanzas:
       host: unsafe2_1_0
       root: /home
 
+    - type: reverse-proxy
+      reversed-host: www.yesodweb.com
+      reversed-port: 80
+      reversing-host: localhost
+
 postgres: true

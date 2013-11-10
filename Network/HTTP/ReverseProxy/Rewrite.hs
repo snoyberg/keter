@@ -17,6 +17,8 @@ import qualified Data.Map as Map
 import Data.Map ( Map )
 import Data.Array ((!))
 import Data.Aeson
+import Control.Monad (unless)
+import Control.Monad.IO.Class (liftIO)
 
 import qualified Data.ByteString as S
 import qualified Data.Text as T
@@ -40,6 +42,9 @@ import Data.Conduit
 
 import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
+import Network.HTTP.Client (responseOpen)
+import Network.HTTP.Client.Body (brRead)
+import Network.HTTP.Client.Types (responseClose)
 import Network.HTTP.Types
 
 data RPEntry = RPEntry
@@ -111,7 +116,7 @@ filterHeaders = filter useHeader
 mkRuleMap :: Set RewriteRule -> Map HeaderName RewriteRule
 mkRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) . Set.toList
 
-mkRequest :: ReverseProxyConfig -> Wai.Request -> Request (ResourceT IO)
+mkRequest :: ReverseProxyConfig -> Wai.Request -> Request
 mkRequest rpConfig request =
   def { method = Wai.requestMethod request
       , secure = reverseUseSSL rpConfig
@@ -122,8 +127,8 @@ mkRequest rpConfig request =
       , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
       , requestBody =
           case Wai.requestBodyLength request of
-            Wai.ChunkedBody   -> RequestBodySourceChunked (mapOutput fromByteString $ Wai.requestBody request)
-            Wai.KnownLength n -> RequestBodySource (fromIntegral n) (mapOutput fromByteString $ Wai.requestBody request)
+            Wai.ChunkedBody   -> requestBodySourceChunkedIO (Wai.requestBody request)
+            Wai.KnownLength n -> requestBodySourceIO (fromIntegral n) (Wai.requestBody request)
       , decompress = const False
       , redirectCount = 0
       , checkStatus = \_ _ _ -> Nothing
@@ -134,9 +139,16 @@ mkRequest rpConfig request =
     reqRuleMap = mkRuleMap $ rewriteRequestRules rpConfig
 
 simpleReverseProxy :: Manager -> ReverseProxyConfig -> Wai.Application
-simpleReverseProxy mgr rpConfig request =
+simpleReverseProxy mgr rpConfig request = Wai.responseSourceBracket
+    (responseOpen proxiedRequest mgr)
+    responseClose
+    $ \res -> return
+        ( responseStatus res
+        , rewriteHeaders respRuleMap $ responseHeaders res
+        , bodyReaderSource $ responseBody res
+        )
+        {-
   do
-    let proxiedRequest = mkRequest rpConfig request
     response <- http proxiedRequest mgr
     (body, _) <- unwrapResumable $ responseBody response
     return $
@@ -144,8 +156,18 @@ simpleReverseProxy mgr rpConfig request =
         (responseStatus response)
         (rewriteHeaders respRuleMap $ responseHeaders response)
         (mapOutput (Chunk . fromByteString) body)
+        -}
   where
+    proxiedRequest = mkRequest rpConfig request
     respRuleMap = mkRuleMap $ rewriteResponseRules rpConfig
+    bodyReaderSource br =
+        loop
+      where
+        loop = do
+            bs <- liftIO $ brRead br
+            unless (S.null bs) $ do
+                yield $ Chunk $ fromByteString bs
+                loop
 
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text

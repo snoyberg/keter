@@ -111,12 +111,12 @@ redirectApp RedirectConfig {..} req =
         | encodeUtf8 path == Wai.rawPathInfo req = sendTo $ mkUrl dest
         | otherwise = other
 
-    noAction = Wai.ResponseBuilder
+    noAction = Wai.responseBuilder
         status404
         [("Content-Type", "text/plain")]
         (copyByteString "File not found")
 
-    sendTo url = Wai.ResponseBuilder
+    sendTo url = Wai.responseBuilder
         status
         [("Location", url)]
         (copyByteString url)
@@ -144,13 +144,13 @@ redirectApp RedirectConfig {..} req =
         ]
 
 missingHostResponse :: Wai.Response
-missingHostResponse = Wai.ResponseBuilder
+missingHostResponse = Wai.responseBuilder
     status200
     [("Content-Type", "text/html; charset=utf-8")]
     $ copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
 
 unknownHostResponse :: ByteString -> Wai.Response
-unknownHostResponse host = Wai.ResponseBuilder
+unknownHostResponse host = Wai.responseBuilder
     status200
     [("Content-Type", "text/html; charset=utf-8")]
     (copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"

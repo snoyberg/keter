@@ -37,7 +37,7 @@ import           Data.Yaml.FilePath
 import qualified Filesystem                as F
 import qualified Filesystem.Path.CurrentOS as F
 import Filesystem.Path.CurrentOS ((</>), hasExtension)
-import qualified Network.HTTP.Conduit      as HTTP (newManager)
+import qualified Network.HTTP.Conduit      as HTTP (newManager, conduitManagerSettings)
 import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
@@ -175,7 +175,7 @@ startWatching kc@KeterConfig {..} appMan log = do
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
 startListening KeterConfig {..} hostman = do
-    manager <- HTTP.newManager def
+    manager <- HTTP.newManager HTTP.conduitManagerSettings
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
         manager

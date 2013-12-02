@@ -42,9 +42,8 @@ import Data.Conduit
 
 import qualified Network.Wai as Wai
 import Network.HTTP.Conduit
-import Network.HTTP.Client (responseOpen)
-import Network.HTTP.Client.Body (brRead)
-import Network.HTTP.Client.Types (responseClose)
+import Network.HTTP.Client (responseOpen, responseClose)
+import Network.HTTP.Client.Internal (brRead)
 import Network.HTTP.Types
 
 data RPEntry = RPEntry

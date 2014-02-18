@@ -18,6 +18,30 @@ for temporary virtual machines. For a production system, we recommend building
 the `keter` binary on a separate system, and tracking it via a package manager
 or similar strategy.
 
+## Bundling your app for Keter
+
+1.  Modify your web app to check for the `PORT` environment variable, and have
+    it listen for incoming HTTP requests on that port. Keter automatically
+    assigns arbitrary ports to each web app it manages.
+
+2.  Create a file `config/keter.yaml`. The minimal file just has two settings:
+
+    ```yaml
+    exec: ../path/to/executable
+    host: mydomainname.example.com
+    ```
+
+    See the bundles section below for more available settings.
+
+3.  Create a gzipped tarball with the `config/keter.yaml` file, your
+    executable, and any other static resources you would like available to your
+    application. This file should be given a `.keter` file extension, e.g.
+    `myapp.keter`.
+
+4.  Copy the `.keter` file to `/opt/keter/incoming`. Keter will monitor this
+    directory for file updates, and automatically redeploy new versions of your
+    bundle.
+
 ## Setup
 
 Instructions are for an Ubuntu system. Eventually, I hope to provide a PPA for

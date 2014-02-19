@@ -159,6 +159,18 @@ To update an app, copy in the new version. The old process will only be
 terminated after the new process has started answering requests. To stop an
 application, delete the file from incoming.
 
+## PostgreSQL support
+
+Keter ships by default with a PostgreSQL plugin, which will handle management of PostgreSQL databases for your application. To use this, make the following changes:
+
+* Add `postgres: true` to your `config/keter.yaml` file.
+* Modify your application to get its database connection settings from the following environment variables:
+    * `PGHOST`
+    * `PGPORT`
+    * `PGUSER`
+    * `PGPASS`
+    * `PGDATABASE`
+
 ## Known issues
 
 * There are reports of Keter not working behind an nginx reverse proxy. From

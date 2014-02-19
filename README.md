@@ -1,4 +1,16 @@
-Deployment system for Yesod (and other Haskell) web apps.
+Deployment system for web applications, originally intended for hosting Yesod
+applications. Keter does the following actions for your application:
+
+* Binds to the main port (usually port 80) and reverse proxies requests to your application based on virtual hostnames.
+* Provides SSL support if requested.
+* Automatically launches applications, monitors processes, and relaunches any processes which die.
+* Provides graceful redeployment support, but launching a second copy of your application, performing a health check, and then switching reverse proxying to the new process.
+* Management of log files.
+
+Keter provides many more advanced features and extension points. It allows
+configuration of static hosts, redirect rules, management of PostgreSQL
+databases, and more. It supports a simple bundle format for applications which
+allows for easy management of your web apps.
 
 ## Quick Start
 

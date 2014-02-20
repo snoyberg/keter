@@ -113,7 +113,9 @@ configuration:
 ```yaml
 exec: ../com.example.app
 args:
-    - Hello World 1
+    - Hello
+    - World
+    - 1
 host: www.example.com
 extra-hosts:
     - "*.example.com"

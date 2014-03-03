@@ -175,7 +175,15 @@ Keter ships by default with a PostgreSQL plugin, which will handle management of
 
 ## Known issues
 
-* There are reports of Keter not working behind an nginx reverse proxy. From
-  the reports, this appears to be a limitation in nginx's implementation, not a
-  problem with Keter. Keter works fine behind other reverse proxies, including
-  Apache and Amazon ELB.
+*   There are reports of Keter not working behind an nginx reverse proxy. From
+    the reports, this appears to be a limitation in nginx's implementation, not a
+    problem with Keter. Keter works fine behind other reverse proxies, including
+    Apache and Amazon ELB.
+
+    One possible workaround is to add the following lines to your nginx configuration:
+
+        proxy_set_header Connection "";
+        proxy_http_version 1.1;
+
+    This has not yet been confirmed to work in production. If you use this,
+    please report either its success or failure back to me.

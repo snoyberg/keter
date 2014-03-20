@@ -20,8 +20,9 @@ import           Control.Exception         (bracketOnError, throwIO)
 import           Control.Exception         (IOException, try)
 import           Control.Monad             (void, when)
 import qualified Data.Conduit.LogFile      as LogFile
+import           Data.Conduit.LogFile      (RotatingLog)
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
-                                            RotatingLog, monitorProcess,
+                                            monitorProcess,
                                             terminateMonitoredProcess)
 import           Data.IORef
 import qualified Data.Map                  as Map

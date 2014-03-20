@@ -118,7 +118,6 @@ Executable hello
 test-suite test
     hs-source-dirs: test
     main-is: Spec.hs
-    other-modules: Data.Conduit.Process.UnixSpec
     type: exitcode-stdio-1.0
     build-depends:   base
                    , transformers

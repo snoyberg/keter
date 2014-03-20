@@ -4,30 +4,13 @@
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
 module Data.Conduit.Process.Unix
-    ( -- * Starting processes
-      forkExecuteFile
-    , killProcess
-    , terminateProcess
-    , waitForProcess
-    , ProcessStatus (..)
-    , signalProcessHandle
-    , signalProcessHandleGroup
-      -- * Process tracking
+    ( -- * Process tracking
       -- $processTracker
 
       -- ** Types
-    , ProcessTracker
-    , TrackedProcess
-    , ProcessTrackerException (..)
+      ProcessTracker
       -- ** Functions
     , initProcessTracker
-    , trackProcess
-    , untrackProcess
-
-      -- * Logging
-    , RotatingLog
-    , openRotatingLog
-    , forkExecuteLog
 
       -- * Monitored process
     , MonitoredProcess
@@ -45,19 +28,13 @@ import           Control.Concurrent.MVar         (MVar, modifyMVar, modifyMVar_,
                                                   takeMVar)
 import           Control.Exception               (Exception, SomeException,
                                                   bracketOnError, finally,
-                                                  handle, mask, mask_,
-                                                  onException, throwIO, try)
-import           Control.Monad                   (unless, void, when, zipWithM_)
-import           Control.Monad.Trans.Class       (lift)
-import           Data.ByteString                 (ByteString, append, concat,
-                                                  null, singleton)
+                                                  handle, mask_,
+                                                  throwIO, try)
+import           Control.Monad                   (void)
+import           Data.ByteString                 (ByteString)
 import qualified Data.ByteString.Char8           as S8
-import           Data.ByteString.Unsafe          (unsafePackCStringFinalizer,
-                                                  unsafeUseAsCString,
-                                                  unsafeUseAsCStringLen)
-import           Data.Conduit                    (Sink, Source, yield, ($$))
+import           Data.Conduit                    (Source, ($$))
 import           Data.Conduit.Binary             (sinkHandle, sourceHandle)
-import           Data.Conduit.List               (mapM_)
 import qualified Data.Conduit.List               as CL
 import           Data.Conduit.LogFile
 import           Data.IORef                      (IORef, newIORef, readIORef,
@@ -65,12 +42,7 @@ import           Data.IORef                      (IORef, newIORef, readIORef,
 import           Data.Time                       (getCurrentTime)
 import           Data.Time                       (diffUTCTime)
 import           Data.Typeable                   (Typeable)
-import           Foreign.C.String
 import           Foreign.C.Types
-import           Foreign.Marshal.Alloc           (allocaBytes, free,
-                                                  mallocBytes)
-import           Foreign.Ptr                     (Ptr, castPtr, nullPtr)
-import           Foreign.Storable                (pokeElemOff, sizeOf)
 import           Prelude                         (Bool (..), Either (..), IO,
                                                   Maybe (..), Monad (..), Show,
                                                   const, error, flip, fmap,
@@ -80,17 +52,10 @@ import           Prelude                         (Bool (..), Either (..), IO,
                                                   (==))
 import           System.Exit                     (ExitCode)
 import           System.IO                       (hClose)
-import           System.Posix.IO.ByteString      (FdOption (CloseOnExec),
-                                                  closeFd, createPipe,
-                                                  fdReadBuf, fdToHandle,
-                                                  fdWriteBuf, setFdOption)
-import           System.Posix.Process.ByteString (ProcessStatus (..),
-                                                  getProcessGroupIDOf,
-                                                  getProcessStatus)
-import           System.Posix.Signals            (Signal, sigKILL,
-                                                  signalProcess,
-                                                  signalProcessGroup)
-import           System.Posix.Types              (CPid (..), Fd, ProcessID)
+import           System.Posix.IO.ByteString      ( closeFd, createPipe,
+                                                  fdToHandle)
+import           System.Posix.Signals            (sigKILL, signalProcess)
+import           System.Posix.Types              (CPid (..))
 import           System.Process
 import           System.Process.Internals        (ProcessHandle (..),
                                                   ProcessHandle__ (..))
@@ -119,101 +84,8 @@ killProcess ph = withProcessHandle_ ph $ \p_ ->
             signalProcess sigKILL h
             return p_
 
-signalProcessHandle :: Signal -> ProcessHandle -> IO ()
-signalProcessHandle signal ph = withProcessHandle_ ph $ \p_ ->
-    case p_ of
-        ClosedHandle _ -> return p_
-        OpenHandle h -> do
-            signalProcess signal h
-            return p_
-
-signalProcessHandleGroup :: Signal -> ProcessHandle -> IO ()
-signalProcessHandleGroup signal ph = withProcessHandle_ ph $ \p_ ->
-    case p_ of
-        ClosedHandle _ -> return p_
-        OpenHandle h -> do
-            pgid <- getProcessGroupIDOf h
-            signalProcessGroup signal pgid
-            return p_
-
--- | Fork a new process and execute the given command.
---
--- This is a wrapper around with fork() and exec*() syscalls, set up to work
--- with @conduit@ datatypes for standard input, output, and error. If @Nothing@
--- is provided for any of those arguments, then the original file handles will
--- remain open to the child process.
---
--- If you would like to simply discard data provided by the child process,
--- provide @sinkNull@ for stdout and/or stderr. To provide an empty input
--- stream, use @return ()@.
---
--- Since 0.1.0
-forkExecuteFile :: ByteString -- ^ command
-                -> [ByteString] -- ^ args
-                -> Maybe [(ByteString, ByteString)] -- ^ environment
-                -> Maybe ByteString -- ^ working directory
-                -> Maybe (Source IO ByteString) -- ^ stdin
-                -> Maybe (Sink ByteString IO ()) -- ^ stdout
-                -> Maybe (Sink ByteString IO ()) -- ^ stderr
-                -> IO ProcessHandle
-forkExecuteFile cmd args menv mwdir mstdin mstdout mstderr = do
-    (min, mout, merr, ph) <- createProcess cp
-    case (,) <$> mstdin <*> min of
-        Just (source, h) -> void $ forkIO $ ignoreExceptions $
-            (source $$ sinkHandle h) `finally` hClose h
-        Nothing -> return ()
-    case (,) <$> mstdout <*> mout of
-        Just (sink, h) -> void $ forkIO $ ignoreExceptions $
-            (sourceHandle h $$ sink) `finally` hClose h
-        Nothing -> return ()
-    case (,) <$> mstderr <*> merr of
-        Just (sink, h) -> void $ forkIO $ ignoreExceptions $
-            (sourceHandle h $$ sink) `finally` hClose h
-        Nothing -> return ()
-    return ph
-  where
-    cp = CreateProcess
-        { cmdspec = RawCommand (S8.unpack cmd) (map S8.unpack args)
-        , cwd = S8.unpack <$> mwdir
-        , env = map (S8.unpack *** S8.unpack) <$> menv
-        , std_in = maybe Inherit (const CreatePipe) mstdin
-        , std_out = maybe Inherit (const CreatePipe) mstdout
-        , std_err = maybe Inherit (const CreatePipe) mstderr
-        , close_fds = True
-        , create_group = True
-#if MIN_VERSION_process(1, 2, 0)
-        , delegate_ctlc = False
-#endif
-        }
-
 ignoreExceptions :: IO () -> IO ()
 ignoreExceptions = handle (\(_ :: SomeException) -> return ())
-
-closeOnExec :: Fd -> IO ()
-closeOnExec fd = setFdOption fd CloseOnExec True
-
-withMString :: Maybe ByteString -> (CString -> IO a) -> IO a
-withMString Nothing f = f nullPtr
-withMString (Just bs) f = unsafeUseAsCString (bs `append` singleton 0) f
-
-withEnv :: Maybe [(ByteString, ByteString)] -> (Ptr CString -> IO a) -> IO a
-withEnv Nothing f = f nullPtr
-withEnv (Just pairs) f =
-    withArgs (map toBS pairs) f
-  where
-    toBS (x, y) = concat [x, "=", y]
-
-withArgs :: [ByteString] -> (Ptr CString -> IO a) -> IO a
-withArgs bss0 f =
-    loop bss0 id
-  where
-    loop [] front = run (front [nullPtr])
-    loop (bs:bss) front =
-        unsafeUseAsCString (bs `append` singleton 0) $ \ptr ->
-        loop bss (front . (ptr:))
-
-    run ptrs = allocaBytes (length ptrs * sizeOf (head ptrs)) $ \res ->
-        zipWithM_ (pokeElemOff res) [0..] ptrs >> f res
 
 -- $processTracker
 --
@@ -391,7 +263,7 @@ monitorProcess
     -> RotatingLog
     -> (ExitCode -> IO Bool) -- ^ should we restart?
     -> IO MonitoredProcess
-monitorProcess log processTracker msetuid exec dir args env rlog shouldRestart = do
+monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart = do
     mstatus <- newMVar NeedsRestart
     let loop mlast = do
             next <- modifyMVar mstatus $ \status ->
@@ -411,7 +283,7 @@ monitorProcess log processTracker msetuid exec dir args env rlog shouldRestart =
                         res <- try $ forkExecuteLog
                             cmd
                             args'
-                            (Just env)
+                            (Just env')
                             (Just dir)
                             (Just $ return ())
                             rlog
@@ -429,7 +301,7 @@ monitorProcess log processTracker msetuid exec dir args env rlog shouldRestart =
                                         then loop (Just now)
                                         else return ())
             next
-    forkIO $ loop Nothing
+    _ <- forkIO $ loop Nothing
     return $ MonitoredProcess mstatus
 
 -- | Abstract type containing information on a process which will be restarted.

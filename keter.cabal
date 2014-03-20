@@ -52,7 +52,6 @@ Library
                      , network-conduit           >= 0.6
                      , network-conduit-tls       >= 1.0.0.2
                      , http-reverse-proxy        >= 0.3.1         && < 0.4
-                     , unix-process-conduit      >= 0.2.2         && < 0.3
                      , unix                      >= 2.5
                      , wai-app-static            >= 2.0           && < 2.1
                      , wai                       >= 2.1           && < 2.2
@@ -88,7 +87,10 @@ Library
                        Network.HTTP.ReverseProxy.Rewrite
                        Data.Yaml.FilePath
                        Codec.Archive.TempTarball
+                       Data.Conduit.LogFile
+                       Data.Conduit.Process.Unix
   ghc-options:         -Wall
+  c-sources:           cbits/process-tracker.c
 
 Executable keter
   Main-is:             keter.hs
@@ -112,6 +114,20 @@ Executable hello
                      , transformers
   ghc-options:         -threaded -Wall
   buildable: False
+
+test-suite test
+    hs-source-dirs: test
+    main-is: Spec.hs
+    other-modules: Data.Conduit.Process.UnixSpec
+    type: exitcode-stdio-1.0
+    build-depends:   base
+                   , transformers
+                   , conduit
+                   , bytestring
+                   , hspec >= 1.3
+                   , unix
+                   , keter
+    ghc-options:     -Wall -threaded
 
 source-repository head
   type:     git

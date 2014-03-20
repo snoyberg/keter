@@ -36,7 +36,6 @@ import qualified Data.ByteString.Char8           as S8
 import           Data.Conduit                    (Source, ($$))
 import           Data.Conduit.Binary             (sinkHandle, sourceHandle)
 import qualified Data.Conduit.List               as CL
-import           Data.Conduit.LogFile
 import           Data.IORef                      (IORef, newIORef, readIORef,
                                                   writeIORef)
 import           Data.Time                       (getCurrentTime)
@@ -190,7 +189,7 @@ forkExecuteLog :: ByteString -- ^ command
                -> Maybe [(ByteString, ByteString)] -- ^ environment
                -> Maybe ByteString -- ^ working directory
                -> Maybe (Source IO ByteString) -- ^ stdin
-               -> RotatingLog -- ^ both stdout and stderr will be sent to this location
+               -> (ByteString -> IO ()) -- ^ both stdout and stderr will be sent to this location
                -> IO ProcessHandle
 forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
     setupPipe
@@ -219,7 +218,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
             }
         ignoreExceptions $ addAttachMessage pipes ph
         void $ forkIO $ ignoreExceptions $
-            (sourceHandle readerH $$ CL.mapM_ (addChunk rlog)) `finally` hClose readerH
+            (sourceHandle readerH $$ CL.mapM_ rlog) `finally` hClose readerH
         case (min, mstdin) of
             (Just h, Just source) -> void $ forkIO $ ignoreExceptions $
                 (source $$ sinkHandle h) `finally` hClose h
@@ -231,7 +230,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
         now <- getCurrentTime
         case p_ of
             ClosedHandle ec -> do
-                addChunk rlog $ S8.concat
+                rlog $ S8.concat
                     [ "\n\n"
                     , S8.pack $ show now
                     , ": Process immediately died with exit code "
@@ -240,7 +239,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
                     ]
                 cleanupPipes pipes
             OpenHandle h -> do
-                addChunk rlog $ S8.concat
+                rlog $ S8.concat
                     [ "\n\n"
                     , S8.pack $ show now
                     , ": Attached new process "
@@ -260,7 +259,7 @@ monitorProcess
     -> S8.ByteString -- ^ working directory
     -> [S8.ByteString] -- ^ command line parameter
     -> [(S8.ByteString, S8.ByteString)] -- ^ environment
-    -> RotatingLog
+    -> (ByteString -> IO ())
     -> (ExitCode -> IO Bool) -- ^ should we restart?
     -> IO MonitoredProcess
 monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart = do

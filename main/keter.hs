@@ -19,4 +19,4 @@ main = do
             [\configDir -> Postgres.load def $ configDir </> "etc" </> "postgres.yaml"]
         _ -> do
             pn <- getProgName
-            error $ "Usage: " ++ pn ++ " <root folder>"
+            error $ "Usage: " ++ pn ++ " <config file>"

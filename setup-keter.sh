@@ -8,7 +8,7 @@ sudo apt-get update
 sudo apt-get install postgresql haskell-platform -y
 
 cabal update
-cabal install keter
+cabal install keter --force-reinstalls
 sudo mkdir -p /opt/keter/bin
 sudo cp ~/.cabal/bin/keter /opt/keter/bin
 

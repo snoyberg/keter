@@ -14,9 +14,13 @@ main = do
     args <- getArgs
     case args of
         ["--version"] -> putStrLn $ "keter version: " ++ showVersion version
+        ["--help"] -> printUsage
         [dir] -> keter
             (decodeString dir)
             [\configDir -> Postgres.load def $ configDir </> "etc" </> "postgres.yaml"]
-        _ -> do
-            pn <- getProgName
-            error $ "Usage: " ++ pn ++ " <config file>"
+        _ -> printUsage
+
+printUsage :: IO ()
+printUsage = do
+    pn <- getProgName
+    error $ "Usage: " ++ pn ++ " <config file>"

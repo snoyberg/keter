@@ -44,10 +44,9 @@ import           Data.Typeable                   (Typeable)
 import           Foreign.C.Types
 import           Prelude                         (Bool (..), Either (..), IO,
                                                   Maybe (..), Monad (..), Show,
-                                                  const, error, flip, fmap,
-                                                  fromIntegral, fst, head, id,
-                                                  length, map, maybe, show, snd,
-                                                  ($), ($!), (*), (.), (<),
+                                                  const, error,
+                                                  map, maybe, show,
+                                                  ($), ($!), (*), (<),
                                                   (==))
 import           System.Exit                     (ExitCode)
 import           System.IO                       (hClose)

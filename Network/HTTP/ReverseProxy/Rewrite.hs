@@ -20,14 +20,12 @@ import Data.Map ( Map )
 import Data.Array ((!))
 import Data.Aeson
 import Control.Monad (unless)
-import Control.Monad.IO.Class (liftIO)
 
 import qualified Data.ByteString as S
 import qualified Data.Text as T
 import Data.Text (Text)
 import Data.Text.Encoding (encodeUtf8, decodeUtf8)
 import qualified Data.CaseInsensitive as CI
-import Control.Monad.Trans.Reader (runReaderT)
 
 import Blaze.ByteString.Builder (fromByteString)
 
@@ -41,8 +39,6 @@ import Text.Regex.TDFA.String (Regex)
 import Data.Char (isDigit)
 
 -- Reverse proxy apparatus
-import Data.Conduit
-
 import qualified Network.Wai as Wai
 import Network.HTTP.Client.Conduit
 import qualified Network.HTTP.Client as NHC
@@ -153,7 +149,7 @@ simpleReverseProxy mgr rpConfig request sendResponse = bracket
     sendBody body send _flush = fix $ \loop -> do
         bs <- body
         unless (S.null bs) $ do
-            send $ fromByteString bs
+            () <- send $ fromByteString bs
             loop
 
 data ReverseProxyConfig = ReverseProxyConfig

@@ -147,7 +147,7 @@ startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO
 startWatching kc@KeterConfig {..} appMan log = do
     -- File system watching
     wm <- FSN.startManager
-    FSN.watchDir wm incoming (const True) $ \e -> do
+    _ <- FSN.watchDir wm incoming (const True) $ \e -> do
         e' <-
             case e of
                 FSN.Removed fp _ -> do

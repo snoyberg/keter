@@ -66,12 +66,12 @@ openRotatingLog :: FilePath -- ^ folder to contain logs
 openRotatingLog dir maxTotal = do
     createDirectoryIfMissing True dir
     bracketOnError (moveCurrent dir) SIO.hClose $ \handle -> do
-        queue <- newTBQueueIO 5
-        let s = Running handle queue
+        queue' <- newTBQueueIO 5
+        let s = Running handle queue'
         ts <- newTVarIO s
         void $ forkIO $ loop dir ts maxTotal
         let rl = RotatingLog ts
-        addFinalizer rl (atomically (writeTBQueue queue Close))
+        addFinalizer rl (atomically (writeTBQueue queue' Close))
         return rl
 
 current :: FilePath -- ^ folder containing logs
@@ -117,14 +117,14 @@ loop dir ts maxTotal =
             s <- readTVar ts
             case s of
                 Closed -> return Nothing
-                Running handle queue -> do
-                    cmd <- readTBQueue queue
+                Running handle queue' -> do
+                    cmd <- readTBQueue queue'
                     case cmd of
                         Close -> return Nothing
-                        AddChunk bs -> return $! Just (handle, queue, bs)
+                        AddChunk bs -> return $! Just (handle, queue', bs)
         case res of
             Nothing -> return ()
-            Just (handle, queue, bs) -> do
+            Just (handle, queue', bs) -> do
                 let total' = total + fromIntegral (S.length bs)
                 S.hPut handle bs
                 SIO.hFlush handle
@@ -132,7 +132,7 @@ loop dir ts maxTotal =
                     then do
                         bracket
                             (SIO.hClose handle >> moveCurrent dir)
-                            (\handle' -> atomically $ writeTVar ts $ Running handle' queue)
+                            (\handle' -> atomically $ writeTVar ts $ Running handle' queue')
                             (const $ return ())
                         go 0
                     else go total'

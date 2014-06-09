@@ -12,7 +12,7 @@ import Keter.Types.Common
 import qualified Keter.Types.V04 as V04
 import Data.Yaml.FilePath
 import Data.Aeson (FromJSON (..), (.:), (.:?), Value (Object, String), withObject, (.!=))
-import Control.Applicative ((<$>), (<*>), pure, (<|>))
+import Control.Applicative ((<$>), (<*>), (<|>))
 import qualified Data.Set as Set
 import qualified Filesystem.Path.CurrentOS as F
 import Data.Default
@@ -20,7 +20,6 @@ import Data.String (fromString)
 import Data.Conduit.Network (HostPreference)
 import Data.Vector (Vector)
 import qualified Data.Vector as V
-import Data.Monoid (mempty)
 import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
 import Data.Maybe (fromMaybe, catMaybes)
 import qualified Network.Wai.Handler.Warp as Warp
@@ -104,8 +103,8 @@ instance ToCurrent KeterConfig where
       where
         getSSL Nothing = V.empty
         getSSL (Just (V04.TLSConfig s ts)) = V.singleton $ LPSecure
-            (Warp.settingsHost s)
-            (Warp.settingsPort s)
+            (Warp.getHost s)
+            (Warp.getPort s)
             (F.decodeString $ WarpTLS.certFile ts)
             (F.decodeString $ WarpTLS.keyFile ts)
 
@@ -174,6 +173,7 @@ instance ToJSON (Stanza ()) where
     toJSON (StanzaReverseProxy x) = addStanzaType "reverse-proxy" x
     toJSON (StanzaBackground x) = addStanzaType "background" x
 
+addStanzaType :: ToJSON a => Value -> a -> Value
 addStanzaType t x =
     case toJSON x of
         Object o -> Object $ HashMap.insert "type" t o

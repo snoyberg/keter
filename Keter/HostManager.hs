@@ -28,6 +28,7 @@ import           Data.Text.Encoding  (encodeUtf8)
 import           Keter.Types
 import           Keter.LabelMap      (LabelMap)
 import qualified Keter.LabelMap      as LabelMap
+import           Prelude             hiding (log)
 
 type HMState = LabelMap HostValue
 

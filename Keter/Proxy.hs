@@ -44,10 +44,7 @@ reverseProxy :: Bool -> Manager -> HostLookup -> ListeningPort -> IO ()
 reverseProxy useHeader manager hostLookup listener =
     run $ withClient useHeader manager hostLookup
   where
-    warp host port = Warp.defaultSettings
-        { Warp.settingsHost = host
-        , Warp.settingsPort = port
-        }
+    warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     run =
         case listener of
             LPInsecure host port -> Warp.runSettings (warp host port)
@@ -59,13 +56,13 @@ withClient :: Bool -- ^ use incoming request header for IP address
            -> Manager
            -> HostLookup
            -> Wai.Application
-withClient useHeader manager portLookup req sendResponse =
+withClient useHeader manager portLookup req0 sendResponse =
     timeBound (5 * 60 * 1000 * 1000) (waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
                 then SIHFromHeader
                 else SIHFromSocket
-        } manager req sendResponse) sendResponse
+        } manager req0 sendResponse)
   where
     -- FIXME This is a temporary workaround for
     -- https://github.com/snoyberg/keter/issues/29. After some research, it
@@ -74,7 +71,7 @@ withClient useHeader manager portLookup req sendResponse =
     -- infinitely without the server it's connecting to going down, so that
     -- requires more research. Meanwhile, this prevents the file descriptor
     -- leak from occurring.
-    timeBound us f sendResponse = do
+    timeBound us f = do
         mres <- timeout us f
         case mres of
             Just res -> return res

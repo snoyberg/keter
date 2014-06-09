@@ -114,10 +114,9 @@ instance ParseYamlFile TLSConfig where
         host <- (fmap fromString <$> o .:? "host") .!= "*"
         port <- o .:? "port" .!= 443
         return $! TLSConfig
-            Warp.defaultSettings
-                { Warp.settingsHost = host
-                , Warp.settingsPort = port
-                }
+            ( Warp.setHost host
+            $ Warp.setPort port
+              Warp.defaultSettings)
             WarpTLS.defaultTlsSettings
                 { WarpTLS.certFile = encodeString cert
                 , WarpTLS.keyFile = encodeString key

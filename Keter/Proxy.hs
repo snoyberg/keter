@@ -59,13 +59,13 @@ withClient :: Bool -- ^ use incoming request header for IP address
            -> Manager
            -> HostLookup
            -> Wai.Application
-withClient useHeader manager portLookup =
-    timeBound (5 * 60 * 1000 * 1000) . waiProxyToSettings getDest def
+withClient useHeader manager portLookup req sendResponse =
+    timeBound (5 * 60 * 1000 * 1000) (waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
                 then SIHFromHeader
                 else SIHFromSocket
-        } manager
+        } manager req sendResponse) sendResponse
   where
     -- FIXME This is a temporary workaround for
     -- https://github.com/snoyberg/keter/issues/29. After some research, it
@@ -74,16 +74,19 @@ withClient useHeader manager portLookup =
     -- infinitely without the server it's connecting to going down, so that
     -- requires more research. Meanwhile, this prevents the file descriptor
     -- leak from occurring.
-    timeBound us f = do
+    timeBound us f sendResponse = do
         mres <- timeout us f
         case mres of
             Just res -> return res
-            Nothing -> return $ Wai.responseLBS status500 [] "timeBound"
+            Nothing -> sendResponse $ Wai.responseLBS status500 [] "timeBound"
+
+    getDest :: Wai.Request -> IO WaiProxyResponse
     getDest req =
         case lookup "host" $ Wai.requestHeaders req of
             Nothing -> return $ WPRResponse missingHostResponse
             Just host -> processHost req host
 
+    processHost :: Wai.Request -> S.ByteString -> IO WaiProxyResponse
     processHost req host = do
         mport <- liftIO $ portLookup host
         case mport of
@@ -92,15 +95,15 @@ withClient useHeader manager portLookup =
 
     performAction _ (PAPort port) =
         return $ WPRProxyDest $ ProxyDest "127.0.0.1" port
-    performAction req (PAStatic StaticFilesConfig {..}) =
-        fmap WPRResponse $ staticApp (defaultFileServerSettings sfconfigRoot)
+    performAction _ (PAStatic StaticFilesConfig {..}) = do
+        return $ WPRApplication $ staticApp (defaultFileServerSettings sfconfigRoot)
             { ssListing =
                 if sfconfigListings
                     then Just defaultListing
                     else Nothing
-            } req
+            }
     performAction req (PARedirect config) = return $ WPRResponse $ redirectApp config req
-    performAction req (PAReverseProxy config) = fmap WPRResponse $ Rewrite.simpleReverseProxy manager config req
+    performAction _ (PAReverseProxy config) = return $ WPRApplication $ Rewrite.simpleReverseProxy manager config
 
 redirectApp :: RedirectConfig -> Wai.Request -> Wai.Response
 redirectApp RedirectConfig {..} req =

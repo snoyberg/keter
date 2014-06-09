@@ -9,6 +9,8 @@ module Network.HTTP.ReverseProxy.Rewrite
   where
 
 import Control.Applicative
+import Control.Exception (bracket)
+import Data.Function (fix)
 import Data.Monoid ((<>))
 
 import qualified Data.Set as Set
@@ -43,6 +45,7 @@ import Data.Conduit
 
 import qualified Network.Wai as Wai
 import Network.HTTP.Client.Conduit
+import qualified Network.HTTP.Client as NHC
 import Network.HTTP.Types
 
 data RPEntry = RPEntry
@@ -125,8 +128,8 @@ mkRequest rpConfig request =
       , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
       , requestBody =
           case Wai.requestBodyLength request of
-            Wai.ChunkedBody   -> requestBodySourceChunked (Wai.requestBody request)
-            Wai.KnownLength n -> requestBodySource (fromIntegral n) (Wai.requestBody request)
+            Wai.ChunkedBody   -> RequestBodyStreamChunked ($ Wai.requestBody request)
+            Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ Wai.requestBody request)
       , decompress = const False
       , redirectCount = 0
       , checkStatus = \_ _ _ -> Nothing
@@ -137,17 +140,21 @@ mkRequest rpConfig request =
     reqRuleMap = mkRuleMap $ rewriteRequestRules rpConfig
 
 simpleReverseProxy :: Manager -> ReverseProxyConfig -> Wai.Application
-simpleReverseProxy mgr rpConfig request = Wai.responseSourceBracket
-    (runReaderT (responseOpen proxiedRequest) mgr)
+simpleReverseProxy mgr rpConfig request sendResponse = bracket
+    (NHC.responseOpen proxiedRequest mgr)
     responseClose
-    $ \res -> return
-        ( responseStatus res
-        , rewriteHeaders respRuleMap $ responseHeaders res
-        , mapOutput (Chunk . fromByteString) (responseBody res)
-        )
+    $ \res -> sendResponse $ Wai.responseStream
+        (responseStatus res)
+        (rewriteHeaders respRuleMap $ responseHeaders res)
+        (sendBody $ responseBody res)
   where
     proxiedRequest = mkRequest rpConfig request
     respRuleMap = mkRuleMap $ rewriteResponseRules rpConfig
+    sendBody body send _flush = fix $ \loop -> do
+        bs <- body
+        unless (S.null bs) $ do
+            send $ fromByteString bs
+            loop
 
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text

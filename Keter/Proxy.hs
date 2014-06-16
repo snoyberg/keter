@@ -33,6 +33,7 @@ import           Network.Wai.Application.Static    (defaultFileServerSettings,
                                                     ssListing, staticApp)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
+import           Network.Wai.Middleware.Gzip       (gzip, def)
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
 import System.Timeout.Lifted (timeout)
@@ -42,7 +43,7 @@ type HostLookup = ByteString -> IO (Maybe ProxyAction)
 
 reverseProxy :: Bool -> Manager -> HostLookup -> ListeningPort -> IO ()
 reverseProxy useHeader manager hostLookup listener =
-    run $ withClient useHeader manager hostLookup
+    run $ gzip def $ withClient useHeader manager hostLookup
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     run =

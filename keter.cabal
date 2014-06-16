@@ -1,10 +1,12 @@
 Name:                keter
-Version:             1.3.1
+Version:             1.3.2
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
     .
     Release history:
+    .
+    [1.3.2] Enable GZIP middleware
     .
     [1.3.1] Upgrade to WAI 3.0
     .
@@ -59,6 +61,7 @@ Library
                      , unix                      >= 2.5
                      , wai-app-static            >= 3.0           && < 3.1
                      , wai                       >= 3.0           && < 3.1
+                     , wai-extra                 >= 3.0           && < 3.1
                      , http-types
                      , regex-tdfa                >= 1.1
                      , attoparsec                >= 0.10

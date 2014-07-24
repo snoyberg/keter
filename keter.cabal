@@ -77,7 +77,7 @@ Library
                      , aeson
                      , unordered-containers
                      , vector
-                     , stm
+                     , stm                       >= 2.4
                      , async
                      , lifted-base
   Exposed-Modules:     Keter.Plugin.Postgres

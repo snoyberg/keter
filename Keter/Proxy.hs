@@ -86,7 +86,7 @@ withClient useHeader protocol manager portLookup req0 sendResponse =
 
     getDest :: Wai.Request -> IO WaiProxyResponse
     getDest req =
-        case lookup "host" $ Wai.requestHeaders req of
+        case Wai.requestHeaderHost req of
             Nothing -> return $ WPRResponse missingHostResponse
             Just host -> processHost req host
 

@@ -41,9 +41,10 @@ import System.Timeout.Lifted (timeout)
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe ProxyAction)
 
-reverseProxy :: Bool -> Manager -> HostLookup -> ListeningPort -> IO ()
+reverseProxy :: Bool
+             -> Manager -> HostLookup -> ListeningPort -> IO ()
 reverseProxy useHeader manager hostLookup listener =
-    run $ gzip def $ withClient useHeader manager hostLookup
+    run $ gzip def $ withClient useHeader protocol manager hostLookup
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     run =
@@ -52,12 +53,17 @@ reverseProxy useHeader manager hostLookup listener =
             LPSecure host port cert key -> WarpTLS.runTLS
                 (WarpTLS.tlsSettings (F.encodeString cert) (F.encodeString key))
                 (warp host port)
+    protocol =
+        case listener of
+            LPInsecure _ _ -> "http"
+            LPSecure _ _ _ _ -> "https"
 
 withClient :: Bool -- ^ use incoming request header for IP address
+           -> ByteString -- ^ protocol, for X-Forwarded-Proto
            -> Manager
            -> HostLookup
            -> Wai.Application
-withClient useHeader manager portLookup req0 sendResponse =
+withClient useHeader protocol manager portLookup req0 sendResponse =
     timeBound (5 * 60 * 1000 * 1000) (waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
@@ -91,8 +97,13 @@ withClient useHeader manager portLookup req0 sendResponse =
             Nothing -> return $ WPRResponse $ unknownHostResponse host
             Just action -> performAction req action
 
-    performAction _ (PAPort port) =
-        return $ WPRProxyDest $ ProxyDest "127.0.0.1" port
+    performAction req (PAPort port) =
+        return $ WPRModifiedRequest req' $ ProxyDest "127.0.0.1" port
+      where
+        req' = req
+            { Wai.requestHeaders = ("X-Forwarded-Proto", protocol)
+                                 : Wai.requestHeaders req
+            }
     performAction _ (PAStatic StaticFilesConfig {..}) = do
         return $ WPRApplication $ staticApp (defaultFileServerSettings sfconfigRoot)
             { ssListing =

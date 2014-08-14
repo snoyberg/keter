@@ -34,7 +34,9 @@ or similar strategy.
 
 1.  Modify your web app to check for the `PORT` environment variable, and have
     it listen for incoming HTTP requests on that port. Keter automatically
-    assigns arbitrary ports to each web app it manages.
+    assigns arbitrary ports to each web app it manages. The Yesod scaffold
+    site is already equipped to read the `PORT` environment variable when
+    it is set.
 
 2.  Create a file `config/keter.yaml`. The minimal file just has two settings:
 
@@ -172,6 +174,9 @@ Keter ships by default with a PostgreSQL plugin, which will handle management of
     * `PGUSER`
     * `PGPASS`
     * `PGDATABASE`
+
+* The Yesod scaffold site is already equipped to read these environment
+  variables when they are set.
 
 ## Known issues
 

@@ -76,7 +76,14 @@ unpackBundle :: AppStartConfig
 unpackBundle AppStartConfig {..} bundle aid = do
     ascLog $ UnpackingBundle bundle
     unpackTempTar (fmap snd ascSetuid) ascTempFolder bundle folderName $ \dir -> do
-        let configFP = dir F.</> "config" F.</> "keter.yaml"
+        -- Get the FilePath for the keter yaml configuration. Tests for
+        -- keter.yml and defaults to keter.yaml.
+        configFP <- do
+            let yml = dir F.</> "config" F.</> "keter.yml"
+            exists <- isFile yml
+            return $ if exists then yml
+                               else dir F.</> "config" F.</> "keter.yaml"
+
         mconfig <- decodeFileRelative configFP
         config <-
             case mconfig of

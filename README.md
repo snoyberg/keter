@@ -192,3 +192,14 @@ Keter ships by default with a PostgreSQL plugin, which will handle management of
 
     This has not yet been confirmed to work in production. If you use this,
     please report either its success or failure back to me.
+
+*   Keter does not handle password-protected SSL key files well.  When provided
+    with such a key file, unlike Apache and Nginx, Keter will not pause to ask
+    for the password.  Instead, your https connections will merely stall.
+
+    To get around this, you need to create a copy of the key without password
+    and deploy this new key:
+
+        openssl rsa -in original.key -out new.key
+
+    (Back up the original key first, just in case.)

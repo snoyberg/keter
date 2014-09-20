@@ -88,6 +88,10 @@ data KeterConfig = KeterConfig
     , kconfigSetuid :: Maybe Text
     , kconfigBuiltinStanzas :: !(V.Vector (Stanza ()))
     , kconfigIpFromHeader :: Bool
+    , kconfigExternalHttpPort :: !Int
+    -- ^ External HTTP port when generating APPROOTs.
+    , kconfigExternalHttpsPort :: !Int
+    -- ^ External HTTPS port when generating APPROOTs.
     }
 
 instance ToCurrent KeterConfig where
@@ -99,6 +103,8 @@ instance ToCurrent KeterConfig where
         , kconfigSetuid = setuid
         , kconfigBuiltinStanzas = V.fromList $ map StanzaReverseProxy $ Set.toList rproxy
         , kconfigIpFromHeader = ipFromHeader
+        , kconfigExternalHttpPort = 80
+        , kconfigExternalHttpsPort = 443
         }
       where
         getSSL Nothing = V.empty
@@ -116,6 +122,8 @@ instance Default KeterConfig where
         , kconfigSetuid = Nothing
         , kconfigBuiltinStanzas = V.empty
         , kconfigIpFromHeader = False
+        , kconfigExternalHttpPort = 80
+        , kconfigExternalHttpsPort = 443
         }
 
 instance ParseYamlFile KeterConfig where
@@ -132,6 +140,8 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "setuid"
             <*> return V.empty
             <*> o .:? "ip-from-header" .!= False
+            <*> o .:? "external-http-port" .!= 80
+            <*> o .:? "external-https-port" .!= 443
 
 data Stanza port
     = StanzaStaticFiles !StaticFilesConfig

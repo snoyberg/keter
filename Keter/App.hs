@@ -266,8 +266,14 @@ launchWebApp :: AppStartConfig
              -> IO a
 launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} f = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
-    let env = ("PORT", pack $ show waconfigPort)
-            : ("APPROOT", (if waconfigSsl then "https://" else "http://") <> waconfigApprootHost)
+    let httpPort  = kconfigExternalHttpPort  ascKeterConfig
+        httpsPort = kconfigExternalHttpsPort ascKeterConfig
+        (scheme, extport) =
+            if waconfigSsl
+                then ("https://", if httpsPort == 443 then "" else ':' : show httpsPort)
+                else ("http://",  if httpPort  ==  80 then "" else ':' : show httpPort)
+        env = ("PORT", pack $ show waconfigPort)
+            : ("APPROOT", scheme <> waconfigApprootHost <> pack extport)
             : Map.toList waconfigEnvironment ++ otherEnv
     exec <- canonicalizePath waconfigExec
     bracketOnError

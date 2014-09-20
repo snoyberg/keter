@@ -24,3 +24,7 @@ listeners:
 # load balancer like Amazon ELB.
 
 # ip-from-header: true
+
+# Control the port numbers assigned via APPROOT
+# external-http-port: 8080
+# external-https-port: 450

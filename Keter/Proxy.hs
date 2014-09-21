@@ -93,7 +93,8 @@ withClient useHeader protocol manager portLookup req0 sendResponse =
 
     processHost :: Wai.Request -> S.ByteString -> IO WaiProxyResponse
     processHost req host = do
-        mport <- liftIO $ portLookup host
+        -- Take the host name up until the port number.
+        mport <- liftIO $ portLookup $ S.takeWhile (/= 58) host
         case mport of
             Nothing -> return $ WPRResponse $ unknownHostResponse host
             Just action -> performAction req action

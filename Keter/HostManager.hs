@@ -20,6 +20,7 @@ module Keter.HostManager
 
 import           Control.Applicative
 import           Control.Exception   (assert, throwIO)
+import qualified Data.CaseInsensitive as CI
 import           Data.Either         (partitionEithers)
 import           Data.IORef
 import qualified Data.Map            as Map
@@ -81,13 +82,13 @@ reserveHosts log (HostManager mstate) aid hosts = do
                 Just (HVActive aid' _)
                     | aid == aid' -> Right Set.empty
                     | otherwise   -> Left (host, aid')
-      where hostBS = encodeUtf8 host
+      where hostBS = encodeUtf8 $ CI.original host
 
     hvres = HVReserved aid
     reserve host es =
         assert (not $ LabelMap.labelAssigned hostBS es) $ LabelMap.insert hostBS hvres es
       where
-        hostBS = encodeUtf8 host
+        hostBS = encodeUtf8 $ CI.original host
 
 -- | Forget previously made reservations.
 forgetReservations :: (LogMessage -> IO ())
@@ -103,7 +104,7 @@ forgetReservations log (HostManager mstate) app hosts = do
     forget host state =
         assert isReservedByMe $ LabelMap.delete hostBS state
       where
-        hostBS = encodeUtf8 host
+        hostBS = encodeUtf8 $ CI.original host
         isReservedByMe = LabelMap.labelAssigned hostBS state &&
             case LabelMap.lookup hostBS state of
                 Nothing -> False
@@ -128,7 +129,7 @@ activateHelper app =
     activate host action state =
         assert isOwnedByMe $ LabelMap.insert hostBS (HVActive app action) state
       where
-        hostBS = encodeUtf8 host
+        hostBS = encodeUtf8 $ CI.original host
         isOwnedByMe = LabelMap.labelAssigned hostBS state &&
             case LabelMap.lookup hostBS state of
                 Nothing -> False
@@ -152,7 +153,7 @@ deactivateHelper app =
     deactivate host state =
         assert isOwnedByMe $ LabelMap.delete hostBS state
       where
-        hostBS = encodeUtf8 host
+        hostBS = encodeUtf8 $ CI.original host
         isOwnedByMe = LabelMap.labelAssigned hostBS state &&
             case LabelMap.lookup hostBS state of
                 Nothing -> False
@@ -175,7 +176,7 @@ lookupAction :: HostManager
              -> IO (Maybe ProxyAction)
 lookupAction (HostManager mstate) host = do
     state <- readIORef mstate
-    return $ case LabelMap.lookup host state of
+    return $ case LabelMap.lookup (CI.original host) state of
         Nothing -> Nothing
         Just (HVActive _ action) -> Just action
         Just (HVReserved _) -> Nothing

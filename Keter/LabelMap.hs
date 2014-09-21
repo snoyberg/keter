@@ -20,8 +20,10 @@ import qualified Data.Map as Map
 import Data.Map (Map)
 import qualified Data.ByteString.Char8 as BS
 import Data.ByteString (ByteString)
+import qualified Data.CaseInsensitive as CI
+import Data.CaseInsensitive (CI)
 
-type LabelTree a = Map ByteString (LabelEntry a)
+type LabelTree a = Map (CI ByteString) (LabelEntry a)
 
 -- | A data structure for storing a hierarchical set of domain labels
 -- from TLD down, supporting wildcards.
@@ -112,40 +114,48 @@ insertTree :: [ByteString] -> a -> LabelMap a -> LabelMap a
 insertTree []    _ _ = error "Cannot assign empty label in hostname."
 
 insertTree ["*"] e EmptyLabelMap = Wildcard (Assigned e EmptyLabelMap)
-insertTree [l]   e EmptyLabelMap = Static (Map.insert l (Assigned e EmptyLabelMap) Map.empty)
+insertTree [l]   e EmptyLabelMap = Static (Map.insert (CI.mk l) (Assigned e EmptyLabelMap) Map.empty)
 
 insertTree ["*"] e (Static t) = WildcardExcept (Assigned e EmptyLabelMap) t
-insertTree [l]   e (Static t) =
+insertTree [l']   e (Static t) =
     case Map.lookup l t of
         Nothing  -> Static (Map.insert l (Assigned e EmptyLabelMap) t)
         Just le  -> Static (Map.insert l (Assigned e (labelEntryMap le)) t)
+  where
+    l = CI.mk l'
 
 insertTree ["*"] e (Wildcard w) = Wildcard (Assigned e (labelEntryMap w))
-insertTree [l]   e (Wildcard w) = WildcardExcept w (Map.insert l (Assigned e EmptyLabelMap) Map.empty)
+insertTree [l]   e (Wildcard w) = WildcardExcept w (Map.insert (CI.mk l) (Assigned e EmptyLabelMap) Map.empty)
 
 insertTree ["*"] e (WildcardExcept w t) = WildcardExcept (Assigned e (labelEntryMap w)) t
-insertTree [l]   e (WildcardExcept w t) =
+insertTree [l']   e (WildcardExcept w t) =
     case Map.lookup l t of
         Nothing -> WildcardExcept w (Map.insert l (Assigned e EmptyLabelMap) t)
         Just le -> WildcardExcept w (Map.insert l (Assigned e (labelEntryMap le)) t)
+  where
+    l = CI.mk l'
 
 insertTree ("*":ls) e EmptyLabelMap = Wildcard (Unassigned (insertTree ls e EmptyLabelMap))
-insertTree (l:ls)   e EmptyLabelMap = Static (Map.insert l (Unassigned $ insertTree ls e EmptyLabelMap) Map.empty)
+insertTree (l:ls)   e EmptyLabelMap = Static (Map.insert (CI.mk l) (Unassigned $ insertTree ls e EmptyLabelMap) Map.empty)
 
 insertTree ("*":ls) e (Static t) = WildcardExcept (Unassigned (insertTree ls e EmptyLabelMap)) t
-insertTree (l:ls)   e (Static t) =
+insertTree (l':ls)   e (Static t) =
     case Map.lookup l t of
         Nothing -> Static (Map.insert l (Unassigned (insertTree ls e EmptyLabelMap)) t)
         Just le -> Static (Map.insert l (lemap (insertTree ls e) le) t)
+  where
+    l = CI.mk l'
 
 insertTree ("*":ls) e (Wildcard w) = Wildcard (lemap (insertTree ls e) w)
-insertTree (l:ls)   e (Wildcard w) = WildcardExcept w (Map.insert l (Assigned e (insertTree ls e EmptyLabelMap)) Map.empty)
+insertTree (l:ls)   e (Wildcard w) = WildcardExcept w (Map.insert (CI.mk l) (Assigned e (insertTree ls e EmptyLabelMap)) Map.empty)
 
 insertTree ("*":ls) e (WildcardExcept w t) = WildcardExcept (lemap (insertTree ls e) w) t
 insertTree (l:ls)   e (WildcardExcept w t) =
-    case Map.lookup l t of
-        Nothing -> WildcardExcept w (Map.insert l (Unassigned (insertTree ls e EmptyLabelMap)) t)
-        Just le -> WildcardExcept w (Map.insert l (lemap (insertTree ls e) le) t)
+    case Map.lookup l' t of
+        Nothing -> WildcardExcept w (Map.insert l' (Unassigned (insertTree ls e EmptyLabelMap)) t)
+        Just le -> WildcardExcept w (Map.insert l' (lemap (insertTree ls e) le) t)
+  where
+    l' = CI.mk l
 
 cleanup :: LabelMap a -> LabelMap a
 cleanup EmptyLabelMap = EmptyLabelMap
@@ -185,28 +195,32 @@ deleteTree [] _ = error "Cannot assign empty label in hostname."
 deleteTree _ EmptyLabelMap = EmptyLabelMap
 
 deleteTree ["*"] (Static t) = Static t
-deleteTree [l]   (Static t) = cleanup $ Static (Map.delete l t)
+deleteTree [l]   (Static t) = cleanup $ Static (Map.delete (CI.mk l) t)
 
 deleteTree ["*"] (Wildcard w) = cleanup $ Wildcard (Unassigned (labelEntryMap w))
 deleteTree [_] (Wildcard w) = Wildcard w
 
 deleteTree ["*"] (WildcardExcept w t) = cleanup $ WildcardExcept (Unassigned (labelEntryMap w)) t
-deleteTree [l] (WildcardExcept w t) = cleanup $ WildcardExcept w (Map.delete l t)
+deleteTree [l] (WildcardExcept w t) = cleanup $ WildcardExcept w (Map.delete (CI.mk l) t)
 
 deleteTree ("*":_) (Static t) = Static t
 deleteTree (l:ls)  (Static t) = cleanup $
-    case Map.lookup l t of
+    case Map.lookup l' t of
         Nothing -> Static t
-        Just le -> Static (Map.insert l (lemap (deleteTree ls) le) t)
+        Just le -> Static (Map.insert l' (lemap (deleteTree ls) le) t)
+  where
+    l' = CI.mk l
 
 deleteTree ("*":ls) (Wildcard w) = cleanup $ Wildcard (lemap (deleteTree ls) w)
 deleteTree (_:_)    (Wildcard w) = Wildcard w
 
 deleteTree ("*":ls) (WildcardExcept w t) = cleanup $ WildcardExcept (lemap (deleteTree ls) w) t
 deleteTree (l:ls) (WildcardExcept w t) = cleanup $
-    case Map.lookup l t of
+    case Map.lookup l' t of
         Nothing            -> WildcardExcept w t
-        Just le             -> WildcardExcept w (Map.insert l (lemap (deleteTree ls) le) t)
+        Just le             -> WildcardExcept w (Map.insert l' (lemap (deleteTree ls) le) t)
+  where
+    l' = CI.mk l
 
 lookup :: ByteString -> LabelMap a -> Maybe a
 lookup h m = lookupTree (hostToLabels h) m
@@ -223,20 +237,20 @@ lookupTree [] _ = Nothing
 
 lookupTree _ EmptyLabelMap = Nothing
 
-lookupTree [l] (Static t)   = Map.lookup l t >>= getPortEntry
+lookupTree [l] (Static t)   = Map.lookup (CI.mk l) t >>= getPortEntry
 --lookupTree (_:_) (Wildcard w) = getPortEntry $ w
 lookupTree [l] (WildcardExcept w t) =
-    case Map.lookup l t >>= getPortEntry of
+    case Map.lookup (CI.mk l) t >>= getPortEntry of
         Just e  -> Just e
         Nothing -> getPortEntry w
 
 lookupTree (l:ls) (Static t) =
-    case Map.lookup l t of
+    case Map.lookup (CI.mk l) t of
         Just le -> lookupTree ls $ labelEntryMap le
         Nothing -> Nothing
 lookupTree (_:ls) (Wildcard w) = lookupTree ls $ labelEntryMap w
 lookupTree (l:ls) (WildcardExcept w t) =
-    case Map.lookup l t of
+    case Map.lookup (CI.mk l) t of
         Just le -> 
             case lookupTree ls $ labelEntryMap le of
                 Just  e -> Just e
@@ -270,17 +284,17 @@ memberTree :: [ByteString] -> LabelMap a -> Bool
 memberTree [] _ = False
 
 memberTree ["*"] (Static _)   = False
-memberTree [l]   (Static t)   = isJust $ Map.lookup l t >>= getPortEntry
+memberTree [l]   (Static t)   = isJust $ Map.lookup (CI.mk l) t >>= getPortEntry
 
 memberTree ["*"] (Wildcard _) = True
 memberTree [_]   (Wildcard _) = False
 
 memberTree ["*"] (WildcardExcept w _) = isJust $ getPortEntry w
-memberTree [l]   (WildcardExcept _ t) = isJust $ Map.lookup l t >>= getPortEntry
+memberTree [l]   (WildcardExcept _ t) = isJust $ Map.lookup (CI.mk l) t >>= getPortEntry
 
 memberTree ("*":_) (Static _) = False
 memberTree (l:ls)  (Static t) =
-    case Map.lookup l t of
+    case Map.lookup (CI.mk l) t of
         Just le -> memberTree ls $ labelEntryMap le
         Nothing -> False
 
@@ -289,7 +303,7 @@ memberTree (_:_)    (Wildcard _) = False
 
 memberTree ("*":ls) (WildcardExcept w _) = memberTree ls $ labelEntryMap w
 memberTree (l:ls)   (WildcardExcept _ t) =
-    case Map.lookup l t of
+    case Map.lookup (CI.mk l) t of
         Just le -> memberTree ls $ labelEntryMap le
         Nothing -> False
 

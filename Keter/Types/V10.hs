@@ -8,6 +8,7 @@ module Keter.Types.V10 where
 import Prelude hiding (FilePath)
 import           System.Posix.Types      (EpochTime)
 import Data.Aeson (Object, ToJSON (..))
+import qualified Data.CaseInsensitive as CI
 import Keter.Types.Common
 import qualified Keter.Types.V04 as V04
 import Data.Yaml.FilePath
@@ -201,20 +202,20 @@ instance ToCurrent StaticFilesConfig where
     type Previous StaticFilesConfig = V04.StaticHost
     toCurrent (V04.StaticHost host root) = StaticFilesConfig
         { sfconfigRoot = root
-        , sfconfigHosts = Set.singleton host
+        , sfconfigHosts = Set.singleton $ CI.mk host
         , sfconfigListings = True
         }
 
 instance ParseYamlFile StaticFilesConfig where
     parseYamlFile basedir = withObject "StaticFilesConfig" $ \o -> StaticFilesConfig
         <$> lookupBase basedir o "root"
-        <*> (o .: "hosts" <|> (Set.singleton <$> (o .: "host")))
+        <*> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
         <*> o .:? "directory-listing" .!= False
 
 instance ToJSON StaticFilesConfig where
     toJSON StaticFilesConfig {..} = object
         [ "root" .= F.encodeString sfconfigRoot
-        , "hosts" .= sfconfigHosts
+        , "hosts" .= Set.map CI.original sfconfigHosts
         , "directory-listing" .= sfconfigListings
         ]
 
@@ -228,21 +229,21 @@ data RedirectConfig = RedirectConfig
 instance ToCurrent RedirectConfig where
     type Previous RedirectConfig = V04.Redirect
     toCurrent (V04.Redirect from to) = RedirectConfig
-        { redirconfigHosts = Set.singleton from
+        { redirconfigHosts = Set.singleton $ CI.mk from
         , redirconfigStatus = 301
         , redirconfigActions = V.singleton $ RedirectAction SPAny
-                             $ RDPrefix False to Nothing
+                             $ RDPrefix False (CI.mk to) Nothing
         }
 
 instance ParseYamlFile RedirectConfig where
     parseYamlFile _ = withObject "RedirectConfig" $ \o -> RedirectConfig
-        <$> (o .: "hosts" <|> (Set.singleton <$> (o .: "host")))
+        <$> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
         <*> o .:? "status" .!= 303
         <*> o .: "actions"
 
 instance ToJSON RedirectConfig where
     toJSON RedirectConfig {..} = object
-        [ "hosts" .= redirconfigHosts
+        [ "hosts" .= Set.map CI.original redirconfigHosts
         , "status" .= redirconfigStatus
         , "actions" .= redirconfigActions
         ]
@@ -279,14 +280,14 @@ instance FromJSON RedirectDest where
         url o = RDUrl <$> o .: "url"
         prefix o = RDPrefix
             <$> o .:? "secure" .!= False
-            <*> o .: "host"
+            <*> (CI.mk <$> o .: "host")
             <*> o .:? "port"
 
 instance ToJSON RedirectDest where
     toJSON (RDUrl url) = object ["url" .= url]
     toJSON (RDPrefix secure host mport) = object $ catMaybes
         [ Just $ "secure" .= secure
-        , Just $ "host" .= host
+        , Just $ "host" .= CI.original host
         , case mport of
             Nothing -> Nothing
             Just port -> Just $ "port" .= port
@@ -298,8 +299,8 @@ data WebAppConfig port = WebAppConfig
     { waconfigExec        :: !F.FilePath
     , waconfigArgs        :: !(Vector Text)
     , waconfigEnvironment :: !(Map Text Text)
-    , waconfigApprootHost :: !Text -- ^ primary host, used for approot
-    , waconfigHosts       :: !(Set Text) -- ^ all hosts, not including the approot host
+    , waconfigApprootHost :: !Host -- ^ primary host, used for approot
+    , waconfigHosts       :: !(Set Host) -- ^ all hosts, not including the approot host
     , waconfigSsl         :: !Bool
     , waconfigPort        :: !port
     }
@@ -311,8 +312,8 @@ instance ToCurrent (WebAppConfig ()) where
         { waconfigExec = exec
         , waconfigArgs = V.fromList args
         , waconfigEnvironment = Map.empty
-        , waconfigApprootHost = host
-        , waconfigHosts = hosts
+        , waconfigApprootHost = CI.mk host
+        , waconfigHosts = Set.map CI.mk hosts
         , waconfigSsl = ssl
         , waconfigPort = ()
         }
@@ -322,12 +323,12 @@ instance ParseYamlFile (WebAppConfig ()) where
         (ahost, hosts) <-
             (do
                 h <- o .: "host"
-                return (h, Set.empty)) <|>
+                return (CI.mk h, Set.empty)) <|>
             (do
                 hs <- o .: "hosts"
                 case hs of
                     [] -> fail "Must provide at least one host"
-                    h:hs' -> return (h, Set.fromList hs'))
+                    h:hs' -> return (CI.mk h, Set.fromList $ map CI.mk hs'))
         WebAppConfig
             <$> lookupBase basedir o "exec"
             <*> o .:? "args" .!= V.empty
@@ -342,7 +343,7 @@ instance ToJSON (WebAppConfig ()) where
         [ "exec" .= F.encodeString waconfigExec
         , "args" .= waconfigArgs
         , "env" .= waconfigEnvironment
-        , "hosts" .= (waconfigApprootHost : Set.toList waconfigHosts)
+        , "hosts" .= map CI.original (waconfigApprootHost : Set.toList waconfigHosts)
         , "ssl" .= waconfigSsl
         ]
 

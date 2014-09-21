@@ -11,6 +11,7 @@ import           Blaze.ByteString.Builder          (copyByteString)
 import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
+import qualified Data.CaseInsensitive              as CI
 import           Data.Default
 import           Data.Monoid                       (mappend)
 import           Data.Text.Encoding                (encodeUtf8)
@@ -144,7 +145,7 @@ redirectApp RedirectConfig {..} req =
     mkUrl (RDUrl url) = encodeUtf8 url
     mkUrl (RDPrefix isSecure host mport) = S.concat
         [ if isSecure then "https://" else "http://"
-        , encodeUtf8 host
+        , encodeUtf8 $ CI.original host
         , case mport of
             Nothing -> ""
             Just port

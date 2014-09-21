@@ -15,6 +15,7 @@ module Keter.Types.Common
 import           Control.Exception          (Exception, SomeException)
 import           Data.Aeson                 (Object)
 import           Data.ByteString            (ByteString)
+import           Data.CaseInsensitive       (CI, original)
 import           Data.Map                   (Map)
 import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
@@ -49,9 +50,9 @@ instance ToCurrent a => ToCurrent (Maybe a) where
 type Port = Int
 
 -- | A virtual host we want to serve content from.
-type Host = Text
+type Host = CI Text
 
-type HostBS = ByteString
+type HostBS = CI ByteString
 
 getAppname :: FilePath -> Text
 getAppname = either id id . toText . basename
@@ -117,17 +118,17 @@ instance Show LogMessage where
         , show e
         ]
     show SanityChecksPassed = "Sanity checks passed"
-    show (ReservingHosts app hosts) = "Reserving hosts for app " ++ show app ++ ": " ++ unwords (map unpack $ Set.toList hosts)
-    show (ForgetingReservations app hosts) = "Forgeting host reservations for app " ++ show app ++ ": " ++ unwords (map unpack $ Set.toList hosts)
-    show (ActivatingApp app hosts) = "Activating app " ++ show app ++ " with hosts: " ++ unwords (map unpack $ Set.toList hosts)
-    show (DeactivatingApp app hosts) = "Deactivating app " ++ show app ++ " with hosts: " ++ unwords (map unpack $ Set.toList hosts)
+    show (ReservingHosts app hosts) = "Reserving hosts for app " ++ show app ++ ": " ++ unwords (map (unpack . original) $ Set.toList hosts)
+    show (ForgetingReservations app hosts) = "Forgeting host reservations for app " ++ show app ++ ": " ++ unwords (map (unpack . original) $ Set.toList hosts)
+    show (ActivatingApp app hosts) = "Activating app " ++ show app ++ " with hosts: " ++ unwords (map (unpack . original) $ Set.toList hosts)
+    show (DeactivatingApp app hosts) = "Deactivating app " ++ show app ++ " with hosts: " ++ unwords (map (unpack . original) $ Set.toList hosts)
     show (ReactivatingApp app old new) = concat
         [ "Reactivating app "
         , show app
         , ".  Old hosts: "
-        , unwords (map unpack $ Set.toList old)
+        , unwords (map (unpack . original) $ Set.toList old)
         , ". New hosts: "
-        , unwords (map unpack $ Set.toList new)
+        , unwords (map (unpack . original) $ Set.toList new)
         , "."
         ]
     show (WatchedFile action fp) = concat

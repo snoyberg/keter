@@ -19,6 +19,7 @@ import           Control.Concurrent.STM
 import           Control.Exception         (bracketOnError, throwIO)
 import           Control.Exception         (IOException, try)
 import           Control.Monad             (void, when)
+import qualified Data.CaseInsensitive      as CI
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.LogFile      (RotatingLog)
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
@@ -163,7 +164,7 @@ withActions asc bconfig f =
     loop (StanzaReverseProxy rev:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions
       where
-        actions = Map.insert (reversingHost rev) (PAReverseProxy rev) actions0
+        actions = Map.insert (CI.mk $ reversingHost rev) (PAReverseProxy rev) actions0
     loop (StanzaBackground back:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
@@ -273,7 +274,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
                 then ("https://", if httpsPort == 443 then "" else ':' : show httpsPort)
                 else ("http://",  if httpPort  ==  80 then "" else ':' : show httpPort)
         env = ("PORT", pack $ show waconfigPort)
-            : ("APPROOT", scheme <> waconfigApprootHost <> pack extport)
+            : ("APPROOT", scheme <> CI.original waconfigApprootHost <> pack extport)
             : Map.toList waconfigEnvironment ++ otherEnv
     exec <- canonicalizePath waconfigExec
     bracketOnError

@@ -11,6 +11,7 @@ module Keter.Main
 import qualified Codec.Archive.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
 import           Control.Monad             (unless)
+import qualified Data.CaseInsensitive      as CI
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Monoid               (mempty)
 import qualified Data.Vector               as V
@@ -179,7 +180,7 @@ startListening KeterConfig {..} hostman = do
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
         manager
-        (HostMan.lookupAction hostman)
+        (HostMan.lookupAction hostman . CI.mk)
 
 runAndBlock :: NonEmptyVector a
             -> (a -> IO ())

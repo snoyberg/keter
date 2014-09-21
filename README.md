@@ -203,3 +203,15 @@ Keter ships by default with a PostgreSQL plugin, which will handle management of
         openssl rsa -in original.key -out new.key
 
     (Back up the original key first, just in case.)
+
+## Stanza-based config files
+
+Starting with Keter 1.0, there is an alternate format for application Keter
+config files, which allows much more flexibility in defining multiple
+functionality for a single bundle (e.g., more than one web app, multiple
+redirects, etc). This README will eventually be updated to reflect all various
+options. In the meanwhile, please see the following examples of how to use this
+file format:
+
+* https://github.com/yesodweb/yesod-scaffold/blob/postgres/config/keter.yml
+* https://github.com/snoyberg/keter/blob/master/incoming/foo1_0/config/keter.yaml

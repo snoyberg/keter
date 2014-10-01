@@ -215,3 +215,18 @@ file format:
 
 * https://github.com/yesodweb/yesod-scaffold/blob/postgres/config/keter.yml
 * https://github.com/snoyberg/keter/blob/master/incoming/foo1_0/config/keter.yaml
+
+## Multiple SSL Certificates
+Keter is able to serve different certificates for different hosts, allowing for the deployment of distinct domains using the same server. An example `keter-config.yaml` would look like::
+```
+root: ..
+listeners:
+  - host: "*4" # Listen on all IPv4 hosts
+    port: 80
+  - host: 127.0.0.1
+    key: key.pem
+    certificate: certificate1.pem
+  - host: 127.0.0.2
+    key: key.pem
+    certificate: certificate2.pem
+```

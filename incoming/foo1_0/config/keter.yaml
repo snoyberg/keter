@@ -28,3 +28,6 @@ stanzas:
       reversing-host: localhost
 
 postgres: true
+
+plugins:
+    #postgres: true

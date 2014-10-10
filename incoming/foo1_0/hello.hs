@@ -20,12 +20,12 @@ main = do
     logger <- mkRequestLogger def
         { outputFormat = Apache FromHeader
         }
-    run port $ logger $ \req -> do
+    run port $ logger $ \req send -> do
         liftIO $ putStrLn $ "Received a request at: " ++ show (pathInfo req)
         liftIO $ hFlush stdout
         liftIO $ hPutStrLn stderr $ "Testing standard error"
         liftIO $ hFlush stderr
-        return $ responseLBS status200 [("content-type", "text/plain")] $ L8.pack $ unlines
+        send $ responseLBS status200 [("content-type", "text/plain")] $ L8.pack $ unlines
             $ ("Message: " ++ msg)
             : ("Path: " ++ fp)
             : ("Headers: " ++ show (requestHeaders req))

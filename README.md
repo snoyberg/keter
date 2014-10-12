@@ -167,7 +167,16 @@ application, delete the file from incoming.
 
 Keter ships by default with a PostgreSQL plugin, which will handle management of PostgreSQL databases for your application. To use this, make the following changes:
 
-* Add `postgres: true` to your `config/keter.yaml` file.
+* Add the following lines to your `config/keter.yaml` file:
+
+```yaml
+plugins:
+  postgres: true
+```
+
+(Note: The `plugins` configuration option was added in v1.0 of the
+keter configuration syntax. If you are using v0.4 then use `postgres: true`.)
+
 * Modify your application to get its database connection settings from the following environment variables:
     * `PGHOST`
     * `PGPORT`

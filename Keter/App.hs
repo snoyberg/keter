@@ -269,11 +269,12 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
     let httpPort  = kconfigExternalHttpPort  ascKeterConfig
         httpsPort = kconfigExternalHttpsPort ascKeterConfig
+        keterEnv  = Map.toList $ kconfigEnvironment ascKeterConfig
         (scheme, extport) =
             if waconfigSsl
                 then ("https://", if httpsPort == 443 then "" else ':' : show httpsPort)
                 else ("http://",  if httpPort  ==  80 then "" else ':' : show httpPort)
-        env = ("PORT", pack $ show waconfigPort)
+        env = keterEnv ++ ("PORT", pack $ show waconfigPort)
             : ("APPROOT", scheme <> CI.original waconfigApprootHost <> pack extport)
             : Map.toList waconfigEnvironment ++ otherEnv
     exec <- canonicalizePath waconfigExec

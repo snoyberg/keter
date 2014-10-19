@@ -93,6 +93,7 @@ data KeterConfig = KeterConfig
     -- ^ External HTTP port when generating APPROOTs.
     , kconfigExternalHttpsPort :: !Int
     -- ^ External HTTPS port when generating APPROOTs.
+    , kconfigEnvironment :: !(Map Text Text)
     }
 
 instance ToCurrent KeterConfig where
@@ -106,6 +107,7 @@ instance ToCurrent KeterConfig where
         , kconfigIpFromHeader = ipFromHeader
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
+        , kconfigEnvironment = Map.empty
         }
       where
         getSSL Nothing = V.empty
@@ -125,6 +127,7 @@ instance Default KeterConfig where
         , kconfigIpFromHeader = False
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
+        , kconfigEnvironment = Map.empty
         }
 
 instance ParseYamlFile KeterConfig where
@@ -143,6 +146,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "ip-from-header" .!= False
             <*> o .:? "external-http-port" .!= 80
             <*> o .:? "external-https-port" .!= 443
+            <*> o .:? "env" .!= Map.empty
 
 data Stanza port
     = StanzaStaticFiles !StaticFilesConfig

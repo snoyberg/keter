@@ -21,7 +21,10 @@ Do get Keter up-and-running quickly on an Ubuntu system, run:
 (Note: you may need to run the above command twice, if the shell exits after
 `apt-get` but before running the rest of its instructions.) This will download
 and build Keter from source and get it running with a
-default configuration.
+default configuration. By default Keter will be set up to also support HTTPS, and
+will require you to provide a key and certificate in `/opt/keter/etc`. You can
+disable HTTPS in `/opt/keter/etc/keter-config.yaml` by commenting the certificate
+and key lines.
 
 _This approach is not recommended for a production system_. We do not recommend
 installing a full GHC toolchain on a production server, nor running such ad-hoc
@@ -239,3 +242,11 @@ listeners:
     key: key.pem
     certificate: certificate2.pem
 ```
+## FAQ
+*   Keter spawns multiple failing process when run with `sudo start keter`.
+    *   This may be due to Keter being unable to find the SSL certificate and key.
+        Try to run `sudo /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml`.
+        If it fails with `keter: etc/certificate.pem: openBinaryFile: does not exist`
+        or something like it, you may need to provide valid SSL certificates and keys
+        or disable HTTPS, by uncommenting the key and certificate lines from 
+        `/opt/keter/etc/keter-config.yaml`.

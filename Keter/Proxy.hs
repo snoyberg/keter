@@ -13,8 +13,9 @@ import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
 import qualified Data.CaseInsensitive              as CI
 import           Data.Default
-import           Data.Monoid                       (mappend)
-import           Data.Text.Encoding                (encodeUtf8)
+import           Data.Monoid                       (mappend, mempty)
+import           Data.Text.Encoding                (encodeUtf8, decodeUtf8With)
+import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
 import qualified Filesystem.Path.CurrentOS         as F
 import           Keter.Types
@@ -45,26 +46,22 @@ type HostLookup = ByteString -> IO (Maybe ProxyAction)
 reverseProxy :: Bool
              -> Manager -> HostLookup -> ListeningPort -> IO ()
 reverseProxy useHeader manager hostLookup listener =
-    run $ gzip def $ withClient useHeader protocol manager hostLookup
+    run $ gzip def $ withClient isSecure useHeader manager hostLookup
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
-    run =
+    (run, isSecure) =
         case listener of
-            LPInsecure host port -> Warp.runSettings (warp host port)
-            LPSecure host port cert key -> WarpTLS.runTLS
+            LPInsecure host port -> (Warp.runSettings (warp host port), False)
+            LPSecure host port cert key -> (WarpTLS.runTLS
                 (WarpTLS.tlsSettings (F.encodeString cert) (F.encodeString key))
-                (warp host port)
-    protocol =
-        case listener of
-            LPInsecure _ _ -> "http"
-            LPSecure _ _ _ _ -> "https"
+                (warp host port), True)
 
-withClient :: Bool -- ^ use incoming request header for IP address
-           -> ByteString -- ^ protocol, for X-Forwarded-Proto
+withClient :: Bool -- ^ is secure?
+           -> Bool -- ^ use incoming request header for IP address
            -> Manager
            -> HostLookup
            -> Wai.Application
-withClient useHeader protocol manager portLookup req0 sendResponse =
+withClient isSecure useHeader manager portLookup req0 sendResponse =
     timeBound (5 * 60 * 1000 * 1000) (waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
@@ -72,6 +69,10 @@ withClient useHeader protocol manager portLookup req0 sendResponse =
                 else SIHFromSocket
         } manager req0 sendResponse)
   where
+    protocol
+        | isSecure = "https"
+        | otherwise = "http"
+
     -- FIXME This is a temporary workaround for
     -- https://github.com/snoyberg/keter/issues/29. After some research, it
     -- seems like Warp is behaving properly here. I'm still not certain why the
@@ -97,7 +98,20 @@ withClient useHeader protocol manager portLookup req0 sendResponse =
         mport <- liftIO $ portLookup $ S.takeWhile (/= 58) host
         case mport of
             Nothing -> return $ WPRResponse $ unknownHostResponse host
-            Just action -> performAction req action
+            Just (action, requiresSecure)
+                | requiresSecure && not isSecure -> performHttpsRedirect host req
+                | otherwise -> performAction req action
+
+    performHttpsRedirect host =
+        return . WPRResponse . redirectApp config
+      where
+        host' = CI.mk $ decodeUtf8With lenientDecode host
+        config = RedirectConfig
+            { redirconfigHosts = mempty
+            , redirconfigStatus = 301
+            , redirconfigActions = V.singleton $ RedirectAction SPAny
+                                 $ RDPrefix True host' Nothing
+            }
 
     performAction req (PAPort port) =
         return $ WPRModifiedRequest req' $ ProxyDest "127.0.0.1" port

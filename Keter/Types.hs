@@ -11,7 +11,9 @@ import Keter.Types.V10 as X
     , StaticFilesConfig (..)
     , KeterConfig (..)
     , Stanza (..)
-    , ProxyAction (..)
+    , StanzaRaw (..)
+    , ProxyAction
+    , ProxyActionRaw (..)
     , RedirectDest (..)
     , RedirectAction (..)
     , SourcePath (..)
@@ -19,5 +21,6 @@ import Keter.Types.V10 as X
     , AppInput (..)
     , BackgroundConfig (..)
     , RestartCount (..)
+    , RequiresSecure
     )
 import Network.HTTP.ReverseProxy.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))

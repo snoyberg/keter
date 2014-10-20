@@ -137,35 +137,35 @@ withActions asc bconfig f =
     loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty
   where
     loop [] wacs backs actions = f wacs backs actions
-    loop (StanzaWebApp wac:stanzas) wacs backs actions = bracketOnError
+    loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = bracketOnError
         (getPort (ascLog asc) (ascPortPool asc) >>= either throwIO return)
         (releasePort (ascPortPool asc))
         (\port -> loop
             stanzas
             (wac { waconfigPort = port } : wacs)
             backs
-            (Map.unions $ actions : map (\host -> Map.singleton host $ PAPort port) hosts))
+            (Map.unions $ actions : map (\host -> Map.singleton host (PAPort port, rs)) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
-    loop (StanzaStaticFiles sfc:stanzas) wacs backs actions0 =
+    loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions
       where
         actions = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host $ PAStatic sfc)
+                : map (\host -> Map.singleton host (PAStatic sfc, rs))
                   (Set.toList (sfconfigHosts sfc))
-    loop (StanzaRedirect red:stanzas) wacs backs actions0 =
+    loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions
       where
         actions = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host $ PARedirect red)
+                : map (\host -> Map.singleton host (PARedirect red, rs))
                   (Set.toList (redirconfigHosts red))
-    loop (StanzaReverseProxy rev:stanzas) wacs backs actions0 =
+    loop (Stanza (StanzaReverseProxy rev) rs:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions
       where
-        actions = Map.insert (CI.mk $ reversingHost rev) (PAReverseProxy rev) actions0
-    loop (StanzaBackground back:stanzas) wacs backs actions =
+        actions = Map.insert (CI.mk $ reversingHost rev) (PAReverseProxy rev, rs) actions0
+    loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
 withRotatingLog :: AppStartConfig
@@ -197,8 +197,8 @@ withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
     ascLog SanityChecksPassed
     f
   where
-    go (StanzaWebApp WebAppConfig {..}) = isExec waconfigExec
-    go (StanzaBackground BackgroundConfig {..}) = isExec bgconfigExec
+    go (Stanza (StanzaWebApp WebAppConfig {..}) _) = isExec waconfigExec
+    go (Stanza (StanzaBackground BackgroundConfig {..}) _) = isExec bgconfigExec
     go _ = return ()
 
     isExec fp = do

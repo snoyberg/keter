@@ -1,3 +1,5 @@
+__1.3.5__ All stanzas may have the `requires-secure` property to force redirect to HTTPS.
+
 __1.3.4__ Support for overriding external ports. Support for keter.yml in addition to keter.yaml. Case insensitive hostname lookups.
 
 __1.3.3__ Set the X-Forwarded-Proto header

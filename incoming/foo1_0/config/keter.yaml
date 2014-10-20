@@ -13,6 +13,7 @@ stanzas:
       host: foobar
       root: ..
       directory-listing: true
+      require-secure: true
 
     - type: static-files
       host: unsafe1_1_0

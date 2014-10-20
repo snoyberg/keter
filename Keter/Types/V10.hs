@@ -39,9 +39,9 @@ instance ToCurrent BundleConfig where
     type Previous BundleConfig = V04.BundleConfig
     toCurrent (V04.BundleConfig webapp statics redirs) = BundleConfig
         { bconfigStanzas = V.concat
-            [ maybe V.empty V.singleton $ fmap (StanzaWebApp . toCurrent) webapp
-            , V.fromList $ map (StanzaStaticFiles . toCurrent) $ Set.toList statics
-            , V.fromList $ map (StanzaRedirect . toCurrent) $ Set.toList redirs
+            [ maybe V.empty V.singleton $ fmap (flip Stanza False . StanzaWebApp . toCurrent) webapp
+            , V.fromList $ map (flip Stanza False . StanzaStaticFiles . toCurrent) $ Set.toList statics
+            , V.fromList $ map (flip Stanza False . StanzaRedirect . toCurrent) $ Set.toList redirs
             ]
         , bconfigPlugins =
             case webapp >>= HashMap.lookup "postgres" . V04.configRaw of
@@ -102,7 +102,7 @@ instance ToCurrent KeterConfig where
         , kconfigPortPool = portman
         , kconfigListeners = NonEmptyVector (LPInsecure host port) (getSSL ssl)
         , kconfigSetuid = setuid
-        , kconfigBuiltinStanzas = V.fromList $ map StanzaReverseProxy $ Set.toList rproxy
+        , kconfigBuiltinStanzas = V.fromList $ map (flip Stanza False . StanzaReverseProxy) $ Set.toList rproxy
         , kconfigIpFromHeader = ipFromHeader
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
@@ -144,7 +144,12 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "external-http-port" .!= 80
             <*> o .:? "external-https-port" .!= 443
 
-data Stanza port
+-- | Whether we should force redirect to HTTPS routes.
+type RequiresSecure = Bool
+
+data Stanza port = Stanza (StanzaRaw port) RequiresSecure
+
+data StanzaRaw port
     = StanzaStaticFiles !StaticFilesConfig
     | StanzaRedirect !RedirectConfig
     | StanzaWebApp !(WebAppConfig port)
@@ -160,24 +165,38 @@ data Stanza port
 -- 1. Webapps will be assigned ports.
 --
 -- 2. Not all stanzas have an associated proxy action.
-data ProxyAction = PAPort Port
-                 | PAStatic StaticFilesConfig
-                 | PARedirect RedirectConfig
-                 | PAReverseProxy ReverseProxyConfig
+data ProxyActionRaw
+    = PAPort Port
+    | PAStatic StaticFilesConfig
+    | PARedirect RedirectConfig
+    | PAReverseProxy ReverseProxyConfig
     deriving Show
+
+type ProxyAction = (ProxyActionRaw, RequiresSecure)
 
 instance ParseYamlFile (Stanza ()) where
     parseYamlFile basedir = withObject "Stanza" $ \o -> do
         typ <- o .: "type"
-        case typ of
+        needsHttps <- o .:? "require-secure" .!= False
+        raw <- case typ of
             "static-files" -> fmap StanzaStaticFiles $ parseYamlFile basedir $ Object o
             "redirect" -> fmap StanzaRedirect $ parseYamlFile basedir $ Object o
             "webapp" -> fmap StanzaWebApp $ parseYamlFile basedir $ Object o
             "reverse-proxy" -> fmap StanzaReverseProxy $ parseJSON $ Object o
             "background" -> fmap StanzaBackground $ parseYamlFile basedir $ Object o
             _ -> fail $ "Unknown stanza type: " ++ typ
+        return $ Stanza raw needsHttps
 
 instance ToJSON (Stanza ()) where
+    toJSON (Stanza raw rs) = addRequiresSecure rs raw
+
+addRequiresSecure :: ToJSON a => Bool -> a -> Value
+addRequiresSecure rs x =
+    case toJSON x of
+        Object o -> Object $ HashMap.insert "requires-secure" (toJSON rs) o
+        v -> v
+
+instance ToJSON (StanzaRaw ()) where
     toJSON (StanzaStaticFiles x) = addStanzaType "static-files" x
     toJSON (StanzaRedirect x) = addStanzaType "redirect" x
     toJSON (StanzaWebApp x) = addStanzaType "webapp" x

@@ -94,6 +94,7 @@ data KeterConfig = KeterConfig
     , kconfigExternalHttpsPort :: !Int
     -- ^ External HTTPS port when generating APPROOTs.
     , kconfigEnvironment :: !(Map Text Text)
+    -- ^ Environment variables to be passed to all apps.
     }
 
 instance ToCurrent KeterConfig where

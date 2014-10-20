@@ -269,14 +269,19 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
     let httpPort  = kconfigExternalHttpPort  ascKeterConfig
         httpsPort = kconfigExternalHttpsPort ascKeterConfig
-        keterEnv  = Map.toList $ kconfigEnvironment ascKeterConfig
         (scheme, extport) =
             if waconfigSsl
                 then ("https://", if httpsPort == 443 then "" else ':' : show httpsPort)
                 else ("http://",  if httpPort  ==  80 then "" else ':' : show httpPort)
-        env = keterEnv ++ ("PORT", pack $ show waconfigPort)
-            : ("APPROOT", scheme <> CI.original waconfigApprootHost <> pack extport)
-            : Map.toList waconfigEnvironment ++ otherEnv
+        env = Map.toList $ Map.unions
+            -- Ordering chosen specifically to precedence rules: app specific,
+            -- plugins, global, and then auto-set Keter variables.
+            [ waconfigEnvironment
+            , Map.fromList otherEnv
+            , kconfigEnvironment ascKeterConfig
+            , Map.singleton "PORT" $ pack $ show waconfigPort
+            , Map.singleton "APPROOT" $ scheme <> CI.original waconfigApprootHost <> pack extport
+            ]
     exec <- canonicalizePath waconfigExec
     bracketOnError
         (monitorProcess

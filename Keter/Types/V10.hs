@@ -182,7 +182,7 @@ type ProxyAction = (ProxyActionRaw, RequiresSecure)
 instance ParseYamlFile (Stanza ()) where
     parseYamlFile basedir = withObject "Stanza" $ \o -> do
         typ <- o .: "type"
-        needsHttps <- o .:? "require-secure" .!= False
+        needsHttps <- o .:? "requires-secure" .!= False
         raw <- case typ of
             "static-files" -> fmap StanzaStaticFiles $ parseYamlFile basedir $ Object o
             "redirect" -> fmap StanzaRedirect $ parseYamlFile basedir $ Object o

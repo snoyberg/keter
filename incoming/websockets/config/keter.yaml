@@ -1,0 +1,5 @@
+stanzas:
+- type: webapp
+  exec: ../chat
+  hosts:
+  - keter-websockets

@@ -92,6 +92,7 @@ extern int launch_process_tracker(void) {
             n = n->next;
             free(n2);
         }
+        exit(0);
     }
     else {
         close(pipes[0]);

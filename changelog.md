@@ -1,3 +1,5 @@
+__1.3.5.1__ Fix bug where the cleanup process would remain running.
+
 __1.3.5__ All stanzas may have the `requires-secure` property to force redirect to HTTPS. You can set additional environment variables in your global Keter config file.
 
 __1.3.4__ Support for overriding external ports. Support for keter.yml in addition to keter.yaml. Case insensitive hostname lookups.

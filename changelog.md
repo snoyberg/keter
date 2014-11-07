@@ -1,3 +1,5 @@
+__1.3.5.3__ More correct/complete solution for issue #44. Allows looking up hosts either with or without port numbers.
+
 __1.3.5.2__ Partial workaround for keter.yaml files that give a port with the hostname.
 
 __1.3.5.1__ Fix bug where the cleanup process would remain running.

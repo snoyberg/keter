@@ -94,8 +94,17 @@ withClient isSecure useHeader manager portLookup req0 sendResponse =
 
     processHost :: Wai.Request -> S.ByteString -> IO WaiProxyResponse
     processHost req host = do
-        -- Take the host name up until the port number.
-        mport <- liftIO $ portLookup $ S.takeWhile (/= 58) host
+        -- Perform two levels of lookup. First: look up the entire host. If
+        -- that fails, try stripping off any port number and try again.
+        mport <- liftIO $ do
+            mport1 <- portLookup host
+            case mport1 of
+                Just _ -> return mport1
+                Nothing -> do
+                    let host' = S.takeWhile (/= 58) host
+                    if host' == host
+                        then return Nothing
+                        else portLookup host'
         case mport of
             Nothing -> return $ WPRResponse $ unknownHostResponse host
             Just (action, requiresSecure)

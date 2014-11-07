@@ -32,7 +32,7 @@ instance ParseYamlFile AppConfig where
     parseYamlFile basedir = withObject "AppConfig" $ \o -> AppConfig
         <$> lookupBase basedir o "exec"
         <*> o .:? "args" .!= []
-        <*> (T.takeWhile (/= ':') <$> o .: "host")
+        <*> o .: "host"
         <*> o .:? "ssl" .!= False
         <*> o .:? "extra-hosts" .!= Set.empty
         <*> return o

@@ -6,7 +6,7 @@ root: /var/www/keter
 listeners:
     # HTTP
     - host: "*4" # Listen on all IPv4 hosts
-      port: 3080 # Could be used to modify port
+      port: 80 # Could be used to modify port
     # HTTPS
 #    - host: "*4"
 #      #port: 443
@@ -14,7 +14,8 @@ listeners:
 #      certificate: certificate.pem
 
 # User to run applications as
-# setuid: ubuntu
+setuid: www-data
+
 # Get the user's IP address from x-forwarded-for. Useful when sitting behind a
 # load balancer like Amazon ELB.
 # ip-from-header: true

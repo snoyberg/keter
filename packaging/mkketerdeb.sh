@@ -46,7 +46,7 @@ $FPM -n $NAME -v $VER -t deb --deb-init=init/sysv/keter \
                              --config-files /etc/keter.conf \
                              --deb-user www-data \
                              --deb-group www-data \
-                             -s dir bin/keter=/usr/sbin/keter etc/keter-config.yaml=/etc/keter.conf var/www=var var/run=var
+                             -s dir bin/keter=/usr/sbin/keter etc/keter-config.yaml=/etc/keter.conf var/www=var
 
 # for upstart (ubuntu?)
 # $FPM -n $NAME -v $VER -t deb --deb-init=init/sysv/keter --config-files /opt/keter/etc/keter-config.yaml -s dir bin/keter=/opt/keter/bin/keter etc/keter-config.yaml=/opt/keter/etc/keter-config.yaml

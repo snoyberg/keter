@@ -18,14 +18,14 @@ umask 022
 export PATH="${PATH:+$PATH:}/usr/sbin:/sbin"
 KETER=/usr/sbin/keter
 CONFIG=/etc/keter.conf
-PIDFILE=/var/run/keter/keter.pid
+PIDFILE=/var/run/keter.pid
 USER=www-data
 GROUP=www-data
 
 case "$1" in
   start)
 	log_daemon_msg "Starting Keter: Web app deployment mananger" "keter"
-	if start-stop-daemon --start --quiet --oknodo --background --user $USER --group $GROUP --chuid $USER --make-pidfile --pidfile $PIDFILE --exec $KETER -- $CONFIG; then
+	if start-stop-daemon --start --quiet --oknodo --background --user $USER --group $GROUP --make-pidfile --pidfile $PIDFILE --exec $KETER -- $CONFIG; then
 	    log_end_msg 0
 	else
 	    log_end_msg 1
@@ -43,7 +43,7 @@ case "$1" in
   restart)
 	log_daemon_msg "Restarting Keter: Web app deployment mananger" "keter"
 	start-stop-daemon --stop --quiet --oknodo --retry 30 --user $USER --pidfile $PIDFILE
-	if start-stop-daemon --start --quiet --oknodo --background --group $GROUP --chuid $USER --pidfile $PIDFILE --exec $KETER -- $CONFIG; then
+	if start-stop-daemon --start --quiet --oknodo --background --user $USER --group $GROUP --pidfile $PIDFILE --exec $KETER -- $CONFIG; then
 	    log_end_msg 0
 	else
 	    log_end_msg 1

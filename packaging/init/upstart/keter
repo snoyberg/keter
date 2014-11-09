@@ -1,0 +1,8 @@
+# /etc/init/keter.conf
+start on (net-device-up and local-filesystems and runlevel [2345])
+stop on runlevel [016]
+respawn
+
+console none
+
+exec /usr/sbin/keter /etc/keter.conf

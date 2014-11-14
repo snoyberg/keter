@@ -12,7 +12,7 @@ import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
 import qualified Data.CaseInsensitive              as CI
-import           Data.Default
+import           Data.Default                      (Default(..))
 import           Data.Monoid                       (mappend, mempty)
 import           Data.Text.Encoding                (encodeUtf8, decodeUtf8With)
 import           Data.Text.Encoding.Error          (lenientDecode)
@@ -35,7 +35,7 @@ import           Network.Wai.Application.Static    (defaultFileServerSettings,
                                                     ssListing, staticApp)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
-import           Network.Wai.Middleware.Gzip       (gzip, def)
+import           Network.Wai.Middleware.Gzip       (gzip)
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
 import System.Timeout.Lifted (timeout)

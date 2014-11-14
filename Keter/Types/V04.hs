@@ -17,7 +17,6 @@ import qualified Network.Wai.Handler.WarpTLS as WarpTLS
 import Filesystem.Path.CurrentOS (encodeString)
 import Keter.Types.Common
 import Network.HTTP.ReverseProxy.Rewrite
-import qualified Data.Text as T
 
 data AppConfig = AppConfig
     { configExec :: F.FilePath

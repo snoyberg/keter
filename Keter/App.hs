@@ -44,6 +44,7 @@ import           Keter.PortPool            (PortPool, getPort, releasePort)
 import           Keter.Types
 import qualified Network
 import           Prelude                   hiding (FilePath)
+import           System.Environment        (getEnvironment)
 import           System.IO                 (hClose)
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime)
@@ -267,6 +268,7 @@ launchWebApp :: AppStartConfig
              -> IO a
 launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} f = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
+    systemEnv <- getEnvironment
     let httpPort  = kconfigExternalHttpPort  ascKeterConfig
         httpsPort = kconfigExternalHttpsPort ascKeterConfig
         (scheme, extport) =
@@ -277,6 +279,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             -- Ordering chosen specifically to precedence rules: app specific,
             -- plugins, global, and then auto-set Keter variables.
             [ waconfigEnvironment
+            , Map.filterWithKey (\k _ -> Set.member k waconfigForwardEnv) $ Map.fromList $ map (\x -> (pack (fst x), pack (snd x))) systemEnv
             , Map.fromList otherEnv
             , kconfigEnvironment ascKeterConfig
             , Map.singleton "PORT" $ pack $ show waconfigPort

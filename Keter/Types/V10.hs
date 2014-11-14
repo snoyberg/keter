@@ -327,6 +327,7 @@ data WebAppConfig port = WebAppConfig
     , waconfigHosts       :: !(Set Host) -- ^ all hosts, not including the approot host
     , waconfigSsl         :: !Bool
     , waconfigPort        :: !port
+    , waconfigForwardEnv  :: !(Set Text)
     }
     deriving Show
 
@@ -340,6 +341,7 @@ instance ToCurrent (WebAppConfig ()) where
         , waconfigHosts = Set.map CI.mk hosts
         , waconfigSsl = ssl
         , waconfigPort = ()
+        , waconfigForwardEnv = Set.empty
         }
 
 instance ParseYamlFile (WebAppConfig ()) where
@@ -361,6 +363,7 @@ instance ParseYamlFile (WebAppConfig ()) where
             <*> return hosts
             <*> o .:? "ssl" .!= False
             <*> return ()
+            <*> o .:? "forward-env" .!= Set.empty
 
 instance ToJSON (WebAppConfig ()) where
     toJSON WebAppConfig {..} = object
@@ -369,6 +372,7 @@ instance ToJSON (WebAppConfig ()) where
         , "env" .= waconfigEnvironment
         , "hosts" .= map CI.original (waconfigApprootHost : Set.toList waconfigHosts)
         , "ssl" .= waconfigSsl
+        , "forward-env" .= waconfigForwardEnv
         ]
 
 data AppInput = AIBundle !FilePath !EpochTime

@@ -5,6 +5,9 @@ stanzas:
         - Hello World 2
       env:
         FROM_KETER_CONFIG: foo bar baz
+      forward-env:
+        - FROM_SYSTEM_ENV
+        - ANOTHER_ENV_VAR
       hosts:
         - keter1_0
         - pong1_0

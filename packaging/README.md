@@ -2,6 +2,11 @@
 
 We provide two scripts to assist in building debian packages.
 
+## Requirements
+
+The `mkketerdeb.sh` script requires `cabal` with sandbox support.
+But will try to install the other dependencies on it's own.
+
 ## Building keter-X.Y.Z.deb
 
 1. Download a recent keter release from <https://github.com/snoyberg/keter/releases>

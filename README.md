@@ -16,7 +16,7 @@ allows for easy management of your web apps.
 
 Do get Keter up-and-running quickly on an Ubuntu system, run:
 
-    wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash
+    wget -O - https://raw.githubusercontent.com/snoyberg/keter/master/setup-keter.sh | bash
 
 (Note: you may need to run the above command twice, if the shell exits after
 `apt-get` but before running the rest of its instructions.) This will download

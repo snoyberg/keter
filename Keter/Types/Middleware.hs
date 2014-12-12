@@ -46,13 +46,13 @@ instance FromJSON MiddlewareConfig where
   parseJSON (String "accept-override"     ) = pure AcceptOverride
   parseJSON (String "autohead"            ) = pure Autohead
   parseJSON (String "jsonp"               ) = pure Jsonp
-  parseJSON (String "method-override"      ) = pure MethodOverride
+  parseJSON (String "method-override"     ) = pure MethodOverride
   parseJSON (String "method-override-post") = pure MethodOverridePost
   parseJSON (Object o) =
      case H.toList o of
-      [("basic-auth", Object o')] -> BasicAuth  <$> o' .:? "realm" .!= "keter"
-                                                <*> (map (T.encodeUtf8 *** T.encodeUtf8) <$>  o' .:? "creds" .!= [])
-      [("headers"   , _ )] -> AddHeaders . map (T.encodeUtf8 *** T.encodeUtf8) <$> o .:? "headers" .!= []
+      [("basic-auth", Object ( o'))] -> BasicAuth  <$> o' .:? "realm" .!= "keter"
+                                                <*> (map (T.encodeUtf8 *** T.encodeUtf8) . H.toList <$> o' .:? "creds"   .!= H.empty)
+      [("headers"   , Object _ )]    -> AddHeaders . map (T.encodeUtf8 *** T.encodeUtf8) . H.toList <$> o  .:? "headers" .!= H.empty
       [("local"     , Object o')] -> Local  <$> o' .:? "status" .!=  401
                                             <*> (TL.encodeUtf8 <$> o' .:? "message" .!= "Unauthorized Accessing from Localhost ONLY" )
       _                      -> mzero -- fail "Rule: unexpected format"
@@ -64,8 +64,11 @@ instance ToJSON MiddlewareConfig where
   toJSON Jsonp              = "jsonp"
   toJSON MethodOverride     = "method-override"
   toJSON MethodOverridePost = "method-override-post"
-  toJSON (BasicAuth realm cred) = object [ "basic-auth" .= object [ "realm" .= realm, "creds" .= map (T.decodeUtf8 *** T.decodeUtf8) cred     ]]
-  toJSON (AddHeaders headers)   = object [ "headers"    .= map (T.decodeUtf8 *** T.decodeUtf8) headers  ]
+  toJSON (BasicAuth realm cred) = object [ "basic-auth" .= object [ "realm" .= realm
+                                                                  , "creds" .= object ( map ( T.decodeUtf8 *** (String . T.decodeUtf8)) cred )
+                                                                  ]
+                                         ]
+  toJSON (AddHeaders headers)   = object [ "headers"    .= object ( map (T.decodeUtf8 *** String . T.decodeUtf8) headers)  ]
   toJSON (Local sc msg)         = object [ "local"      .= object [ "status" .= sc
                                                                   , "message" .=  TL.decodeUtf8 msg 
                                                                   ]

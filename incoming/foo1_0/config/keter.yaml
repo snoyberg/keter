@@ -37,13 +37,10 @@ stanzas:
          - basic-auth:
               realm: "bla bla"
               creds:
-                 - - jon
-                   - rocks
-                 - - bla
-                   - dada
+                 jon : rocks
+                 bla : dada
          - headers:
-            - - Access-Control-Allow-Origin
-              - "*"
+             Access-Control-Allow-Origin : "*"
     - type: reverse-proxy
       reversed-host: www.yesodweb.com
       reversed-port: 80

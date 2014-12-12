@@ -11,6 +11,7 @@ import Data.Aeson (Object, ToJSON (..))
 import qualified Data.CaseInsensitive as CI
 import Keter.Types.Common
 import qualified Keter.Types.V04 as V04
+import Keter.Types.Middleware
 import Data.Yaml.FilePath
 import Data.Aeson (FromJSON (..), (.:), (.:?), Value (Object, String), withObject, (.!=))
 import Control.Applicative ((<$>), (<*>), (<|>))
@@ -219,6 +220,7 @@ data StaticFilesConfig = StaticFilesConfig
     , sfconfigHosts    :: !(Set Host)
     , sfconfigListings :: !Bool
     -- FIXME basic auth
+    , sfconfigMiddleware :: ![ MiddlewareConfig ]
     }
     deriving Show
 
@@ -228,6 +230,7 @@ instance ToCurrent StaticFilesConfig where
         { sfconfigRoot = root
         , sfconfigHosts = Set.singleton $ CI.mk host
         , sfconfigListings = True
+        , sfconfigMiddleware = []
         }
 
 instance ParseYamlFile StaticFilesConfig where
@@ -235,12 +238,14 @@ instance ParseYamlFile StaticFilesConfig where
         <$> lookupBase basedir o "root"
         <*> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
         <*> o .:? "directory-listing" .!= False
+        <*> o .:? "middleware" .!= []
 
 instance ToJSON StaticFilesConfig where
     toJSON StaticFilesConfig {..} = object
         [ "root" .= F.encodeString sfconfigRoot
         , "hosts" .= Set.map CI.original sfconfigHosts
         , "directory-listing" .= sfconfigListings
+        , "middleware" .= sfconfigMiddleware
         ]
 
 data RedirectConfig = RedirectConfig

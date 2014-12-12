@@ -19,6 +19,7 @@ import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
 import qualified Filesystem.Path.CurrentOS         as F
 import           Keter.Types
+import           Keter.Types.Middleware
 import           Network.HTTP.Conduit              (Manager)
 import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     SetIpHeader (..),
@@ -31,7 +32,7 @@ import           Network.HTTP.Types                (mkStatus, status200,
                                                     status303, status307,
                                                     status404, status500)
 import qualified Network.Wai                       as Wai
-import           Network.Wai.Application.Static    (defaultFileServerSettings,
+import           Network.Wai.Application.Static    (defaultFileServerSettings, ssRedirectToIndex,
                                                     ssListing, staticApp)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
@@ -130,11 +131,12 @@ withClient isSecure useHeader manager portLookup req0 sendResponse =
                                  : Wai.requestHeaders req
             }
     performAction _ (PAStatic StaticFilesConfig {..}) = do
-        return $ WPRApplication $ staticApp (defaultFileServerSettings sfconfigRoot)
+        return $ WPRApplication $ processMiddleware sfconfigMiddleware $ staticApp (defaultFileServerSettings sfconfigRoot)
             { ssListing =
                 if sfconfigListings
                     then Just defaultListing
                     else Nothing
+            , ssRedirectToIndex = True -- XXX: can be removed once WAI-static is fixed
             }
     performAction req (PARedirect config) = return $ WPRResponse $ redirectApp config req
     performAction _ (PAReverseProxy config) = return $ WPRApplication $ Rewrite.simpleReverseProxy manager config

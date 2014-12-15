@@ -32,7 +32,7 @@ import           Network.HTTP.Types                (mkStatus, status200,
                                                     status303, status307,
                                                     status404, status500)
 import qualified Network.Wai                       as Wai
-import           Network.Wai.Application.Static    (defaultFileServerSettings, ssRedirectToIndex,
+import           Network.Wai.Application.Static    (defaultFileServerSettings,
                                                     ssListing, staticApp)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
@@ -136,7 +136,6 @@ withClient isSecure useHeader manager portLookup req0 sendResponse =
                 if sfconfigListings
                     then Just defaultListing
                     else Nothing
-            , ssRedirectToIndex = True -- XXX: can be removed once WAI-static is fixed
             }
     performAction req (PARedirect config) = return $ WPRResponse $ redirectApp config req
     performAction _ (PAReverseProxy config) = return $ WPRApplication $ Rewrite.simpleReverseProxy manager config

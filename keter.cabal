@@ -44,7 +44,7 @@ Library
                      , unix                      >= 2.5
                      , wai-app-static            >= 3.0           && < 3.1
                      , wai                       >= 3.0           && < 3.1
-                     , wai-extra                 >= 3.0           && < 3.1
+                     , wai-extra                 >= 3.0.3         && < 3.1
                      , http-types
                      , regex-tdfa                >= 1.1
                      , attoparsec                >= 0.10

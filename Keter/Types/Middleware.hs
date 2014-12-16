@@ -16,10 +16,9 @@ import Network.Wai.Middleware.AcceptOverride  (acceptOverride)
 import Network.Wai.Middleware.Autohead        (autohead)
 import Network.Wai.Middleware.Jsonp           (jsonp)
 import Network.Wai.Middleware.Local           (local)
--- import Network.Wai.Middleware.AddHeaders      (addHeaders)
+import Network.Wai.Middleware.AddHeaders      (addHeaders)
 import Network.Wai.Middleware.MethodOverride  (methodOverride)
 import Network.Wai.Middleware.MethodOverridePost (methodOverridePost)
-
 import Network.Wai.Middleware.HttpAuth        (basicAuth)
 
 import Data.ByteString.Lazy         as L (ByteString)
@@ -94,9 +93,7 @@ toMiddleware (Local s c )       = local ( responseLBS (toEnum s) [] c )
 toMiddleware MethodOverride     = methodOverride
 toMiddleware MethodOverridePost = methodOverridePost
 toMiddleware (BasicAuth realm cred) = basicAuth (\u p -> return $ maybe False (==p) $ lookup u cred ) (fromString realm)
--- XXX: fix it once we have it
-toMiddleware (AddHeaders headers)   = id -- fix it once we have it
-                    -- addHeaders headers
+toMiddleware (AddHeaders headers)   = addHeaders headers
 
 -- composeMiddleware :
 composeMiddleware :: [Middleware] -> Middleware

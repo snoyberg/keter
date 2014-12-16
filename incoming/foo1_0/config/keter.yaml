@@ -25,7 +25,22 @@ stanzas:
     - type: static-files
       host: unsafe2_1_0
       root: /home
-
+      middleware:
+         - autohead
+         - accept-override
+         - jsonp
+         - method-override
+         - method-override-post
+         - local:
+             status : 405
+             message: "Keter Rocks localy"
+         - basic-auth:
+              realm: "bla bla"
+              creds:
+                 jon : rocks
+                 bla : dada
+         - headers:
+             Access-Control-Allow-Origin : "*"
     - type: reverse-proxy
       reversed-host: www.yesodweb.com
       reversed-port: 80

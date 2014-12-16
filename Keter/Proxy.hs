@@ -19,6 +19,7 @@ import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
 import qualified Filesystem.Path.CurrentOS         as F
 import           Keter.Types
+import           Keter.Types.Middleware
 import           Network.HTTP.Conduit              (Manager)
 import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     SetIpHeader (..),
@@ -130,7 +131,7 @@ withClient isSecure useHeader manager portLookup req0 sendResponse =
                                  : Wai.requestHeaders req
             }
     performAction _ (PAStatic StaticFilesConfig {..}) = do
-        return $ WPRApplication $ staticApp (defaultFileServerSettings sfconfigRoot)
+        return $ WPRApplication $ processMiddleware sfconfigMiddleware $ staticApp (defaultFileServerSettings sfconfigRoot)
             { ssListing =
                 if sfconfigListings
                     then Just defaultListing

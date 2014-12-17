@@ -1,8 +1,7 @@
 Name:                keter
 Version:             1.3.6
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
-Description:
-    Handles deployment of web apps, providing a reverse proxy to achieve zero downtime deployments. For more information, please see the README on Github: <https://github.com/snoyberg/keter#readme>
+Description:         Hackage documentation generation is not reliable. For up to date documentation, please see: <http://www.stackage.org/package/keter>.
 Homepage:            http://www.yesodweb.com/
 License:             MIT
 License-file:        LICENSE
@@ -11,7 +10,8 @@ Maintainer:          michael@snoyman.com
 Category:            Web, Yesod
 Build-type:          Simple
 Cabal-version:       >=1.8
-extra-source-files:  changelog.md
+extra-source-files:  ChangeLog.md
+                     README.md
 
 --Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
 

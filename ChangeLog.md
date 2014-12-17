@@ -1,3 +1,7 @@
+## 1.3.7
+
+* Add ability to use middleware [#63](https://github.com/snoyberg/keter/pulls/63)
+
 ## 1.3.6
 
 Support the `forward-env` setting.

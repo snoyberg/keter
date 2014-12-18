@@ -222,18 +222,23 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
         eres <- E.try $ App.start appStartConfig appid input
         case eres of
             Left e -> do
-                let name =
-                        case appid of
-                            AIBuiltin -> "<builtin>"
-                            AINamed x -> x
                 log $ ErrorStartingBundle name e
                 return Nothing
             Right app -> return $ Just app
     processAction (Just app) (Reload input) = do
-        App.reload app input
-        -- reloading will /always/ result in a valid app, either the old one
-        -- will continue running or the new one will replace it.
-        return $ Just app
+        eres <- E.try $ App.reload app input
+        case eres of
+            Left e -> do
+                log $ ErrorStartingBundle name e
+                -- reloading will /always/ result in a valid app, either the old one
+                -- will continue running or the new one will replace it.
+                return (Just app)
+            Right () -> return $ Just app
+
+    name =
+        case appid of
+            AIBuiltin -> "<builtin>"
+            AINamed x -> x
 
 addApp :: AppManager -> FilePath -> IO ()
 addApp appMan bundle = do

@@ -1,3 +1,7 @@
+## 1.3.7.1
+
+Bug fix: catch exceptions during reload [#64](https://github.com/snoyberg/keter/issues/64)
+
 ## 1.3.7
 
 * Add ability to use middleware [#63](https://github.com/snoyberg/keter/pulls/63)

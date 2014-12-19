@@ -1,5 +1,7 @@
+# Keter Configuration Examples
+#
+#  See README.md for build details
 
-# Build test bundles. See README.md
 
 GHC?=ghc
 

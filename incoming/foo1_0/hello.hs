@@ -25,13 +25,11 @@ main = do
         liftIO $ hFlush stdout
         liftIO $ hPutStrLn stderr $ "Testing standard error"
         liftIO $ hFlush stderr
-        send $ responseLBS status200 [("content-type", "text/plain")] $ L8.pack $ unlines
-            $ ("Message: " ++ msg)
-            : ("Path: " ++ fp)
-            : ("Headers: " ++ show (requestHeaders req))
-            : map (\(k, v) -> concat
-                [ "Env: "
-                , k
-                , " = "
-                , v
-                ]) env
+        send $ responseLBS status200 [("content-type", "text/plain")]
+             $ L8.pack $ unlines
+             $ ("Message: " ++ msg)
+                : ("Path: " ++ fp)
+                : ("Headers: " ++ show (requestHeaders req))
+                : map (\(k, v) -> concat [ "Env: "
+                                         , k, " = ", v
+                                         ]) env

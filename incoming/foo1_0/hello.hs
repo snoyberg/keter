@@ -1,14 +1,16 @@
 {-# LANGUAGE OverloadedStrings #-}
-import System.Environment
-import qualified Data.ByteString.Lazy.Char8 as L8
-import Network.Wai
-import Network.Wai.Handler.Warp
-import Network.HTTP.Types
-import System.Directory
-import Control.Monad.IO.Class
-import System.IO
-import Network.Wai.Middleware.RequestLogger
-import Data.Default
+
+import           Control.Monad.IO.Class
+import qualified Data.ByteString.Lazy.Char8           as L8
+import           Data.Default
+import           Network.HTTP.Types
+import           Network.Wai
+import           Network.Wai.Handler.Warp
+import           Network.Wai.Middleware.RequestLogger
+import           System.Directory
+import           System.Environment
+import           System.IO
+
 
 main :: IO ()
 main = do
@@ -28,8 +30,8 @@ main = do
         send $ responseLBS status200 [("content-type", "text/plain")]
              $ L8.pack $ unlines
              $ ("Message: " ++ msg)
-                : ("Path: " ++ fp)
-                : ("Headers: " ++ show (requestHeaders req))
-                : map (\(k, v) -> concat [ "Env: "
-                                         , k, " = ", v
-                                         ]) env
+             : ("Path: " ++ fp)
+             : ("Headers: " ++ show (requestHeaders req))
+             : map (\(k, v) -> concat [ "Env: "
+                                      , k, " = ", v
+                                      ]) env

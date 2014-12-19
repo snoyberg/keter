@@ -55,4 +55,4 @@ stanzas:
       reversing-host: localhost
 
 plugins:
-    postgres: true
+    #postgres: true

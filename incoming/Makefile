@@ -50,3 +50,5 @@ clean:
 	find . -type f -name '*.keter' -delete
 	find . -type f -name '*.hi' -delete
 	find . -type f -name '*.o' -delete
+	find . -type f -name '*.dyn_hi' -delete
+	find . -type f -name '*.dyn_o' -delete

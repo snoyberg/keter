@@ -54,7 +54,9 @@ import           System.Posix.IO.ByteString      ( closeFd, createPipe,
                                                   fdToHandle)
 import           System.Posix.Signals            (sigKILL, signalProcess)
 import           System.Posix.Types              (CPid (..))
-import           System.Process
+import           System.Process                  (CmdSpec (..), CreateProcess (..),
+                                                  StdStream (..), createProcess,
+                                                  terminateProcess, waitForProcess)
 import           System.Process.Internals        (ProcessHandle (..),
                                                   ProcessHandle__ (..))
 

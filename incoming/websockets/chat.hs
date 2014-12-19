@@ -6,7 +6,8 @@ import Control.Monad (forever)
 import Control.Monad.Trans.Reader
 import Control.Concurrent (threadDelay)
 import Data.Time
-import Conduit
+import Data.Conduit
+import qualified Data.Conduit.List as CL
 import Data.Monoid ((<>))
 import Control.Concurrent.STM.Lifted
 import Data.Text (Text)
@@ -30,7 +31,7 @@ chatApp = do
         dupTChan writeChan
     race_
         (forever $ atomically (readTChan readChan) >>= sendTextData)
-        (sourceWS $$ mapM_C (\msg ->
+        (sourceWS $$ CL.mapM_ (\msg ->
             atomically $ writeTChan writeChan $ name <> ": " <> msg))
 
 getHomeR :: Handler Html

@@ -11,7 +11,7 @@ PKGCONF = ../cabal.sandbox.config
 CABAL_ARGS = --sandbox-config-file=$(PKGCONF)
 
 
-all: foo.keter foo1_0.keter
+all: foo.keter foo1_0.keter websockets
 .PHONY: all
 
 # Simple targets
@@ -36,16 +36,17 @@ foo1_0.keter: ./foo1_0/*.hs ./foo1_0/config/*.yaml
 	cd foo1_0; tar czfv ../foo1_0.keter *
 
 
-# websockets needs Yesod and Conduit
+# websockets needs extra dependencies:
+#
+#  $ cabal install yesod-websockets lifted-base
 websockets.keter: ./websockets/*.hs ./websockets/config/*.yaml
 	@echo "Building websockets example."
 	$(CABAL) $(CABAL_ARGS) exec $(GHC) -- --make ./websockets/chat.hs
 	strip ./websockets/chat
-	tar czfv websockets.keter chat config/keter.yaml
+	cd websockets; tar czfv ../websockets.keter *
 
 
 clean:
-	rm -f *.keter
 	find . -type f -name '*.keter' -delete
 	find . -type f -name '*.hi' -delete
 	find . -type f -name '*.o' -delete

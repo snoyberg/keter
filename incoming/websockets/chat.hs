@@ -1,16 +1,20 @@
-{-# LANGUAGE QuasiQuotes, TemplateHaskell, TypeFamilies, OverloadedStrings #-}
-import Yesod.Core
-import Yesod.WebSockets
-import qualified Data.Text.Lazy as TL
-import Control.Monad (forever)
-import Control.Monad.Trans.Reader
-import Control.Concurrent (threadDelay)
-import Data.Time
-import Data.Conduit
-import qualified Data.Conduit.List as CL
-import Data.Monoid ((<>))
-import Control.Concurrent.STM.Lifted
-import Data.Text (Text)
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE TypeFamilies      #-}
+
+import           Control.Concurrent            (threadDelay)
+import           Control.Concurrent.STM.Lifted
+import           Control.Monad                 (forever)
+import           Control.Monad.Trans.Reader
+import           Data.Conduit
+import qualified Data.Conduit.List             as CL
+import           Data.Monoid                   ((<>))
+import           Data.Text                     (Text)
+import qualified Data.Text.Lazy                as TL
+import           Data.Time
+import           Yesod.Core
+import           Yesod.WebSockets
 
 data App = App (TChan Text)
 

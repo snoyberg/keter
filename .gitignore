@@ -5,12 +5,16 @@ process.txt
 process2.txt
 postgres.yaml
 *.o
+*.dyn_o
 *.hi
+*.dyn_hi
 temp/
 *.keter
 test/app
 incoming/foo/hello
 incoming/foo1_0/hello
+incoming/foo1_0/worker
+incoming/websockets/chat
 log/
 .cabal-sandbox/
 cabal.sandbox.config

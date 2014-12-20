@@ -89,22 +89,6 @@ Executable keter
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
 
-Executable hello
-  Main-is:             hello.hs
-  hs-source-dirs:      incoming/foo
-  Build-depends:       base
-                     , keter
-                     , warp
-                     , wai
-                     , wai-extra
-                     , http-types
-                     , bytestring
-                     , directory
-                     , data-default
-                     , transformers
-  ghc-options:         -threaded -Wall
-  buildable: False
-
 test-suite test
     hs-source-dirs: test
     main-is: Spec.hs

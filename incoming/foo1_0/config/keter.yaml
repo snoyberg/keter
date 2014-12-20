@@ -2,7 +2,8 @@ stanzas:
     - type: webapp
       exec: ../hello
       args:
-        - Hello World 2
+        - Hello World v1.0
+      #ssl : true
       env:
         FROM_KETER_CONFIG: foo bar baz
       forward-env:
@@ -12,19 +13,25 @@ stanzas:
         - keter1_0
         - pong1_0
 
-    - type: static-files
-      host: foobar
-      root: ..
-      directory-listing: true
-      requires-secure: true
+    - type: background
+      exec: ../worker
+      args:
+        - Keter Background Worker
+      env:
+        FROM_KETER_CONFIG: foo bar baz
+      restart-count: 10
+      restart-delay-seconds: 6
 
     - type: static-files
       host: unsafe1_1_0
+      directory-listing: true
+      requires-secure: true
       root: ../../
 
     - type: static-files
       host: unsafe2_1_0
       root: /home
+      #directory-listing: true
       middleware:
          - autohead
          - accept-override
@@ -33,20 +40,19 @@ stanzas:
          - method-override-post
          - local:
              status : 405
-             message: "Keter Rocks localy"
+             message: "Keter Rocks (local status message)"
          - basic-auth:
-              realm: "bla bla"
+              realm: "Keter Basic Auth"
               creds:
                  jon : rocks
                  bla : dada
          - headers:
              Access-Control-Allow-Origin : "*"
+
     - type: reverse-proxy
       reversed-host: www.yesodweb.com
       reversed-port: 80
       reversing-host: localhost
-
-postgres: true
 
 plugins:
     #postgres: true

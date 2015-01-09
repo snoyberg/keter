@@ -16,12 +16,12 @@ import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))
 import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
-import           Control.Exception         (bracketOnError, throwIO)
-import           Control.Exception         (IOException, try)
+import           Control.Exception         (IOException, bracketOnError,
+                                            throwIO, try)
 import           Control.Monad             (void, when)
 import qualified Data.CaseInsensitive      as CI
-import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.LogFile      (RotatingLog)
+import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
                                             terminateMonitoredProcess)
@@ -68,7 +68,7 @@ data RunningWebApp = RunningWebApp
     }
 
 newtype RunningBackgroundApp = RunningBackgroundApp
-    { rbaProcess             :: MonitoredProcess
+    { rbaProcess :: MonitoredProcess
     }
 
 unpackBundle :: AppStartConfig

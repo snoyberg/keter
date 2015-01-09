@@ -1,5 +1,4 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell   #-}
 module Data.Conduit.LogFile
     ( RotatingLog
     , openRotatingLog

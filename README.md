@@ -14,14 +14,14 @@ allows for easy management of your web apps.
 
 ## Quick Start
 
-Do get Keter up-and-running quickly on an Ubuntu system, run:
+To get Keter up-and-running quickly on an Ubuntu system, run:
 
     wget -O - https://raw.githubusercontent.com/snoyberg/keter/master/setup-keter.sh | bash
 
 (Note: you may need to run the above command twice, if the shell exits after
 `apt-get` but before running the rest of its instructions.) This will download
 and build Keter from source and get it running with a
-default configuration. By default Keter will be set up to also support HTTPS, and
+default configuration. By default Keter will be set up to support HTTPS and
 will require you to provide a key and certificate in `/opt/keter/etc`. You can
 disable HTTPS in `/opt/keter/etc/keter-config.yaml` by commenting the certificate
 and key lines.

@@ -112,8 +112,8 @@ with a `.keter` filename extension and which has one special file:
 `config/keter.yaml`. A sample file is available at
 https://github.com/snoyberg/keter/blob/master/incoming/foo1_0/config/keter.yaml.
 
-Keter as well supports wildcard subdomains and exceptions, as in this example
-configuration:
+Keter also supports wildcard subdomains and exceptions, as in this
+example configuration:
 
 ```yaml
 exec: ../com.example.app
@@ -168,7 +168,9 @@ application, delete the file from incoming.
 
 ## PostgreSQL support
 
-Keter ships by default with a PostgreSQL plugin, which will handle management of PostgreSQL databases for your application. To use this, make the following changes:
+Keter ships by default with a PostgreSQL plugin, which will handle
+management of PostgreSQL databases for your application. To use this,
+make the following changes:
 
 * Add the following lines to your `config/keter.yaml` file:
 
@@ -229,7 +231,11 @@ file format:
 * https://github.com/snoyberg/keter/blob/master/incoming/foo1_0/config/keter.yaml
 
 ## Multiple SSL Certificates
-Keter is able to serve different certificates for different hosts, allowing for the deployment of distinct domains using the same server. An example `keter-config.yaml` would look like::
+
+Keter is able to serve different certificates for different hosts,
+allowing for the deployment of distinct domains using the same
+server. An example `keter-config.yaml` would look like::
+
 ```
 root: ..
 listeners:
@@ -242,11 +248,13 @@ listeners:
     key: key.pem
     certificate: certificate2.pem
 ```
+
 ## FAQ
+
 *   Keter spawns multiple failing process when run with `sudo start keter`.
     *   This may be due to Keter being unable to find the SSL certificate and key.
         Try to run `sudo /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml`.
         If it fails with `keter: etc/certificate.pem: openBinaryFile: does not exist`
         or something like it, you may need to provide valid SSL certificates and keys
-        or disable HTTPS, by uncommenting the key and certificate lines from 
+        or disable HTTPS, by uncommenting the key and certificate lines from
         `/opt/keter/etc/keter-config.yaml`.

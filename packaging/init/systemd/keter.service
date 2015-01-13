@@ -1,0 +1,11 @@
+[Unit]
+Description=Keter Web Server
+Documentation=man:keter(1p) http://github.com/snoyberg/keter
+After=network.service
+
+[Service]
+User=keter
+ExecStart=/usr/bin/keter /etc/keter.conf
+
+[Install]
+WantedBy=multi-user.target

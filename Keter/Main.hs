@@ -45,7 +45,7 @@ import           System.Posix.User         (getUserEntryForID,
 import Control.Monad (void, when)
 import Data.Default (def)
 import Prelude hiding (FilePath, log)
-import Filesystem (listDirectory, createTree)
+import Filesystem (createTree)
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
@@ -127,7 +127,7 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
 launchInitial :: KeterConfig -> AppMan.AppManager -> IO ()
 launchInitial kc@KeterConfig {..} appMan = do
     createTree incoming
-    bundles0 <- fmap (filter isKeter) $ listDirectory incoming
+    bundles0 <- fmap (filter isKeter) $ listDirectoryTree incoming
     mapM_ (AppMan.addApp appMan) bundles0
 
     unless (V.null kconfigBuiltinStanzas) $ AppMan.perform
@@ -147,7 +147,7 @@ startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO
 startWatching kc@KeterConfig {..} appMan log = do
     -- File system watching
     wm <- FSN.startManager
-    _ <- FSN.watchDir wm incoming (const True) $ \e -> do
+    _ <- FSN.watchTree wm incoming (const True) $ \e -> do
         e' <-
             case e of
                 FSN.Removed fp _ -> do
@@ -165,13 +165,25 @@ startWatching kc@KeterConfig {..} appMan log = do
 
     -- Install HUP handler for cases when inotify cannot be used.
     void $ flip (installHandler sigHUP) Nothing $ Catch $ do
-        bundles <- fmap (filter isKeter) $ F.listDirectory incoming
+        bundles <- fmap (filter isKeter) $ listDirectoryTree incoming
         newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
             time <- modificationTime <$> getFileStatus (F.encodeString bundle)
             return (getAppname bundle, (bundle, time))
         AppMan.reloadAppList appMan newMap
   where
     incoming = getIncoming kc
+
+listDirectoryTree :: FilePath -> IO [FilePath]
+listDirectoryTree fp = do
+       dir <- F.listDirectory fp
+       concat <$> mapM (\fp1 -> do
+          isDir <- F.isDirectory fp1
+          if isDir
+           then
+             listDirectoryTree fp1
+           else
+             return [fp1]
+           ) dir
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
 startListening KeterConfig {..} hostman = do

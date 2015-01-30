@@ -66,11 +66,12 @@ data LabelMap a = EmptyLabelMap
                 | Static         !(LabelTree a)
                 | Wildcard       !(LabelEntry a)
                 | WildcardExcept !(LabelEntry a) !(LabelTree a)
-    deriving (Show)
+    deriving (Show, Eq)
 
 -- | Indicates whether a given label in the
 data LabelEntry a = Assigned   !a !(LabelMap a)
                   | Unassigned    !(LabelMap a)
+                  deriving Eq
 
 instance Show (LabelEntry a) where
     show (Assigned _ m) = "Assigned _ (" ++ show m ++ ")"
@@ -252,7 +253,7 @@ lookupTree (l:ls) (Static t) =
 lookupTree (_:ls) (Wildcard w) = lookupTree ls $ labelEntryMap w
 lookupTree (l:ls) (WildcardExcept w t) =
     case Map.lookup (CI.mk l) t of
-        Just le -> 
+        Just le ->
             case lookupTree ls $ labelEntryMap le of
                 Just  e -> Just e
                 Nothing -> lookupTree ls $ labelEntryMap w
@@ -264,7 +265,7 @@ lookupTree (l:ls) (WildcardExcept w t) =
 -- will return true for precisely *.example.com, but not foo.example.com.
 --
 -- This is so that different keter applications may establish ownership
--- over different subdomains, including exceptions to a wildcard. 
+-- over different subdomains, including exceptions to a wildcard.
 --
 -- This function *does not* test whether or not a given input would
 -- resolve to an existing host. In the above example, given only an

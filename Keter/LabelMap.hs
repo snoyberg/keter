@@ -66,24 +66,22 @@ data LabelMap a = EmptyLabelMap
                 | Static         !(LabelTree a)
                 | Wildcard       !(LabelEntry a)
                 | WildcardExcept !(LabelEntry a) !(LabelTree a)
-    deriving (Show)
+    deriving (Show, Eq)
 
 -- | Indicates whether a given label in the
 data LabelEntry a = Assigned   !a !(LabelMap a)
                   | Unassigned    !(LabelMap a)
+                  deriving Eq
 
 instance Show (LabelEntry a) where
     show (Assigned _ m) = "Assigned _ (" ++ show m ++ ")"
     show (Unassigned m) = "Unassigned (" ++ show m ++ ")"
 
 hostToLabels :: ByteString -> [ByteString]
-hostToLabels h =
-  if BS.null h
-  then []
-  else 
-    if BS.last h == '.'
-    then drop 1 $ labels
-    else labels
+hostToLabels h
+  | BS.null h        = []
+  | BS.last h == '.' = drop 1 labels
+  | otherwise        = labels
   where labels = reverse . BS.split '.' $ h
 
 lemap :: (LabelMap a -> LabelMap a) -> LabelEntry a -> LabelEntry a
@@ -161,7 +159,7 @@ cleanup m@(Static t) =
     case Map.null (Map.filter p t) of
         True  -> EmptyLabelMap
         False -> m
-    where 
+    where
         p (Unassigned EmptyLabelMap) = False
         p _ = True
 
@@ -193,7 +191,13 @@ deleteTree [] _ = error "Cannot assign empty label in hostname."
 deleteTree _ EmptyLabelMap = EmptyLabelMap
 
 deleteTree ["*"] (Static t) = Static t
-deleteTree [l]   (Static t) = cleanup $ Static (Map.delete (CI.mk l) t)
+deleteTree [l]   (Static t) = cleanup $ Static m
+   where
+    m = case l' `Map.lookup` t of
+      Just (Assigned _ EmptyLabelMap) -> Map.delete l' t
+      Just (Assigned _ b) -> Map.insert l' (Unassigned b) (Map.delete l' t)
+      _ -> t
+    l' = CI.mk l
 
 deleteTree ["*"] (Wildcard w) = cleanup $ Wildcard (Unassigned (labelEntryMap w))
 deleteTree [_] (Wildcard w) = Wildcard w
@@ -216,7 +220,7 @@ deleteTree ("*":ls) (WildcardExcept w t) = cleanup $ WildcardExcept (lemap (dele
 deleteTree (l:ls) (WildcardExcept w t) = cleanup $
     case Map.lookup l' t of
         Nothing            -> WildcardExcept w t
-        Just le             -> WildcardExcept w (Map.insert l' (lemap (deleteTree ls) le) t)
+        Just le            -> WildcardExcept w (Map.insert l' (lemap (deleteTree ls) le) t)
   where
     l' = CI.mk l
 
@@ -249,7 +253,7 @@ lookupTree (l:ls) (Static t) =
 lookupTree (_:ls) (Wildcard w) = lookupTree ls $ labelEntryMap w
 lookupTree (l:ls) (WildcardExcept w t) =
     case Map.lookup (CI.mk l) t of
-        Just le -> 
+        Just le ->
             case lookupTree ls $ labelEntryMap le of
                 Just  e -> Just e
                 Nothing -> lookupTree ls $ labelEntryMap w
@@ -261,7 +265,7 @@ lookupTree (l:ls) (WildcardExcept w t) =
 -- will return true for precisely *.example.com, but not foo.example.com.
 --
 -- This is so that different keter applications may establish ownership
--- over different subdomains, including exceptions to a wildcard. 
+-- over different subdomains, including exceptions to a wildcard.
 --
 -- This function *does not* test whether or not a given input would
 -- resolve to an existing host. In the above example, given only an

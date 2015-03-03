@@ -187,10 +187,9 @@ listDirectoryTree fp = do
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
 startListening KeterConfig {..} hostman = do
-    manager <- HTTP.newManager HTTP.conduitManagerSettings
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
-        manager
+        (HTTP.newManager HTTP.conduitManagerSettings)
         (HostMan.lookupAction hostman . CI.mk)
 
 runAndBlock :: NonEmptyVector a

@@ -45,9 +45,9 @@ import System.Timeout.Lifted (timeout)
 type HostLookup = ByteString -> IO (Maybe ProxyAction)
 
 reverseProxy :: Bool
-             -> Manager -> HostLookup -> ListeningPort -> IO ()
-reverseProxy useHeader manager hostLookup listener =
-    run $ gzip def $ withClient isSecure useHeader manager hostLookup
+             -> IO Manager -> HostLookup -> ListeningPort -> IO ()
+reverseProxy useHeader iomanager hostLookup listener =
+    run $ gzip def $ withClient isSecure useHeader iomanager hostLookup
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     (run, isSecure) =
@@ -59,10 +59,11 @@ reverseProxy useHeader manager hostLookup listener =
 
 withClient :: Bool -- ^ is secure?
            -> Bool -- ^ use incoming request header for IP address
-           -> Manager
+           -> IO Manager
            -> HostLookup
            -> Wai.Application
-withClient isSecure useHeader manager portLookup req0 sendResponse =
+withClient isSecure useHeader iomanager portLookup req0 sendResponse = do
+    manager <- iomanager
     timeBound (5 * 60 * 1000 * 1000) (waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
@@ -110,7 +111,9 @@ withClient isSecure useHeader manager portLookup req0 sendResponse =
             Nothing -> return $ WPRResponse $ unknownHostResponse host
             Just (action, requiresSecure)
                 | requiresSecure && not isSecure -> performHttpsRedirect host req
-                | otherwise -> performAction req action
+                | otherwise -> do
+                    manager <- iomanager
+                    performAction manager req action
 
     performHttpsRedirect host =
         return . WPRResponse . redirectApp config
@@ -123,22 +126,22 @@ withClient isSecure useHeader manager portLookup req0 sendResponse =
                                  $ RDPrefix True host' Nothing
             }
 
-    performAction req (PAPort port) =
+    performAction _ req (PAPort port) =
         return $ WPRModifiedRequest req' $ ProxyDest "127.0.0.1" port
       where
         req' = req
             { Wai.requestHeaders = ("X-Forwarded-Proto", protocol)
                                  : Wai.requestHeaders req
             }
-    performAction _ (PAStatic StaticFilesConfig {..}) = do
+    performAction _ _ (PAStatic StaticFilesConfig {..}) = do
         return $ WPRApplication $ processMiddleware sfconfigMiddleware $ staticApp (defaultFileServerSettings sfconfigRoot)
             { ssListing =
                 if sfconfigListings
                     then Just defaultListing
                     else Nothing
             }
-    performAction req (PARedirect config) = return $ WPRResponse $ redirectApp config req
-    performAction _ (PAReverseProxy config) = return $ WPRApplication $ Rewrite.simpleReverseProxy manager config
+    performAction _ req (PARedirect config) = return $ WPRResponse $ redirectApp config req
+    performAction manager _ (PAReverseProxy config) = return $ WPRApplication $ Rewrite.simpleReverseProxy manager config
 
 redirectApp :: RedirectConfig -> Wai.Request -> Wai.Response
 redirectApp RedirectConfig {..} req =

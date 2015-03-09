@@ -54,7 +54,7 @@ Library
                      , array
                      , mtl
                      , warp
-                     , warp-tls
+                     , warp-tls                  >= 3.0.2.1
                      , aeson
                      , unordered-containers
                      , vector

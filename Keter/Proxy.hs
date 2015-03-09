@@ -53,8 +53,11 @@ reverseProxy useHeader manager hostLookup listener =
     (run, isSecure) =
         case listener of
             LPInsecure host port -> (Warp.runSettings (warp host port), False)
-            LPSecure host port cert key -> (WarpTLS.runTLS
-                (WarpTLS.tlsSettings (F.encodeString cert) (F.encodeString key))
+            LPSecure host port cert chainCerts key -> (WarpTLS.runTLS
+                (WarpTLS.tlsSettingsChain
+                    (F.encodeString cert)
+                    (map F.encodeString $ V.toList chainCerts)
+                    (F.encodeString key))
                 (warp host port), True)
 
 withClient :: Bool -- ^ is secure?

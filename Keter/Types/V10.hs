@@ -66,7 +66,8 @@ instance ToJSON BundleConfig where
         , "plugins" .= bconfigPlugins
         ]
 
-data ListeningPort = LPSecure !HostPreference !Port !F.FilePath !F.FilePath
+data ListeningPort = LPSecure !HostPreference !Port
+                              !F.FilePath !(V.Vector F.FilePath) !F.FilePath
                    | LPInsecure !HostPreference !Port
 
 instance ParseYamlFile ListeningPort where
@@ -80,7 +81,9 @@ instance ParseYamlFile ListeningPort where
                 return $ LPInsecure host port
             (Just cert, Just key) -> do
                 port <- o .:? "port" .!= 443
-                return $ LPSecure host port cert key
+                chainCerts <- o .:? "chain-certificates"
+                    >>= maybe (return V.empty) (parseYamlFile basedir)
+                return $ LPSecure host port cert chainCerts key
             _ -> fail "Must provide both certificate and key files"
 
 data KeterConfig = KeterConfig
@@ -117,6 +120,7 @@ instance ToCurrent KeterConfig where
             (Warp.getHost s)
             (Warp.getPort s)
             (F.decodeString $ WarpTLS.certFile ts)
+            V.empty
             (F.decodeString $ WarpTLS.keyFile ts)
 
 instance Default KeterConfig where

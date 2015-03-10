@@ -1,3 +1,7 @@
+## 1.3.9
+
+* Support chain certificates in credentials [#82](https://github.com/snoyberg/keter/pull/82)
+
 ## 1.3.7.1
 
 Bug fix: catch exceptions during reload [#64](https://github.com/snoyberg/keter/issues/64)

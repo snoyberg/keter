@@ -31,7 +31,7 @@ Library
                      , time
                      , tar                       >= 0.4
                      , template-haskell
-                     , blaze-builder             >= 0.3           && < 0.4
+                     , blaze-builder             >= 0.3           && < 0.5
                      , yaml                      >= 0.8.4         && < 0.9
                      , unix-compat               >= 0.3           && < 0.5
                      , fsnotify                  >= 0.0.11

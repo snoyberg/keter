@@ -140,7 +140,7 @@ load Settings{..} fp = do
                                     return $ Right dbi
         lift $ f dbi
 
-    sanitize = T.map sanitize'
+    sanitize = T.toLower . T.map sanitize'
     sanitize' c
         | 'A' <= c && c <= 'Z' = c
         | 'a' <= c && c <= 'z' = c

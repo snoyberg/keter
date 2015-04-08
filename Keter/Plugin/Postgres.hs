@@ -21,6 +21,7 @@ import           Data.Default
 import qualified Data.HashMap.Strict       as HMap
 import qualified Data.Map                  as Map
 import           Data.Monoid               ((<>))
+import qualified Data.Char                 as C
 import qualified Data.Text                 as T
 import qualified Data.Text.Lazy            as TL
 import           Data.Text.Lazy.Builder    (fromText, toLazyText)
@@ -142,7 +143,7 @@ load Settings{..} fp = do
 
     sanitize = T.map sanitize'
     sanitize' c
-        | 'A' <= c && c <= 'Z' = c
+        | 'A' <= c && c <= 'Z' = C.toLower c
         | 'a' <= c && c <= 'z' = c
         | '0' <= c && c <= '9' = c
         | otherwise = '_'

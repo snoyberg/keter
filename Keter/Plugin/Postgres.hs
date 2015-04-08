@@ -13,8 +13,7 @@ import           Control.Concurrent        (forkIO)
 import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar
 import           Control.Exception         (throwIO, try)
-import           Control.Monad             (void)
-import           Control.Monad             (forever, mzero, replicateM)
+import           Control.Monad             (forever, mzero, replicateM,void)
 import           Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
 import           Data.Default
@@ -101,7 +100,7 @@ load Settings{..} fp = do
         -- FIXME stop using the worker thread approach?
         void $ forkIO $ flip S.evalStateT (db0, g0) $ forever $ loop chan
         return Plugin
-            { pluginGetEnv = \appname o -> do
+            { pluginGetEnv = \appname o ->
                 case HMap.lookup "postgres" o of
                     Just (Bool True) -> do
                         x <- newEmptyMVar
@@ -140,7 +139,7 @@ load Settings{..} fp = do
                                     return $ Right dbi
         lift $ f dbi
 
-    sanitize = T.map sanitize'
+    sanitize = T.toLower . T.map sanitize'
     sanitize' c
         | 'A' <= c && c <= 'Z' = c
         | 'a' <= c && c <= 'z' = c

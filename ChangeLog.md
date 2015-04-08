@@ -1,6 +1,10 @@
-## 1.3.9.1
+## 1.3.9.2
 
 * Lower case PostgreSQL names [#88](https://github.com/snoyberg/keter/pull/88)
+
+## 1.3.9.1
+
+* Allow blaze-builder 0.4
 
 ## 1.3.9
 

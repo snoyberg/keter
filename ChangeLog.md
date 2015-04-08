@@ -1,3 +1,7 @@
+## 1.3.9.1
+
+* Lower case PostgreSQL names [#88](https://github.com/snoyberg/keter/pull/88)
+
 ## 1.3.9
 
 * Support chain certificates in credentials [#82](https://github.com/snoyberg/keter/pull/82)

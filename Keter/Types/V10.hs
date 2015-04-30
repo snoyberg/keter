@@ -87,23 +87,24 @@ instance ParseYamlFile ListeningPort where
             _ -> fail "Must provide both certificate and key files"
 
 data KeterConfig = KeterConfig
-    { kconfigDir :: F.FilePath
-    , kconfigPortPool :: V04.PortSettings
-    , kconfigListeners :: !(NonEmptyVector ListeningPort)
-    , kconfigSetuid :: Maybe Text
-    , kconfigBuiltinStanzas :: !(V.Vector (Stanza ()))
-    , kconfigIpFromHeader :: Bool
-    , kconfigExternalHttpPort :: !Int
+    { kconfigDir                 :: F.FilePath
+    , kconfigPortPool            :: V04.PortSettings
+    , kconfigListeners           :: !(NonEmptyVector ListeningPort)
+    , kconfigSetuid              :: Maybe Text
+    , kconfigBuiltinStanzas      :: !(V.Vector (Stanza ()))
+    , kconfigIpFromHeader        :: Bool
+    , kconfigExternalHttpPort    :: !Int
     -- ^ External HTTP port when generating APPROOTs.
-    , kconfigExternalHttpsPort :: !Int
+    , kconfigExternalHttpsPort   :: !Int
     -- ^ External HTTPS port when generating APPROOTs.
-    , kconfigEnvironment :: !(Map Text Text)
+    , kconfigEnvironment         :: !(Map Text Text)
     -- ^ Environment variables to be passed to all apps.
+    , kconfigConnectionTimeBound :: !Int
     }
 
 instance ToCurrent KeterConfig where
     type Previous KeterConfig = V04.KeterConfig
-    toCurrent (V04.KeterConfig dir portman host port ssl setuid rproxy ipFromHeader) = KeterConfig
+    toCurrent (V04.KeterConfig dir portman host port ssl setuid rproxy ipFromHeader connectionTimeBound) = KeterConfig
         { kconfigDir = dir
         , kconfigPortPool = portman
         , kconfigListeners = NonEmptyVector (LPInsecure host port) (getSSL ssl)
@@ -113,6 +114,7 @@ instance ToCurrent KeterConfig where
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
+        , kconfigConnectionTimeBound = connectionTimeBound
         }
       where
         getSSL Nothing = V.empty
@@ -134,6 +136,7 @@ instance Default KeterConfig where
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
+        , kconfigConnectionTimeBound = 5000
         }
 
 instance ParseYamlFile KeterConfig where
@@ -153,6 +156,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "external-http-port" .!= 80
             <*> o .:? "external-https-port" .!= 443
             <*> o .:? "env" .!= Map.empty
+            <*> o .:? "connection-time-bound" .!= 5000
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool

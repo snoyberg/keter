@@ -72,14 +72,15 @@ instance FromJSON Redirect where
     parseJSON _ = fail "Wanted an object"
 
 data KeterConfig = KeterConfig
-    { kconfigDir :: F.FilePath
-    , kconfigPortMan :: PortSettings
-    , kconfigHost :: HostPreference
-    , kconfigPort :: Port
-    , kconfigSsl :: Maybe TLSConfig
-    , kconfigSetuid :: Maybe Text
-    , kconfigReverseProxy :: Set ReverseProxyConfig
-    , kconfigIpFromHeader :: Bool
+    { kconfigDir                 :: F.FilePath
+    , kconfigPortMan             :: PortSettings
+    , kconfigHost                :: HostPreference
+    , kconfigPort                :: Port
+    , kconfigSsl                 :: Maybe TLSConfig
+    , kconfigSetuid              :: Maybe Text
+    , kconfigReverseProxy        :: Set ReverseProxyConfig
+    , kconfigIpFromHeader        :: Bool
+    , kconfigConnectionTimeBound :: Int
     }
 
 instance Default KeterConfig where
@@ -92,6 +93,7 @@ instance Default KeterConfig where
         , kconfigSetuid = Nothing
         , kconfigReverseProxy = Set.empty
         , kconfigIpFromHeader = False
+        , kconfigConnectionTimeBound = 5000
         }
 
 instance ParseYamlFile KeterConfig where
@@ -104,6 +106,7 @@ instance ParseYamlFile KeterConfig where
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
         <*> o .:? "ip-from-header" .!= False
+        <*> o .:? "connection-time-bound" .!= 5000
 
 data TLSConfig = TLSConfig !Warp.Settings !WarpTLS.TLSSettings
 

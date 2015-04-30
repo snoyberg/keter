@@ -32,3 +32,7 @@ listeners:
 # Set additional environment variables for all apps
 # env:
 #    key: value
+
+# Connection time bound in milliseconds, set to 0 to have no time bound,
+# i.e. keep connections alive indefinitely. Default value is 5000.
+# connection-time-bound: 5000

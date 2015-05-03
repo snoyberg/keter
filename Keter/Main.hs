@@ -98,7 +98,7 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
     hostman <- HostMan.start
     portpool <- PortPool.start kconfigPortPool
     tf <- TempFolder.setup $ kconfigDir </> "temp"
-    plugins <- sequence $ map ($ kconfigDir) mkPlugins
+    plugins <- mapM ($ kconfigDir) mkPlugins
     muid <-
         case kconfigSetuid of
             Nothing -> return Nothing
@@ -127,7 +127,7 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
 launchInitial :: KeterConfig -> AppMan.AppManager -> IO ()
 launchInitial kc@KeterConfig {..} appMan = do
     createTree incoming
-    bundles0 <- fmap (filter isKeter) $ listDirectoryTree incoming
+    bundles0 <- filter isKeter <$> listDirectoryTree incoming
     mapM_ (AppMan.addApp appMan) bundles0
 
     unless (V.null kconfigBuiltinStanzas) $ AppMan.perform

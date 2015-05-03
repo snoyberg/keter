@@ -93,8 +93,11 @@ instance Default KeterConfig where
         , kconfigSetuid = Nothing
         , kconfigReverseProxy = Set.empty
         , kconfigIpFromHeader = False
-        , kconfigConnectionTimeBound = 5000
+        , kconfigConnectionTimeBound = fiveMinutes
         }
+
+fiveMinutes :: Int
+fiveMinutes = 5 * 60 * 1000
 
 instance ParseYamlFile KeterConfig where
     parseYamlFile basedir = withObject "KeterConfig" $ \o -> KeterConfig
@@ -106,7 +109,7 @@ instance ParseYamlFile KeterConfig where
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
         <*> o .:? "ip-from-header" .!= False
-        <*> o .:? "connection-time-bound" .!= 5000
+        <*> o .:? "connection-time-bound" .!= fiveMinutes
 
 data TLSConfig = TLSConfig !Warp.Settings !WarpTLS.TLSSettings
 

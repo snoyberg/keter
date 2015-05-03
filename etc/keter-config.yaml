@@ -34,5 +34,5 @@ listeners:
 #    key: value
 
 # Connection time bound in milliseconds, set to 0 to have no time bound,
-# i.e. keep connections alive indefinitely. Default value is 5000.
-# connection-time-bound: 5000
+# i.e. keep connections alive indefinitely. Default value is 5 minutes.
+# connection-time-bound: 300000

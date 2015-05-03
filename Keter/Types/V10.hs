@@ -139,7 +139,7 @@ instance Default KeterConfig where
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
-        , kconfigConnectionTimeBound = 5000
+        , kconfigConnectionTimeBound = V04.fiveMinutes
         }
 
 instance ParseYamlFile KeterConfig where
@@ -159,7 +159,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "external-http-port" .!= 80
             <*> o .:? "external-https-port" .!= 443
             <*> o .:? "env" .!= Map.empty
-            <*> o .:? "connection-time-bound" .!= 5000
+            <*> o .:? "connection-time-bound" .!= V04.fiveMinutes
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool

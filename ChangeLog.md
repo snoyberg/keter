@@ -1,3 +1,7 @@
+## 1.3.10
+
+* Configurable time bound [#92](https://github.com/snoyberg/keter/pull/92)
+
 ## 1.3.9.2
 
 * Lower case PostgreSQL names [#88](https://github.com/snoyberg/keter/pull/88)

@@ -12,9 +12,9 @@ import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
 import qualified Data.CaseInsensitive              as CI
-import           Data.Default                      (Default(..))
+import           Data.Default                      (Default (..))
 import           Data.Monoid                       (mappend, mempty)
-import           Data.Text.Encoding                (encodeUtf8, decodeUtf8With)
+import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
 import qualified Filesystem.Path.CurrentOS         as F
@@ -38,8 +38,8 @@ import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import           Network.Wai.Middleware.Gzip       (gzip)
 import           Prelude                           hiding (FilePath, (++))
+import           System.Timeout.Lifted             (timeout)
 import           WaiAppStatic.Listing              (defaultListing)
-import System.Timeout.Lifted (timeout)
 
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe ProxyAction)

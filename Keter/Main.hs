@@ -27,25 +27,26 @@ import           System.Posix.Signals      (Handler (Catch), installHandler,
 import           Control.Applicative       ((<$>))
 import           Control.Exception         (throwIO, try)
 import           Control.Monad             (forM)
+import           Control.Monad             (void, when)
 import           Data.Conduit.Process.Unix (initProcessTracker)
+import           Data.Default              (def)
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as T
 import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
 import           Data.Yaml.FilePath
+import           Filesystem                (createTree)
 import qualified Filesystem                as F
+import           Filesystem.Path.CurrentOS (hasExtension, (</>))
 import qualified Filesystem.Path.CurrentOS as F
-import Filesystem.Path.CurrentOS ((</>), hasExtension)
-import qualified Network.HTTP.Conduit      as HTTP (newManager, conduitManagerSettings)
+import qualified Network.HTTP.Conduit      as HTTP (conduitManagerSettings,
+                                                    newManager)
+import           Prelude                   hiding (FilePath, log)
 import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
-import Control.Monad (void, when)
-import Data.Default (def)
-import Prelude hiding (FilePath, log)
-import Filesystem (createTree)
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]

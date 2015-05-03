@@ -12,9 +12,9 @@ import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
 import qualified Data.CaseInsensitive              as CI
-import           Data.Default                      (Default(..))
+import           Data.Default                      (Default (..))
 import           Data.Monoid                       (mappend, mempty)
-import           Data.Text.Encoding                (encodeUtf8, decodeUtf8With)
+import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
 import qualified Filesystem.Path.CurrentOS         as F
@@ -38,16 +38,16 @@ import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import           Network.Wai.Middleware.Gzip       (gzip)
 import           Prelude                           hiding (FilePath, (++))
+import           System.Timeout.Lifted             (timeout)
 import           WaiAppStatic.Listing              (defaultListing)
-import System.Timeout.Lifted (timeout)
 
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe ProxyAction)
 
 reverseProxy :: Bool
-             -> Manager -> HostLookup -> ListeningPort -> IO ()
-reverseProxy useHeader manager hostLookup listener =
-    run $ gzip def $ withClient isSecure useHeader manager hostLookup
+             -> Int -> Manager -> HostLookup -> ListeningPort -> IO ()
+reverseProxy useHeader timeBound manager hostLookup listener =
+    run $ gzip def $ withClient isSecure useHeader timeBound manager hostLookup
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     (run, isSecure) =
@@ -62,22 +62,26 @@ reverseProxy useHeader manager hostLookup listener =
 
 withClient :: Bool -- ^ is secure?
            -> Bool -- ^ use incoming request header for IP address
+           -> Int  -- ^ time bound for connections
            -> Manager
            -> HostLookup
            -> Wai.Application
-withClient isSecure useHeader manager portLookup req0 sendResponse =
-    timeBound (5 * 60 * 1000 * 1000) (waiProxyToSettings getDest def
+withClient isSecure useHeader bound manager portLookup req0 sendResponse =
+    if bound > 0
+       then timeBound (bound * 1000) task
+       else task
+  where
+    task = waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
                 then SIHFromHeader
                 else SIHFromSocket
-        } manager req0 sendResponse)
-  where
+        } manager req0 sendResponse
     protocol
         | isSecure = "https"
         | otherwise = "http"
 
-    -- FIXME This is a temporary workaround for
+    -- FIXME This is a workaround for
     -- https://github.com/snoyberg/keter/issues/29. After some research, it
     -- seems like Warp is behaving properly here. I'm still not certain why the
     -- http call (from http-conduit) inside waiProxyToSettings could ever block

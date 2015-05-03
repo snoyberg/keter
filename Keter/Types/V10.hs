@@ -1,35 +1,38 @@
-{-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TypeFamilies      #-}
 module Keter.Types.V10 where
 
-import Prelude hiding (FilePath)
-import           System.Posix.Types      (EpochTime)
-import Data.Aeson (Object, ToJSON (..))
-import qualified Data.CaseInsensitive as CI
-import Keter.Types.Common
-import qualified Keter.Types.V04 as V04
-import Keter.Types.Middleware
-import Data.Yaml.FilePath
-import Data.Aeson (FromJSON (..), (.:), (.:?), Value (Object, String), withObject, (.!=))
-import Control.Applicative ((<$>), (<*>), (<|>))
-import qualified Data.Set as Set
-import qualified Filesystem.Path.CurrentOS as F
-import Data.Default
-import Data.String (fromString)
-import Data.Conduit.Network (HostPreference)
-import Data.Vector (Vector)
-import qualified Data.Vector as V
-import Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
-import Data.Maybe (fromMaybe, catMaybes)
-import qualified Network.Wai.Handler.Warp as Warp
-import qualified Network.Wai.Handler.WarpTLS as WarpTLS
-import qualified Data.HashMap.Strict as HashMap
-import qualified Data.Map as Map
-import Data.Aeson ((.=), Value (Bool), object)
-import Data.Word (Word)
+import           Control.Applicative               ((<$>), (<*>), (<|>))
+import           Data.Aeson                        (Object, ToJSON (..))
+import           Data.Aeson                        (FromJSON (..),
+                                                    Value (Object, String),
+                                                    withObject, (.!=), (.:),
+                                                    (.:?))
+import           Data.Aeson                        (Value (Bool), object, (.=))
+import qualified Data.CaseInsensitive              as CI
+import           Data.Conduit.Network              (HostPreference)
+import           Data.Default
+import qualified Data.HashMap.Strict               as HashMap
+import qualified Data.Map                          as Map
+import           Data.Maybe                        (catMaybes, fromMaybe)
+import qualified Data.Set                          as Set
+import           Data.String                       (fromString)
+import           Data.Vector                       (Vector)
+import qualified Data.Vector                       as V
+import           Data.Word                         (Word)
+import           Data.Yaml.FilePath
+import qualified Filesystem.Path.CurrentOS         as F
+import           Keter.Types.Common
+import           Keter.Types.Middleware
+import qualified Keter.Types.V04                   as V04
+import           Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
+import qualified Network.Wai.Handler.Warp          as Warp
+import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
+import           Prelude                           hiding (FilePath)
+import           System.Posix.Types                (EpochTime)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
@@ -87,23 +90,24 @@ instance ParseYamlFile ListeningPort where
             _ -> fail "Must provide both certificate and key files"
 
 data KeterConfig = KeterConfig
-    { kconfigDir :: F.FilePath
-    , kconfigPortPool :: V04.PortSettings
-    , kconfigListeners :: !(NonEmptyVector ListeningPort)
-    , kconfigSetuid :: Maybe Text
-    , kconfigBuiltinStanzas :: !(V.Vector (Stanza ()))
-    , kconfigIpFromHeader :: Bool
-    , kconfigExternalHttpPort :: !Int
+    { kconfigDir                 :: F.FilePath
+    , kconfigPortPool            :: V04.PortSettings
+    , kconfigListeners           :: !(NonEmptyVector ListeningPort)
+    , kconfigSetuid              :: Maybe Text
+    , kconfigBuiltinStanzas      :: !(V.Vector (Stanza ()))
+    , kconfigIpFromHeader        :: Bool
+    , kconfigExternalHttpPort    :: !Int
     -- ^ External HTTP port when generating APPROOTs.
-    , kconfigExternalHttpsPort :: !Int
+    , kconfigExternalHttpsPort   :: !Int
     -- ^ External HTTPS port when generating APPROOTs.
-    , kconfigEnvironment :: !(Map Text Text)
+    , kconfigEnvironment         :: !(Map Text Text)
     -- ^ Environment variables to be passed to all apps.
+    , kconfigConnectionTimeBound :: !Int
     }
 
 instance ToCurrent KeterConfig where
     type Previous KeterConfig = V04.KeterConfig
-    toCurrent (V04.KeterConfig dir portman host port ssl setuid rproxy ipFromHeader) = KeterConfig
+    toCurrent (V04.KeterConfig dir portman host port ssl setuid rproxy ipFromHeader connectionTimeBound) = KeterConfig
         { kconfigDir = dir
         , kconfigPortPool = portman
         , kconfigListeners = NonEmptyVector (LPInsecure host port) (getSSL ssl)
@@ -113,6 +117,7 @@ instance ToCurrent KeterConfig where
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
+        , kconfigConnectionTimeBound = connectionTimeBound
         }
       where
         getSSL Nothing = V.empty
@@ -134,6 +139,7 @@ instance Default KeterConfig where
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
+        , kconfigConnectionTimeBound = 5000
         }
 
 instance ParseYamlFile KeterConfig where
@@ -153,6 +159,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "external-http-port" .!= 80
             <*> o .:? "external-https-port" .!= 443
             <*> o .:? "env" .!= Map.empty
+            <*> o .:? "connection-time-bound" .!= 5000
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool
@@ -220,9 +227,9 @@ addStanzaType t x =
         v -> v
 
 data StaticFilesConfig = StaticFilesConfig
-    { sfconfigRoot     :: !F.FilePath
-    , sfconfigHosts    :: !(Set Host)
-    , sfconfigListings :: !Bool
+    { sfconfigRoot       :: !F.FilePath
+    , sfconfigHosts      :: !(Set Host)
+    , sfconfigListings   :: !Bool
     -- FIXME basic auth
     , sfconfigMiddleware :: ![ MiddlewareConfig ]
     }
@@ -253,8 +260,8 @@ instance ToJSON StaticFilesConfig where
         ]
 
 data RedirectConfig = RedirectConfig
-    { redirconfigHosts :: !(Set Host)
-    , redirconfigStatus :: !Int
+    { redirconfigHosts   :: !(Set Host)
+    , redirconfigStatus  :: !Int
     , redirconfigActions :: !(Vector RedirectAction)
     }
     deriving Show
@@ -388,10 +395,10 @@ data AppInput = AIBundle !FilePath !EpochTime
               | AIData !BundleConfig
 
 data BackgroundConfig = BackgroundConfig
-    { bgconfigExec :: !F.FilePath
-    , bgconfigArgs :: !(Vector Text)
-    , bgconfigEnvironment :: !(Map Text Text)
-    , bgconfigRestartCount :: !RestartCount
+    { bgconfigExec                :: !F.FilePath
+    , bgconfigArgs                :: !(Vector Text)
+    , bgconfigEnvironment         :: !(Map Text Text)
+    , bgconfigRestartCount        :: !RestartCount
     , bgconfigRestartDelaySeconds :: !Word
     }
     deriving Show

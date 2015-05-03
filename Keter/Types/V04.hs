@@ -3,28 +3,28 @@
 -- compatibility in config file format.
 module Keter.Types.V04 where
 
-import Prelude hiding (FilePath)
-import Data.Yaml.FilePath
-import Data.Aeson
-import Control.Applicative
-import qualified Data.Set as Set
-import qualified Filesystem.Path as F
-import Data.Default
-import Data.String (fromString)
-import Data.Conduit.Network (HostPreference)
-import qualified Network.Wai.Handler.Warp as Warp
-import qualified Network.Wai.Handler.WarpTLS as WarpTLS
-import Filesystem.Path.CurrentOS (encodeString)
-import Keter.Types.Common
-import Network.HTTP.ReverseProxy.Rewrite
+import           Control.Applicative
+import           Data.Aeson
+import           Data.Conduit.Network              (HostPreference)
+import           Data.Default
+import qualified Data.Set                          as Set
+import           Data.String                       (fromString)
+import           Data.Yaml.FilePath
+import qualified Filesystem.Path                   as F
+import           Filesystem.Path.CurrentOS         (encodeString)
+import           Keter.Types.Common
+import           Network.HTTP.ReverseProxy.Rewrite
+import qualified Network.Wai.Handler.Warp          as Warp
+import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
+import           Prelude                           hiding (FilePath)
 
 data AppConfig = AppConfig
-    { configExec :: F.FilePath
-    , configArgs :: [Text]
-    , configHost :: Text
-    , configSsl :: Bool
+    { configExec       :: F.FilePath
+    , configArgs       :: [Text]
+    , configHost       :: Text
+    , configSsl        :: Bool
     , configExtraHosts :: Set Text
-    , configRaw :: Object
+    , configRaw        :: Object
     }
 
 instance ParseYamlFile AppConfig where
@@ -37,9 +37,9 @@ instance ParseYamlFile AppConfig where
         <*> return o
 
 data BundleConfig = BundleConfig
-    { bconfigApp :: Maybe AppConfig
+    { bconfigApp         :: Maybe AppConfig
     , bconfigStaticHosts :: Set StaticHost
-    , bconfigRedirects :: Set Redirect
+    , bconfigRedirects   :: Set Redirect
     }
 
 instance ParseYamlFile BundleConfig where
@@ -61,7 +61,7 @@ instance ParseYamlFile StaticHost where
 
 data Redirect = Redirect
     { redFrom :: Text
-    , redTo :: Text
+    , redTo   :: Text
     }
     deriving (Eq, Ord)
 
@@ -72,14 +72,15 @@ instance FromJSON Redirect where
     parseJSON _ = fail "Wanted an object"
 
 data KeterConfig = KeterConfig
-    { kconfigDir :: F.FilePath
-    , kconfigPortMan :: PortSettings
-    , kconfigHost :: HostPreference
-    , kconfigPort :: Port
-    , kconfigSsl :: Maybe TLSConfig
-    , kconfigSetuid :: Maybe Text
-    , kconfigReverseProxy :: Set ReverseProxyConfig
-    , kconfigIpFromHeader :: Bool
+    { kconfigDir                 :: F.FilePath
+    , kconfigPortMan             :: PortSettings
+    , kconfigHost                :: HostPreference
+    , kconfigPort                :: Port
+    , kconfigSsl                 :: Maybe TLSConfig
+    , kconfigSetuid              :: Maybe Text
+    , kconfigReverseProxy        :: Set ReverseProxyConfig
+    , kconfigIpFromHeader        :: Bool
+    , kconfigConnectionTimeBound :: Int
     }
 
 instance Default KeterConfig where
@@ -92,6 +93,7 @@ instance Default KeterConfig where
         , kconfigSetuid = Nothing
         , kconfigReverseProxy = Set.empty
         , kconfigIpFromHeader = False
+        , kconfigConnectionTimeBound = 5000
         }
 
 instance ParseYamlFile KeterConfig where
@@ -104,6 +106,7 @@ instance ParseYamlFile KeterConfig where
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
         <*> o .:? "ip-from-header" .!= False
+        <*> o .:? "connection-time-bound" .!= 5000
 
 data TLSConfig = TLSConfig !Warp.Settings !WarpTLS.TLSSettings
 
@@ -131,7 +134,7 @@ data PortSettings = PortSettings
 
 instance Default PortSettings where
     def = PortSettings
-        -- Top 10 Largest IANA unassigned port ranges with no unauthorized uses known 
+        -- Top 10 Largest IANA unassigned port ranges with no unauthorized uses known
         { portRange = [43124..44320]
                       ++ [28120..29166]
                       ++ [45967..46997]

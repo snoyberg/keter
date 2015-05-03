@@ -27,25 +27,26 @@ import           System.Posix.Signals      (Handler (Catch), installHandler,
 import           Control.Applicative       ((<$>))
 import           Control.Exception         (throwIO, try)
 import           Control.Monad             (forM)
+import           Control.Monad             (void, when)
 import           Data.Conduit.Process.Unix (initProcessTracker)
+import           Data.Default              (def)
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as T
 import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
 import           Data.Yaml.FilePath
+import           Filesystem                (createTree)
 import qualified Filesystem                as F
+import           Filesystem.Path.CurrentOS (hasExtension, (</>))
 import qualified Filesystem.Path.CurrentOS as F
-import Filesystem.Path.CurrentOS ((</>), hasExtension)
-import qualified Network.HTTP.Conduit      as HTTP (newManager, conduitManagerSettings)
+import qualified Network.HTTP.Conduit      as HTTP (conduitManagerSettings,
+                                                    newManager)
+import           Prelude                   hiding (FilePath, log)
 import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
-import Control.Monad (void, when)
-import Data.Default (def)
-import Prelude hiding (FilePath, log)
-import Filesystem (createTree)
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
@@ -98,7 +99,7 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
     hostman <- HostMan.start
     portpool <- PortPool.start kconfigPortPool
     tf <- TempFolder.setup $ kconfigDir </> "temp"
-    plugins <- sequence $ map ($ kconfigDir) mkPlugins
+    plugins <- mapM ($ kconfigDir) mkPlugins
     muid <-
         case kconfigSetuid of
             Nothing -> return Nothing
@@ -127,7 +128,7 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
 launchInitial :: KeterConfig -> AppMan.AppManager -> IO ()
 launchInitial kc@KeterConfig {..} appMan = do
     createTree incoming
-    bundles0 <- fmap (filter isKeter) $ listDirectoryTree incoming
+    bundles0 <- filter isKeter <$> listDirectoryTree incoming
     mapM_ (AppMan.addApp appMan) bundles0
 
     unless (V.null kconfigBuiltinStanzas) $ AppMan.perform
@@ -190,6 +191,7 @@ startListening KeterConfig {..} hostman = do
     manager <- HTTP.newManager HTTP.conduitManagerSettings
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
+        kconfigConnectionTimeBound
         manager
         (HostMan.lookupAction hostman . CI.mk)
 

@@ -45,9 +45,9 @@ import System.Timeout.Lifted (timeout)
 type HostLookup = ByteString -> IO (Maybe ProxyAction)
 
 reverseProxy :: Bool
-             -> Manager -> HostLookup -> ListeningPort -> IO ()
-reverseProxy useHeader manager hostLookup listener =
-    run $ gzip def $ withClient isSecure useHeader manager hostLookup
+             -> Int -> Manager -> HostLookup -> ListeningPort -> IO ()
+reverseProxy useHeader timeBound manager hostLookup listener =
+    run $ gzip def $ withClient isSecure useHeader timeBound manager hostLookup
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     (run, isSecure) =
@@ -62,22 +62,26 @@ reverseProxy useHeader manager hostLookup listener =
 
 withClient :: Bool -- ^ is secure?
            -> Bool -- ^ use incoming request header for IP address
+           -> Int  -- ^ time bound for connections
            -> Manager
            -> HostLookup
            -> Wai.Application
-withClient isSecure useHeader manager portLookup req0 sendResponse =
-    timeBound (5 * 60 * 1000 * 1000) (waiProxyToSettings getDest def
+withClient isSecure useHeader bound manager portLookup req0 sendResponse =
+    if bound > 0
+       then timeBound (bound * 1000) task
+       else task
+  where
+    task = waiProxyToSettings getDest def
         { wpsSetIpHeader =
             if useHeader
                 then SIHFromHeader
                 else SIHFromSocket
-        } manager req0 sendResponse)
-  where
+        } manager req0 sendResponse
     protocol
         | isSecure = "https"
         | otherwise = "http"
 
-    -- FIXME This is a temporary workaround for
+    -- FIXME This is a workaround for
     -- https://github.com/snoyberg/keter/issues/29. After some research, it
     -- seems like Warp is behaving properly here. I'm still not certain why the
     -- http call (from http-conduit) inside waiProxyToSettings could ever block

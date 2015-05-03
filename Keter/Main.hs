@@ -190,6 +190,7 @@ startListening KeterConfig {..} hostman = do
     manager <- HTTP.newManager HTTP.conduitManagerSettings
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
+        kconfigConnectionTimeBound
         manager
         (HostMan.lookupAction hostman . CI.mk)
 

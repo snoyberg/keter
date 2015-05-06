@@ -18,7 +18,7 @@ import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception         (IOException, bracketOnError,
                                             throwIO, try)
-import           Control.Monad             (void, when)
+import           Control.Monad             (void, when, unless)
 import qualified Data.CaseInsensitive      as CI
 import           Data.Conduit.LogFile      (RotatingLog)
 import qualified Data.Conduit.LogFile      as LogFile
@@ -47,8 +47,7 @@ import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
 import           System.IO                 (hClose)
 import           System.Posix.Files        (fileAccess)
-import           System.Posix.Types        (EpochTime)
-import           System.Posix.Types        (GroupID, UserID)
+import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
 
 data App = App
@@ -145,7 +144,7 @@ withActions asc bconfig f =
             stanzas
             (wac { waconfigPort = port } : wacs)
             backs
-            (Map.unions $ actions : map (\host -> Map.singleton host (PAPort port, rs)) hosts))
+            (Map.unions $ actions : map (\host -> Map.singleton host (PAPort port (waconfigTimeout wac), rs)) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
     loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 =
@@ -162,10 +161,10 @@ withActions asc bconfig f =
                 $ actions0
                 : map (\host -> Map.singleton host (PARedirect red, rs))
                   (Set.toList (redirconfigHosts red))
-    loop (Stanza (StanzaReverseProxy rev) rs:stanzas) wacs backs actions0 =
+    loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions
       where
-        actions = Map.insert (CI.mk $ reversingHost rev) (PAReverseProxy rev, rs) actions0
+        actions = Map.insert (CI.mk $ reversingHost rev) (PAReverseProxy rev mid to, rs) actions0
     loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
@@ -207,9 +206,7 @@ withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
         if exists
             then do
                 canExec <- fileAccess (F.encodeString fp) True False True
-                if canExec
-                    then return ()
-                    else throwIO $ FileNotExecutable fp
+                unless canExec $ throwIO $ FileNotExecutable fp
             else throwIO $ ExecutableNotFound fp
 
 start :: AppStartConfig
@@ -279,7 +276,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             -- Ordering chosen specifically to precedence rules: app specific,
             -- plugins, global, and then auto-set Keter variables.
             [ waconfigEnvironment
-            , Map.filterWithKey (\k _ -> Set.member k waconfigForwardEnv) $ Map.fromList $ map (\x -> (pack (fst x), pack (snd x))) systemEnv
+            , Map.filterWithKey (\k _ -> Set.member k waconfigForwardEnv) $ Map.fromList $ map (pack *** pack) systemEnv
             , Map.fromList otherEnv
             , kconfigEnvironment ascKeterConfig
             , Map.singleton "PORT" $ pack $ show waconfigPort
@@ -309,15 +306,13 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             AINamed x -> x
 
 killWebApp :: RunningWebApp -> IO ()
-killWebApp RunningWebApp {..} = do
+killWebApp RunningWebApp {..} =
     terminateMonitoredProcess rwaProcess
 
 ensureAlive :: RunningWebApp -> IO ()
 ensureAlive RunningWebApp {..} = do
     didAnswer <- testApp rwaPort
-    if didAnswer
-        then return ()
-        else error "ensureAlive failed"
+    unless didAnswer $ error "ensureAlive failed"
   where
     testApp :: Port -> IO Bool
     testApp port = do
@@ -393,7 +388,7 @@ launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlog Backgrou
             AINamed x -> x
 
 killBackgroundApp :: RunningBackgroundApp -> IO ()
-killBackgroundApp RunningBackgroundApp {..} = do
+killBackgroundApp RunningBackgroundApp {..} =
     terminateMonitoredProcess rbaProcess
 
     {-

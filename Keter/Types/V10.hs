@@ -54,7 +54,7 @@ instance ToCurrent BundleConfig where
         }
 
 instance ParseYamlFile BundleConfig where
-    parseYamlFile basedir = withObject "BundleConfig" $ \o -> do
+    parseYamlFile basedir = withObject "BundleConfig" $ \o ->
         case HashMap.lookup "stanzas" o of
             Nothing -> (toCurrent :: V04.BundleConfig -> BundleConfig) <$> parseYamlFile basedir (Object o)
             Just _ -> current o
@@ -112,7 +112,7 @@ instance ToCurrent KeterConfig where
         , kconfigPortPool = portman
         , kconfigListeners = NonEmptyVector (LPInsecure host port) (getSSL ssl)
         , kconfigSetuid = setuid
-        , kconfigBuiltinStanzas = V.fromList $ map (flip Stanza False . StanzaReverseProxy) $ Set.toList rproxy
+        , kconfigBuiltinStanzas = V.fromList $ map (flip Stanza False . (\rp -> StanzaReverseProxy rp [] Nothing)) $ Set.toList rproxy
         , kconfigIpFromHeader = ipFromHeader
         , kconfigExternalHttpPort = 80
         , kconfigExternalHttpsPort = 443
@@ -170,7 +170,7 @@ data StanzaRaw port
     = StanzaStaticFiles !StaticFilesConfig
     | StanzaRedirect !RedirectConfig
     | StanzaWebApp !(WebAppConfig port)
-    | StanzaReverseProxy !ReverseProxyConfig
+    | StanzaReverseProxy !ReverseProxyConfig ![ MiddlewareConfig ] !(Maybe Int)
     | StanzaBackground !BackgroundConfig
             -- FIXME console app
     deriving Show
@@ -183,10 +183,10 @@ data StanzaRaw port
 --
 -- 2. Not all stanzas have an associated proxy action.
 data ProxyActionRaw
-    = PAPort Port
+    = PAPort Port !(Maybe Int)
     | PAStatic StaticFilesConfig
     | PARedirect RedirectConfig
-    | PAReverseProxy ReverseProxyConfig
+    | PAReverseProxy ReverseProxyConfig ![ MiddlewareConfig ] !(Maybe Int)
     deriving Show
 
 type ProxyAction = (ProxyActionRaw, RequiresSecure)
@@ -196,11 +196,13 @@ instance ParseYamlFile (Stanza ()) where
         typ <- o .: "type"
         needsHttps <- o .:? "requires-secure" .!= False
         raw <- case typ of
-            "static-files" -> fmap StanzaStaticFiles $ parseYamlFile basedir $ Object o
-            "redirect" -> fmap StanzaRedirect $ parseYamlFile basedir $ Object o
-            "webapp" -> fmap StanzaWebApp $ parseYamlFile basedir $ Object o
-            "reverse-proxy" -> fmap StanzaReverseProxy $ parseJSON $ Object o
-            "background" -> fmap StanzaBackground $ parseYamlFile basedir $ Object o
+            "static-files"  -> fmap StanzaStaticFiles $ parseYamlFile basedir $ Object o
+            "redirect"      -> fmap StanzaRedirect $ parseYamlFile basedir $ Object o
+            "webapp"        -> fmap StanzaWebApp $ parseYamlFile basedir $ Object o
+            "reverse-proxy" -> StanzaReverseProxy <$> parseJSON (Object o)
+                                                  <*> o .:? "middleware" .!= []
+                                                  <*> o .:? "connection-time-bound"
+            "background"    -> fmap StanzaBackground $ parseYamlFile basedir $ Object o
             _ -> fail $ "Unknown stanza type: " ++ typ
         return $ Stanza raw needsHttps
 
@@ -217,7 +219,7 @@ instance ToJSON (StanzaRaw ()) where
     toJSON (StanzaStaticFiles x) = addStanzaType "static-files" x
     toJSON (StanzaRedirect x) = addStanzaType "redirect" x
     toJSON (StanzaWebApp x) = addStanzaType "webapp" x
-    toJSON (StanzaReverseProxy x) = addStanzaType "reverse-proxy" x
+    toJSON (StanzaReverseProxy x _ _) = addStanzaType "reverse-proxy" x
     toJSON (StanzaBackground x) = addStanzaType "background" x
 
 addStanzaType :: ToJSON a => Value -> a -> Value
@@ -232,16 +234,18 @@ data StaticFilesConfig = StaticFilesConfig
     , sfconfigListings   :: !Bool
     -- FIXME basic auth
     , sfconfigMiddleware :: ![ MiddlewareConfig ]
+    , sfconfigTimeout    :: !(Maybe Int)
     }
     deriving Show
 
 instance ToCurrent StaticFilesConfig where
     type Previous StaticFilesConfig = V04.StaticHost
     toCurrent (V04.StaticHost host root) = StaticFilesConfig
-        { sfconfigRoot = root
-        , sfconfigHosts = Set.singleton $ CI.mk host
-        , sfconfigListings = True
+        { sfconfigRoot       = root
+        , sfconfigHosts      = Set.singleton $ CI.mk host
+        , sfconfigListings   = True
         , sfconfigMiddleware = []
+        , sfconfigTimeout    = Nothing
         }
 
 instance ParseYamlFile StaticFilesConfig where
@@ -250,13 +254,15 @@ instance ParseYamlFile StaticFilesConfig where
         <*> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
         <*> o .:? "directory-listing" .!= False
         <*> o .:? "middleware" .!= []
+        <*> o .:? "connection-time-bound"
 
 instance ToJSON StaticFilesConfig where
     toJSON StaticFilesConfig {..} = object
-        [ "root" .= F.encodeString sfconfigRoot
-        , "hosts" .= Set.map CI.original sfconfigHosts
-        , "directory-listing" .= sfconfigListings
-        , "middleware" .= sfconfigMiddleware
+        [ "root"                  .= F.encodeString sfconfigRoot
+        , "hosts"                 .= Set.map CI.original sfconfigHosts
+        , "directory-listing"     .= sfconfigListings
+        , "middleware"            .= sfconfigMiddleware
+        , "connection-time-bound" .= sfconfigTimeout
         ]
 
 data RedirectConfig = RedirectConfig
@@ -344,6 +350,7 @@ data WebAppConfig port = WebAppConfig
     , waconfigSsl         :: !Bool
     , waconfigPort        :: !port
     , waconfigForwardEnv  :: !(Set Text)
+    , waconfigTimeout     :: !(Maybe Int)
     }
     deriving Show
 
@@ -358,6 +365,7 @@ instance ToCurrent (WebAppConfig ()) where
         , waconfigSsl = ssl
         , waconfigPort = ()
         , waconfigForwardEnv = Set.empty
+        , waconfigTimeout = Nothing
         }
 
 instance ParseYamlFile (WebAppConfig ()) where
@@ -380,15 +388,17 @@ instance ParseYamlFile (WebAppConfig ()) where
             <*> o .:? "ssl" .!= False
             <*> return ()
             <*> o .:? "forward-env" .!= Set.empty
+            <*> o .:? "connection-time-bound"
 
 instance ToJSON (WebAppConfig ()) where
     toJSON WebAppConfig {..} = object
-        [ "exec" .= F.encodeString waconfigExec
-        , "args" .= waconfigArgs
-        , "env" .= waconfigEnvironment
-        , "hosts" .= map CI.original (waconfigApprootHost : Set.toList waconfigHosts)
-        , "ssl" .= waconfigSsl
-        , "forward-env" .= waconfigForwardEnv
+        [ "exec"                  .= F.encodeString waconfigExec
+        , "args"                  .= waconfigArgs
+        , "env"                   .= waconfigEnvironment
+        , "hosts"                 .= map CI.original (waconfigApprootHost : Set.toList waconfigHosts)
+        , "ssl"                   .= waconfigSsl
+        , "forward-env"           .= waconfigForwardEnv
+        , "connection-time-bound" .= waconfigTimeout
         ]
 
 data AppInput = AIBundle !FilePath !EpochTime
@@ -408,7 +418,7 @@ data RestartCount = UnlimitedRestarts | LimitedRestarts !Word
 
 instance FromJSON RestartCount where
     parseJSON (String "unlimited") = return UnlimitedRestarts
-    parseJSON v = fmap LimitedRestarts $ parseJSON v
+    parseJSON v = LimitedRestarts <$> parseJSON v
 
 instance ParseYamlFile BackgroundConfig where
     parseYamlFile basedir = withObject "BackgroundConfig" $ \o -> BackgroundConfig

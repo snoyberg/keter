@@ -17,7 +17,6 @@ import           Data.Monoid                       (mappend, mempty)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
-import qualified Filesystem.Path.CurrentOS         as F
 import           Keter.Types
 import           Keter.Types.Middleware
 import           Network.HTTP.Conduit              (Manager)
@@ -55,9 +54,9 @@ reverseProxy useHeader timeBound manager hostLookup listener =
             LPInsecure host port -> (Warp.runSettings (warp host port), False)
             LPSecure host port cert chainCerts key -> (WarpTLS.runTLS
                 (WarpTLS.tlsSettingsChain
-                    (F.encodeString cert)
-                    (map F.encodeString $ V.toList chainCerts)
-                    (F.encodeString key))
+                    cert
+                    (V.toList chainCerts)
+                    key)
                 (warp host port), True)
 
 withClient :: Bool -- ^ is secure?

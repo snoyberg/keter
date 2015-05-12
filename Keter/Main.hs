@@ -36,10 +36,8 @@ import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
 import           Data.Yaml.FilePath
-import           Filesystem                (createTree)
-import qualified Filesystem                as F
-import           Filesystem.Path.CurrentOS (hasExtension, (</>))
-import qualified Filesystem.Path.CurrentOS as F
+import           System.Directory          (createDirectoryIfMissing, doesFileExist, createDirectoryIfMissing, getDirectoryContents, doesDirectoryExist)
+import           System.FilePath           (takeExtension, (</>))
 import qualified Network.HTTP.Conduit      as HTTP (conduitManagerSettings,
                                                     newManager)
 import           Prelude                   hiding (FilePath, log)
@@ -61,7 +59,7 @@ withConfig :: FilePath
            -> (KeterConfig -> IO a)
            -> IO a
 withConfig input f = do
-    exists <- F.isFile input
+    exists <- doesFileExist input
     config <-
         if exists
             then do
@@ -77,7 +75,7 @@ withLogger :: FilePath
            -> IO a
 withLogger fp f = withConfig fp $ \config -> do
     mainlog <- LogFile.openRotatingLog
-        (F.encodeString $ (kconfigDir config) </> "log" </> "keter")
+        (kconfigDir config </> "log" </> "keter")
         LogFile.defaultMaxTotal
 
     f config $ \ml -> do
@@ -127,7 +125,7 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
 
 launchInitial :: KeterConfig -> AppMan.AppManager -> IO ()
 launchInitial kc@KeterConfig {..} appMan = do
-    createTree incoming
+    createDirectoryIfMissing True incoming
     bundles0 <- filter isKeter <$> listDirectoryTree incoming
     mapM_ (AppMan.addApp appMan) bundles0
 
@@ -142,7 +140,7 @@ getIncoming :: KeterConfig -> FilePath
 getIncoming kc = kconfigDir kc </> "incoming"
 
 isKeter :: FilePath -> Bool
-isKeter fp = hasExtension fp "keter"
+isKeter fp = takeExtension fp == ".keter"
 
 startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO ()
 startWatching kc@KeterConfig {..} appMan log = do
@@ -168,7 +166,7 @@ startWatching kc@KeterConfig {..} appMan log = do
     void $ flip (installHandler sigHUP) Nothing $ Catch $ do
         bundles <- fmap (filter isKeter) $ listDirectoryTree incoming
         newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
-            time <- modificationTime <$> getFileStatus (F.encodeString bundle)
+            time <- modificationTime <$> getFileStatus bundle
             return (getAppname bundle, (bundle, time))
         AppMan.reloadAppList appMan newMap
   where
@@ -176,9 +174,10 @@ startWatching kc@KeterConfig {..} appMan log = do
 
 listDirectoryTree :: FilePath -> IO [FilePath]
 listDirectoryTree fp = do
-       dir <- F.listDirectory fp
-       concat <$> mapM (\fp1 -> do
-          isDir <- F.isDirectory fp1
+       dir <- getDirectoryContents fp
+       concat <$> mapM (\fpRel -> do
+          let fp1 = fp </> fpRel
+          isDir <- doesDirectoryExist fp1
           if isDir
            then
              listDirectoryTree fp1

@@ -30,15 +30,15 @@ import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
 import           Data.Monoid               ((<>))
 import qualified Data.Set                  as Set
-import           Data.Text                 (pack)
+import           Data.Text                 (pack, unpack)
 import           Data.Text.Encoding        (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error  (lenientDecode)
 import qualified Data.Vector               as V
 import           Data.Yaml
 import           Data.Yaml.FilePath
-import           Filesystem                (canonicalizePath, isFile,
-                                            removeTree)
-import qualified Filesystem.Path.CurrentOS as F
+import System.FilePath ((</>))
+import           System.Directory          (canonicalizePath, doesFileExist,
+                                            removeDirectoryRecursive)
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
 import           Keter.Types
@@ -81,10 +81,10 @@ unpackBundle AppStartConfig {..} bundle aid = do
         -- Get the FilePath for the keter yaml configuration. Tests for
         -- keter.yml and defaults to keter.yaml.
         configFP <- do
-            let yml = dir F.</> "config" F.</> "keter.yml"
-            exists <- isFile yml
+            let yml = dir </> "config" </> "keter.yml"
+            exists <- doesFileExist yml
             return $ if exists then yml
-                               else dir F.</> "config" F.</> "keter.yaml"
+                               else dir </> "config" </> "keter.yaml"
 
         mconfig <- decodeFileRelative configFP
         config <-
@@ -117,7 +117,7 @@ withConfig :: AppStartConfig
 withConfig _asc _aid (AIData bconfig) f = f Nothing bconfig Nothing
 withConfig asc aid (AIBundle fp modtime) f = bracketOnError
     (unpackBundle asc fp aid)
-    (\(newdir, _) -> removeTree newdir)
+    (\(newdir, _) -> removeDirectoryRecursive newdir)
     $ \(newdir, bconfig) -> f (Just newdir) bconfig (Just modtime)
 
 withReservations :: AppStartConfig
@@ -181,16 +181,16 @@ withRotatingLog AppStartConfig {..} aid (Just var) f = do
     mrlog <- readTVarIO var
     case mrlog of
         Nothing -> bracketOnError
-            (LogFile.openRotatingLog (F.encodeString dir) LogFile.defaultMaxTotal)
+            (LogFile.openRotatingLog dir LogFile.defaultMaxTotal)
             LogFile.close
             (f var)
         Just rlog ->  f var rlog
   where
-    dir = kconfigDir ascKeterConfig F.</> "log" F.</> name
+    dir = kconfigDir ascKeterConfig </> "log" </> name
     name =
         case aid of
             AIBuiltin -> "__builtin__"
-            AINamed x -> F.fromText $ "app-" <> x
+            AINamed x -> unpack $ "app-" <> x
 
 withSanityChecks :: AppStartConfig -> BundleConfig -> IO a -> IO a
 withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
@@ -203,10 +203,10 @@ withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
     go _ = return ()
 
     isExec fp = do
-        exists <- isFile fp
+        exists <- doesFileExist fp
         if exists
             then do
-                canExec <- fileAccess (F.encodeString fp) True False True
+                canExec <- fileAccess fp True False True
                 if canExec
                     then return ()
                     else throwIO $ FileNotExecutable fp
@@ -291,8 +291,8 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             (ascLog . OtherMessage . decodeUtf8With lenientDecode)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
-            (encodeUtf8 $ either id id $ F.toText exec)
-            (maybe "/tmp" (encodeUtf8 . either id id . F.toText) mdir)
+            (encodeUtf8 $ pack exec)
+            (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
             (LogFile.addChunk rlog)
@@ -378,8 +378,8 @@ launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlog Backgrou
             (ascLog . OtherMessage . decodeUtf8With lenientDecode)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
-            (encodeUtf8 $ either id id $ F.toText exec)
-            (maybe "/tmp" (encodeUtf8 . either id id . F.toText) mdir)
+            (encodeUtf8 $ pack exec)
+            (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList bgconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
             (LogFile.addChunk rlog)
@@ -580,7 +580,7 @@ terminateHelper AppStartConfig {..} aid apps backs mdir = do
         Nothing -> return ()
         Just dir -> do
             ascLog $ RemovingOldFolder dir
-            res <- try $ removeTree dir
+            res <- try $ removeDirectoryRecursive dir
             case res of
                 Left e -> $logEx ascLog e
                 Right () -> return ()

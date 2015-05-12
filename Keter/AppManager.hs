@@ -25,7 +25,6 @@ import qualified Data.Map                  as Map
 import           Data.Maybe                (mapMaybe)
 import           Data.Maybe                (catMaybes)
 import qualified Data.Set                  as Set
-import qualified Filesystem.Path.CurrentOS as F
 import           Keter.App                 (App, AppStartConfig)
 import qualified Keter.App                 as App
 import           Keter.Types
@@ -247,7 +246,7 @@ addApp appMan bundle = do
 
 getInputForBundle :: FilePath -> IO (AppId, Action)
 getInputForBundle bundle = do
-    time <- modificationTime <$> getFileStatus (F.encodeString bundle)
+    time <- modificationTime <$> getFileStatus bundle
     return (AINamed $ getAppname bundle, Reload $ AIBundle bundle time)
 
 terminateApp :: AppManager -> Appname -> IO ()

@@ -16,19 +16,20 @@ import           Control.Exception         (throwIO, try)
 import           Control.Monad             (forever, mzero, replicateM, void)
 import           Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
+import qualified Data.Char                 as C
 import           Data.Default
 import qualified Data.HashMap.Strict       as HMap
 import qualified Data.Map                  as Map
 import           Data.Monoid               ((<>))
-import qualified Data.Char                 as C
 import qualified Data.Text                 as T
 import qualified Data.Text.Lazy            as TL
 import           Data.Text.Lazy.Builder    (fromText, toLazyText)
 import           Data.Yaml
-import           Filesystem                (createTree, isFile, rename)
-import           Filesystem.Path.CurrentOS (directory, encodeString, (<.>))
 import           Keter.Types
 import           Prelude                   hiding (FilePath)
+import           System.Directory          (createDirectoryIfMissing,
+                                            doesFileExist, renameFile)
+import           System.FilePath           (takeDirectory, (<.>))
 import           System.Process            (readProcess)
 import qualified System.Random             as R
 
@@ -86,10 +87,10 @@ data Command = GetConfig Appname (Either SomeException DBInfo -> IO ())
 -- automatically be saved to this file.
 load :: Settings -> FilePath -> IO Plugin
 load Settings{..} fp = do
-    createTree $ directory fp
-    e <- isFile fp
+    createDirectoryIfMissing True $ takeDirectory fp
+    e <- doesFileExist fp
     edb <- if e
-        then decodeFileEither $ encodeString fp
+        then decodeFileEither fp
         else return $ Right Map.empty
     case edb of
         Left ex -> throwIO ex
@@ -131,8 +132,8 @@ load Settings{..} fp = do
                         Right () -> do
                             let db' = Map.insert appname dbi db
                             ey <- lift $ try $ do
-                                encodeFile (encodeString tmpfp) db'
-                                rename tmpfp fp
+                                encodeFile tmpfp db'
+                                renameFile tmpfp fp
                             case ey of
                                 Left e -> return $ Left e
                                 Right () -> do

@@ -20,11 +20,11 @@ import qualified Data.ByteString.Lazy      as L
 import           Data.ByteString.Unsafe    (unsafeUseAsCStringLen)
 import qualified Data.IORef                as I
 import           Data.Monoid               ((<>))
-import           Data.Text                 (Text, pack)
+import           Data.Text                 (Text, pack, unpack)
 import           Data.Word                 (Word)
-import qualified Filesystem                as F
-import           Filesystem.Path.CurrentOS ((</>))
-import qualified Filesystem.Path.CurrentOS as F
+import           System.FilePath ((</>))
+import qualified System.FilePath           as F
+import qualified System.Directory          as D
 import           Foreign.Ptr               (castPtr)
 import           System.Posix.Files        (setFdOwnerAndGroup,
                                             setOwnerAndGroup)
@@ -33,45 +33,45 @@ import           System.Posix.IO           (FdOption (CloseOnExec), closeFd,
 import           System.Posix.Types        (GroupID, UserID)
 
 data TempFolder = TempFolder
-    { tfRoot    :: F.FilePath
+    { tfRoot    :: FilePath
     , tfCounter :: I.IORef Word
     }
 
-setup :: F.FilePath -> IO TempFolder
+setup :: FilePath -> IO TempFolder
 setup fp = do
-    e <- F.isDirectory fp
-    when e $ F.removeTree fp
-    F.createTree fp
+    e <- D.doesDirectoryExist fp
+    when e $ D.removeDirectoryRecursive fp
+    D.createDirectoryIfMissing True fp
     c <- I.newIORef minBound
     return $ TempFolder fp c
 
 getFolder :: Maybe (UserID, GroupID)
           -> TempFolder
           -> Text -- ^ prefix for folder name
-          -> IO F.FilePath
+          -> IO FilePath
 getFolder muid TempFolder {..} appname = do
     !i <- I.atomicModifyIORef tfCounter $ \i -> (succ i, i)
-    let fp = tfRoot </> F.fromText (appname <> "-" <> pack (show i))
-    F.createTree fp
+    let fp = tfRoot </> unpack (appname <> "-" <> pack (show i))
+    D.createDirectoryIfMissing True fp
     case muid of
         Nothing -> return ()
-        Just (uid, gid) -> setOwnerAndGroup (F.encodeString fp) uid gid
+        Just (uid, gid) -> setOwnerAndGroup fp uid gid
     return fp
 
 unpackTempTar :: Maybe (UserID, GroupID)
               -> TempFolder
-              -> F.FilePath -- ^ bundle
+              -> FilePath -- ^ bundle
               -> Text -- ^ prefix for folder name
-              -> (F.FilePath -> IO a)
+              -> (FilePath -> IO a)
               -> IO a
 unpackTempTar muid tf bundle appname withDir = do
-    lbs <- L.readFile $ F.encodeString bundle
-    bracketOnError (getFolder muid tf appname) F.removeTree $ \dir -> do
+    lbs <- L.readFile bundle
+    bracketOnError (getFolder muid tf appname) D.removeDirectoryRecursive $ \dir -> do
         unpackTar muid dir $ Tar.read $ decompress lbs
         withDir dir
 
 unpackTar :: Maybe (UserID, GroupID)
-          -> F.FilePath
+          -> FilePath
           -> Tar.Entries Tar.FormatError
           -> IO ()
 unpackTar muid dir =
@@ -82,18 +82,18 @@ unpackTar muid dir =
     loop (Tar.Next e es) = go e >> loop es
 
     go e = do
-        let fp = dir </> F.decodeString (Tar.entryPath e)
+        let fp = dir </> Tar.entryPath e
         case Tar.entryContent e of
             Tar.NormalFile lbs _ -> do
                 case muid of
-                    Nothing -> F.createTree $ F.directory fp
-                    Just (uid, gid) -> createTreeUID uid gid $ F.directory fp
+                    Nothing -> D.createDirectoryIfMissing True $ F.takeDirectory fp
+                    Just (uid, gid) -> createTreeUID uid gid $ F.takeDirectory fp
                 let write fd bs = unsafeUseAsCStringLen bs $ \(ptr, len) -> do
                         _ <- fdWriteBuf fd (castPtr ptr) (fromIntegral len)
                         return ()
                 bracket
                     (do
-                        fd <- createFile (F.encodeString fp) $ Tar.entryPermissions e
+                        fd <- createFile fp $ Tar.entryPermissions e
                         setFdOption fd CloseOnExec True
                         case muid of
                             Nothing -> return ()
@@ -105,13 +105,13 @@ unpackTar muid dir =
 
 -- | Create a directory tree, setting the uid and gid of all newly created
 -- folders.
-createTreeUID :: UserID -> GroupID -> F.FilePath -> IO ()
+createTreeUID :: UserID -> GroupID -> FilePath -> IO ()
 createTreeUID uid gid =
     go
   where
     go fp = do
-        exists <- F.isDirectory fp
+        exists <- D.doesDirectoryExist fp
         unless exists $ do
-            go $ F.parent fp
-            F.createDirectory False fp
-            setOwnerAndGroup (F.encodeString fp) uid gid
+            go $ F.takeDirectory fp
+            D.createDirectoryIfMissing False fp
+            setOwnerAndGroup fp uid gid

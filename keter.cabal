@@ -1,5 +1,5 @@
 Name:                keter
-Version:             1.3.10.1
+Version:             1.4.0
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:         Hackage documentation generation is not reliable. For up to date documentation, please see: <http://www.stackage.org/package/keter>.
 Homepage:            http://www.yesodweb.com/
@@ -35,13 +35,11 @@ Library
                      , yaml                      >= 0.8.4         && < 0.9
                      , unix-compat               >= 0.3           && < 0.5
                      , fsnotify                  >= 0.0.11
-                     , system-filepath           >= 0.4           && < 0.5
-                     , system-fileio             >= 0.3           && < 0.4
                      , conduit                   >= 1.1
                      , conduit-extra             >= 1.1
                      , http-reverse-proxy        >= 0.4           && < 0.5
                      , unix                      >= 2.5
-                     , wai-app-static            >= 3.0           && < 3.1
+                     , wai-app-static            >= 3.1           && < 3.2
                      , wai                       >= 3.0           && < 3.1
                      , wai-extra                 >= 3.0.3         && < 3.1
                      , http-types
@@ -87,7 +85,7 @@ Library
 Executable keter
   Main-is:             keter.hs
   hs-source-dirs:      main
-  Build-depends:       base, keter, system-filepath, data-default
+  Build-depends:       base, keter, data-default
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
 

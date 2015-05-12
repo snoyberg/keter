@@ -1,4 +1,6 @@
 {-# LANGUAGE NoImplicitPrelude #-}
+{-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances #-}
 -- | Utilities for dealing with YAML config files which contain relative file
 -- paths.
 module Data.Yaml.FilePath
@@ -11,13 +13,13 @@ module Data.Yaml.FilePath
     ) where
 
 import Control.Applicative ((<$>))
-import Filesystem.Path.CurrentOS (FilePath, encodeString, directory, fromText, (</>))
 import Data.Yaml (decodeFileEither, ParseException (AesonException), parseJSON)
-import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord, fail)
+import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord, fail, FilePath)
 import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
-import Data.Text (Text)
+import Data.Text (Text, unpack)
 import qualified Data.Set as Set
 import qualified Data.Vector as V
+import System.FilePath (takeDirectory, (</>))
 
 -- | The directory from which we're reading the config file.
 newtype BaseDir = BaseDir FilePath
@@ -27,7 +29,7 @@ decodeFileRelative :: ParseYamlFile a
                    => FilePath
                    -> IO (Either ParseException a)
 decodeFileRelative fp = do
-    evalue <- decodeFileEither $ encodeString fp
+    evalue <- decodeFileEither fp
     return $! case evalue of
         Left e -> Left e
         Right value ->
@@ -35,7 +37,7 @@ decodeFileRelative fp = do
                 Left s -> Left $! AesonException s
                 Right x -> Right $! x
   where
-    basedir = BaseDir $ directory fp
+    basedir = BaseDir $ takeDirectory fp
 
 -- | A replacement for the @.:@ operator which will both parse a file path and
 -- apply the relative file logic.
@@ -52,7 +54,7 @@ class ParseYamlFile a where
     parseYamlFile :: BaseDir -> Value -> Parser a
 
 instance ParseYamlFile FilePath where
-    parseYamlFile (BaseDir dir) o = ((dir </>) . fromText) <$> parseJSON o
+    parseYamlFile (BaseDir dir) o = ((dir </>) . unpack) <$> parseJSON o
 instance (ParseYamlFile a, Ord a) => ParseYamlFile (Set.Set a) where
     parseYamlFile base o = parseJSON o >>= ((Set.fromList <$>) . mapM (parseYamlFile base))
 instance ParseYamlFile a => ParseYamlFile (V.Vector a) where

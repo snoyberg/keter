@@ -1,3 +1,7 @@
+## 1.4.0
+
+* Drop system-filepath
+
 ## 1.3.10
 
 * Configurable time bound [#92](https://github.com/snoyberg/keter/pull/92)

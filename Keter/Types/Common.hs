@@ -22,11 +22,9 @@ import qualified Data.Set                   as Set
 import           Data.Text                  (Text, pack, unpack)
 import           Data.Typeable              (Typeable)
 import qualified Data.Yaml
-import           Filesystem.Path.CurrentOS  (FilePath, basename, encodeString,
-                                             toText)
 import qualified Language.Haskell.TH.Syntax as TH
-import           Prelude                    hiding (FilePath)
 import           System.Exit                (ExitCode)
+import           System.FilePath            (takeBaseName)
 
 -- | Name of the application. Should just be the basename of the application
 -- file.
@@ -55,7 +53,7 @@ type Host = CI Text
 type HostBS = CI ByteString
 
 getAppname :: FilePath -> Text
-getAppname = either id id . toText . basename
+getAppname = pack . takeBaseName
 
 data LogMessage
     = ProcessCreated FilePath
@@ -81,16 +79,16 @@ data LogMessage
     | WatchedFile Text FilePath
 
 instance Show LogMessage where
-    show (ProcessCreated f) = "Created process: " ++ encodeString f
+    show (ProcessCreated f) = "Created process: " ++ f
     show (InvalidBundle f e) = concat
         [ "Unable to parse bundle file '"
-        , encodeString f
+        , f
         , "': "
         , show e
         ]
     show (ProcessDidNotStart fp) = concat
         [ "Could not start process within timeout period: "
-        , encodeString fp
+        , fp
         ]
     show (ExceptionThrown t e) = concat
         [ unpack t
@@ -100,16 +98,16 @@ instance Show LogMessage where
     show (RemovingPort p) = "Port in use, removing from port pool: " ++ show p
     show (UnpackingBundle b) = concat
         [ "Unpacking bundle '"
-        , encodeString b
+        , b
         , "'"
         ]
     show (TerminatingApp t) = "Shutting down app: " ++ unpack t
     show (FinishedReloading t) = "App finished reloading: " ++ unpack t
     show (TerminatingOldProcess (AINamed t)) = "Sending old process TERM signal: " ++ unpack t
     show (TerminatingOldProcess AIBuiltin) = "Sending old process TERM signal: builtin"
-    show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ encodeString fp
+    show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ fp
     show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ unpack t
-    show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ encodeString f
+    show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ f
     show (OtherMessage t) = unpack t
     show (ErrorStartingBundle name e) = concat
         [ "Error occured when launching bundle "
@@ -135,7 +133,7 @@ instance Show LogMessage where
         [ "Watched file "
         , unpack action
         , ": "
-        , encodeString fp
+        , fp
         ]
 
 data KeterException = CannotParsePostgres FilePath

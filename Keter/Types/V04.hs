@@ -10,8 +10,7 @@ import           Data.Default
 import qualified Data.Set                          as Set
 import           Data.String                       (fromString)
 import           Data.Yaml.FilePath
-import qualified Filesystem.Path                   as F
-import           Filesystem.Path.CurrentOS         (encodeString)
+import qualified System.FilePath                   as F
 import           Keter.Types.Common
 import           Network.HTTP.ReverseProxy.Rewrite
 import qualified Network.Wai.Handler.Warp          as Warp
@@ -124,8 +123,8 @@ instance ParseYamlFile TLSConfig where
             $ Warp.setPort port
               Warp.defaultSettings)
             WarpTLS.defaultTlsSettings
-                { WarpTLS.certFile = encodeString cert
-                , WarpTLS.keyFile = encodeString key
+                { WarpTLS.certFile = cert
+                , WarpTLS.keyFile = key
                 }
 
 -- | Controls execution of the nginx thread. Follows the settings type pattern.

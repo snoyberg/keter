@@ -24,14 +24,13 @@ import           Data.Vector                       (Vector)
 import qualified Data.Vector                       as V
 import           Data.Word                         (Word)
 import           Data.Yaml.FilePath
-import qualified Filesystem.Path.CurrentOS         as F
+import qualified System.FilePath                   as F
 import           Keter.Types.Common
 import           Keter.Types.Middleware
 import qualified Keter.Types.V04                   as V04
 import           Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
-import           Prelude                           hiding (FilePath)
 import           System.Posix.Types                (EpochTime)
 
 data BundleConfig = BundleConfig
@@ -124,9 +123,9 @@ instance ToCurrent KeterConfig where
         getSSL (Just (V04.TLSConfig s ts)) = V.singleton $ LPSecure
             (Warp.getHost s)
             (Warp.getPort s)
-            (F.decodeString $ WarpTLS.certFile ts)
+            (WarpTLS.certFile ts)
             V.empty
-            (F.decodeString $ WarpTLS.keyFile ts)
+            (WarpTLS.keyFile ts)
 
 instance Default KeterConfig where
     def = KeterConfig
@@ -253,7 +252,7 @@ instance ParseYamlFile StaticFilesConfig where
 
 instance ToJSON StaticFilesConfig where
     toJSON StaticFilesConfig {..} = object
-        [ "root" .= F.encodeString sfconfigRoot
+        [ "root" .= sfconfigRoot
         , "hosts" .= Set.map CI.original sfconfigHosts
         , "directory-listing" .= sfconfigListings
         , "middleware" .= sfconfigMiddleware
@@ -383,7 +382,7 @@ instance ParseYamlFile (WebAppConfig ()) where
 
 instance ToJSON (WebAppConfig ()) where
     toJSON WebAppConfig {..} = object
-        [ "exec" .= F.encodeString waconfigExec
+        [ "exec" .= waconfigExec
         , "args" .= waconfigArgs
         , "env" .= waconfigEnvironment
         , "hosts" .= map CI.original (waconfigApprootHost : Set.toList waconfigHosts)
@@ -420,7 +419,7 @@ instance ParseYamlFile BackgroundConfig where
 
 instance ToJSON BackgroundConfig where
     toJSON BackgroundConfig {..} = object $ catMaybes
-        [ Just $ "exec" .= F.encodeString bgconfigExec
+        [ Just $ "exec" .= bgconfigExec
         , Just $ "args" .= bgconfigArgs
         , Just $ "env" .= bgconfigEnvironment
         , case bgconfigRestartCount of

@@ -58,6 +58,7 @@ Library
                      , stm                       >= 2.4
                      , async
                      , lifted-base
+                     , system-filepath
   if impl(ghc < 7.6)
     build-depends:
                     ghc-prim
@@ -85,7 +86,7 @@ Library
 Executable keter
   Main-is:             keter.hs
   hs-source-dirs:      main
-  Build-depends:       base, keter, data-default
+  Build-depends:       base, keter, data-default, filepath
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
 

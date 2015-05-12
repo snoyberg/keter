@@ -7,7 +7,7 @@ import Paths_keter (version)
 import Data.Version (showVersion)
 import qualified Keter.Plugin.Postgres as Postgres
 import Data.Default (def)
-import Filesystem.Path.CurrentOS ((</>), decodeString)
+import System.FilePath ((</>))
 
 main :: IO ()
 main = do
@@ -16,7 +16,7 @@ main = do
         ["--version"] -> putStrLn $ "keter version: " ++ showVersion version
         ["--help"] -> printUsage
         [dir] -> keter
-            (decodeString dir)
+            dir
             [\configDir -> Postgres.load def $ configDir </> "etc" </> "postgres.yaml"]
         _ -> printUsage
 

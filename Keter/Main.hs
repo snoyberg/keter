@@ -13,6 +13,7 @@ import           Control.Monad             (unless)
 import qualified Data.CaseInsensitive      as CI
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Monoid               (mempty)
+import           Data.String               (fromString)
 import qualified Data.Vector               as V
 import           Keter.App                 (AppStartConfig (..))
 import qualified Keter.AppManager          as AppMan
@@ -45,6 +46,7 @@ import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
+import Filesystem.Path.CurrentOS (encodeString) -- needed for fsnotify
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
@@ -146,18 +148,19 @@ startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO
 startWatching kc@KeterConfig {..} appMan log = do
     -- File system watching
     wm <- FSN.startManager
-    _ <- FSN.watchTree wm incoming (const True) $ \e -> do
-        e' <-
+    _ <- FSN.watchTree wm (fromString incoming) (const True) $ \e -> do
+        e' <- do
+            let toString = encodeString
             case e of
                 FSN.Removed fp _ -> do
-                    log $ WatchedFile "removed" fp
-                    return $ Left fp
+                    log $ WatchedFile "removed" $ toString fp
+                    return $ Left $ toString fp
                 FSN.Added fp _ -> do
-                    log $ WatchedFile "added" fp
-                    return $ Right fp
+                    log $ WatchedFile "added" $ toString fp
+                    return $ Right $ toString fp
                 FSN.Modified fp _ -> do
-                    log $ WatchedFile "modified" fp
-                    return $ Right fp
+                    log $ WatchedFile "modified" $ toString fp
+                    return $ Right $ toString fp
         case e' of
             Left fp -> when (isKeter fp) $ AppMan.terminateApp appMan $ getAppname fp
             Right fp -> when (isKeter fp) $ AppMan.addApp appMan $ incoming </> fp

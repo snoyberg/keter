@@ -1,3 +1,7 @@
+## 1.4.0.1
+
+* Avoid infinite loop traversing incoming directory [#96](https://github.com/snoyberg/keter/issues/96)
+
 ## 1.4.0
 
 * Drop system-filepath

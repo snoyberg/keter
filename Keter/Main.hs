@@ -186,7 +186,7 @@ listDirectoryTree fp = do
              listDirectoryTree fp1
            else
              return [fp1]
-           ) dir
+           ) (filter (\x -> x /= "." && x /= "..") dir)
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
 startListening KeterConfig {..} hostman = do

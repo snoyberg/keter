@@ -25,8 +25,11 @@ import           Network.HTTP.Conduit              (Manager)
 import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     SetIpHeader (..),
                                                     WaiProxyResponse (..),
-                                                    waiProxyToSettingsWithTimeouts,
-                                                    wpsSetIpHeader)
+                                                    LocalWaiProxySettings,
+                                                    setLpsTimeBound,
+                                                    waiProxyToSettings,
+                                                    wpsSetIpHeader,
+                                                    wpsGetDest)
 import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import           Network.HTTP.Types                (mkStatus, status200,
                                                     status301, status302,
@@ -68,11 +71,14 @@ withClient :: Bool -- ^ is secure?
            -> HostLookup
            -> Wai.Application
 withClient isSecure useHeader bound manager hostLookup =
-    waiProxyToSettingsWithTimeouts getDest def
+    waiProxyToSettings
+       (error "First argument to waiProxyToSettings forced, even thought wpsGetDest provided")
+       def
         { wpsSetIpHeader =
             if useHeader
                 then SIHFromHeader
                 else SIHFromSocket
+        ,  wpsGetDest = Just getDest
         } manager
   where
     protocol
@@ -87,17 +93,20 @@ withClient isSecure useHeader bound manager hostLookup =
     -- requires more research. Meanwhile, this prevents the file descriptor
     -- leak from occurring.
 
-    fixTimeBound :: Maybe Int -> Maybe Int
-    fixTimeBound to = case to <|> Just bound of
-          Just x | x > 0 -> Just x
-          _              -> Nothing
-    getDest :: Wai.Request -> IO (Maybe Int, WaiProxyResponse)
+    addjustGlobalBound :: Maybe Int -> LocalWaiProxySettings
+    addjustGlobalBound to = go `setLpsTimeBound` def
+      where
+        go = case to <|> Just bound of
+               Just x | x > 0 -> Just x
+               _              -> Nothing
+
+    getDest :: Wai.Request -> IO (LocalWaiProxySettings, WaiProxyResponse)
     getDest req =
         case Wai.requestHeaderHost req of
-            Nothing -> return (Nothing, WPRResponse missingHostResponse)
+            Nothing -> return (def, WPRResponse missingHostResponse)
             Just host -> processHost req host
 
-    processHost :: Wai.Request -> S.ByteString -> IO (Maybe Int, WaiProxyResponse)
+    processHost :: Wai.Request -> S.ByteString -> IO (LocalWaiProxySettings, WaiProxyResponse)
     processHost req host = do
         -- Perform two levels of lookup. First: look up the entire host. If
         -- that fails, try stripping off any port number and try again.
@@ -111,13 +120,13 @@ withClient isSecure useHeader bound manager hostLookup =
                         then return Nothing
                         else hostLookup host'
         case mport of
-            Nothing -> return (Nothing, WPRResponse $ unknownHostResponse host)
+            Nothing -> return (def, WPRResponse $ unknownHostResponse host)
             Just (action, requiresSecure)
                 | requiresSecure && not isSecure -> performHttpsRedirect host req
                 | otherwise -> performAction req action
 
     performHttpsRedirect host =
-        return . (fixTimeBound Nothing,) . WPRResponse . redirectApp config
+        return . (addjustGlobalBound Nothing,) . WPRResponse . redirectApp config
       where
         host' = CI.mk $ decodeUtf8With lenientDecode host
         config = RedirectConfig
@@ -128,22 +137,22 @@ withClient isSecure useHeader bound manager hostLookup =
             }
 
     performAction req (PAPort port tbound) =
-        return (fixTimeBound tbound, WPRModifiedRequest req' $ ProxyDest "127.0.0.1" port)
+        return (addjustGlobalBound tbound, WPRModifiedRequest req' $ ProxyDest "127.0.0.1" port)
       where
         req' = req
             { Wai.requestHeaders = ("X-Forwarded-Proto", protocol)
                                  : Wai.requestHeaders req
             }
     performAction _ (PAStatic StaticFilesConfig {..}) =
-        return (fixTimeBound sfconfigTimeout, WPRApplication $ processMiddleware sfconfigMiddleware $ staticApp (defaultFileServerSettings sfconfigRoot)
+        return (addjustGlobalBound sfconfigTimeout, WPRApplication $ processMiddleware sfconfigMiddleware $ staticApp (defaultFileServerSettings sfconfigRoot)
             { ssListing =
                 if sfconfigListings
                     then Just defaultListing
                     else Nothing
             })
-    performAction req (PARedirect config) = return (fixTimeBound Nothing, WPRResponse $ redirectApp config req)
+    performAction req (PARedirect config) = return (addjustGlobalBound Nothing, WPRResponse $ redirectApp config req)
     performAction _ (PAReverseProxy config rpconfigMiddleware tbound) =
-       return (fixTimeBound tbound, WPRApplication $ processMiddleware rpconfigMiddleware $ Rewrite.simpleReverseProxy manager config)
+       return (addjustGlobalBound tbound, WPRApplication $ processMiddleware rpconfigMiddleware $ Rewrite.simpleReverseProxy manager config)
 
 redirectApp :: RedirectConfig -> Wai.Request -> Wai.Response
 redirectApp RedirectConfig {..} req =

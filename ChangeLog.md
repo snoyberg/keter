@@ -1,3 +1,7 @@
+## 1.4.1
+
+* Add configurable timeouts [#93](https://github.com/snoyberg/keter/pull/93)
+
 ## 1.4.0.1
 
 * Avoid infinite loop traversing incoming directory [#96](https://github.com/snoyberg/keter/issues/96)

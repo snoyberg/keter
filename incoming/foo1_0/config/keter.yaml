@@ -12,6 +12,7 @@ stanzas:
       hosts:
         - keter1_0
         - pong1_0
+      #connection-time-bound: 0
 
     - type: background
       exec: ../worker
@@ -27,6 +28,7 @@ stanzas:
       directory-listing: true
       requires-secure: true
       root: ../../
+      #connection-time-bound: 0
 
     - type: static-files
       host: unsafe2_1_0
@@ -53,6 +55,15 @@ stanzas:
       reversed-host: www.yesodweb.com
       reversed-port: 80
       reversing-host: localhost
+     # connection-time-bound: 0
+     # middleware:
+     #  - autohead
+     #     - basic-auth:
+     #          realm: "Keter Basic Auth"
+     #          creds:
+     #             keter : rocks
+     #     - headers:
+     #         Access-Control-Allow-Origin : "*"
 
 plugins:
     #postgres: true

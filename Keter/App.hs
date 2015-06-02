@@ -18,7 +18,7 @@ import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception         (IOException, bracketOnError,
                                             throwIO, try)
-import           Control.Monad             (void, when, unless)
+import           Control.Monad             (void, when)
 import qualified Data.CaseInsensitive      as CI
 import           Data.Conduit.LogFile      (RotatingLog)
 import qualified Data.Conduit.LogFile      as LogFile

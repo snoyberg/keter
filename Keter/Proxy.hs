@@ -34,7 +34,7 @@ import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import           Network.HTTP.Types                (mkStatus, status200,
                                                     status301, status302,
                                                     status303, status307,
-                                                    status404, status500)
+                                                    status404)
 import qualified Network.Wai                       as Wai
 import           Network.Wai.Application.Static    (defaultFileServerSettings,
                                                     ssListing, staticApp)
@@ -42,7 +42,6 @@ import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import           Network.Wai.Middleware.Gzip       (gzip)
 import           Prelude                           hiding (FilePath, (++))
-import           System.Timeout.Lifted             (timeout)
 import           WaiAppStatic.Listing              (defaultListing)
 
 -- | Mapping from virtual hostname to port number.

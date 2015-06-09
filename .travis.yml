@@ -9,7 +9,6 @@ env:
 
 matrix:
   allow_failures:
-   - env: GHCVER=7.10.1 CABALVER=1.22
    - env: GHCVER=head  CABALVER=head
 
 before_install:
@@ -24,11 +23,11 @@ install:
  - cabal install --only-dependencies --enable-tests
 
 script:
- - cabal configure --enable-tests 
+ - cabal configure --enable-tests
 #--enable-library-coverage || cabal configure --enable-tests --enable-coverage
  - cabal build
  - cabal test
 
 #after_script:
 # - cabal install hpc-coveralls
-# - hpc-coveralls --exclude-dir=test test 
+# - hpc-coveralls --exclude-dir=test test

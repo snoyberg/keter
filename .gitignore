@@ -1,6 +1,7 @@
 *.swp
 nginx.conf
 dist/
+dist-stack/
 process.txt
 process2.txt
 postgres.yaml
@@ -17,5 +18,6 @@ incoming/foo1_0/worker
 incoming/websockets/chat
 log/
 .cabal-sandbox/
+.stack-work/
 cabal.sandbox.config
 *.sublime-*

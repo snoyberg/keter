@@ -1,0 +1,7 @@
+flags:
+  keter: {}
+packages:
+- '.'
+extra-deps:
+- wai-app-static-3.1.0
+resolver: lts-2.11

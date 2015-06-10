@@ -8,7 +8,7 @@ module Keter.Plugin.Postgres
     , load
     ) where
 
-import           Control.Applicative       ((<$>), (<*>))
+import           Control.Applicative       ((<$>), (<*>), pure)
 import           Control.Concurrent        (forkIO)
 import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar
@@ -20,10 +20,12 @@ import qualified Data.Char                 as C
 import           Data.Default
 import qualified Data.HashMap.Strict       as HMap
 import qualified Data.Map                  as Map
+import           Data.Maybe                (fromMaybe)
 import           Data.Monoid               ((<>))
 import qualified Data.Text                 as T
 import qualified Data.Text.Lazy            as TL
 import           Data.Text.Lazy.Builder    (fromText, toLazyText)
+import qualified Data.Vector               as V
 import           Data.Yaml
 import           Keter.Types
 import           Prelude                   hiding (FilePath)
@@ -54,23 +56,32 @@ instance Default Settings where
 
 -- | Information on an individual PostgreSQL database.
 data DBInfo = DBInfo
-    { dbiName :: Text
-    , dbiUser :: Text
-    , dbiPass :: Text
+    { dbiName   :: Text
+    , dbiUser   :: Text
+    , dbiPass   :: Text
+    , dbiServer :: DBServerInfo
     }
     deriving Show
 
-randomDBI :: R.StdGen -> (DBInfo, R.StdGen)
-randomDBI =
-    S.runState (DBInfo <$> rt <*> rt <*> rt)
+data DBServerInfo = DBServerInfo
+    { dbServer :: Text
+    , dbPort   :: Int
+    }
+    deriving Show
+
+randomDBI :: DBServerInfo -> R.StdGen -> (DBInfo, R.StdGen)
+randomDBI dbsi r =
+    S.runState (DBInfo <$> rt <*> rt <*> rt <*> (pure dbsi)) r
   where
     rt = T.pack <$> replicateM 10 (S.state $ R.randomR ('a', 'z'))
 
 instance ToJSON DBInfo where
-    toJSON (DBInfo n u p) = object
-        [ "name" .= n
-        , "user" .= u
-        , "pass" .= p
+    toJSON (DBInfo n u p (DBServerInfo server port)) = object
+        [ "name"   .= n
+        , "user"   .= u
+        , "pass"   .= p
+        , "server" .= server
+        , "port"   .= port
         ]
 
 instance FromJSON DBInfo where
@@ -78,9 +89,21 @@ instance FromJSON DBInfo where
         <$> o .: "name"
         <*> o .: "user"
         <*> o .: "pass"
+        <*> (DBServerInfo
+            <$> o .:? "server" .!= "localhost"
+            <*> o .:? "port"   .!= 5432)
     parseJSON _ = mzero
 
-data Command = GetConfig Appname (Either SomeException DBInfo -> IO ())
+instance FromJSON DBServerInfo where
+    parseJSON (Object o) = DBServerInfo
+        <$> o .: "server"
+        <*> o .: "port"
+    parseJSON _ = mzero
+    
+instance Default DBServerInfo where
+    def = DBServerInfo "localhost" 5432
+
+data Command = GetConfig Appname DBServerInfo (Either SomeException DBInfo -> IO ())
 
 -- | Load a set of existing connections from a config file. If the file does
 -- not exist, it will be created. Any newly created databases will
@@ -104,9 +127,16 @@ load Settings{..} fp = do
         return Plugin
             { pluginGetEnv = \appname o ->
                 case HMap.lookup "postgres" o of
+                    Just (Array x) -> do
+                        let Object o' = V.head x
+                            dbServer = fromMaybe def . parseMaybe parseJSON  $ V.head x
+                        x <- newEmptyMVar
+                        writeChan chan $ GetConfig appname dbServer $ putMVar x
+                        edbi <- takeMVar x
+                        edbiToEnv edbi
                     Just (Bool True) -> do
                         x <- newEmptyMVar
-                        writeChan chan $ GetConfig appname $ putMVar x
+                        writeChan chan $ GetConfig appname def $ putMVar x
                         edbi <- takeMVar x
                         edbiToEnv edbi
                     _ -> return []
@@ -115,13 +145,13 @@ load Settings{..} fp = do
     tmpfp = fp <.> "tmp"
 
     loop chan = do
-        GetConfig appname f <- lift $ readChan chan
+        GetConfig appname dbServer f <- lift $ readChan chan
         (db, g) <- S.get
         dbi <-
             case Map.lookup appname db of
                 Just dbi -> return $ Right dbi
                 Nothing -> do
-                    let (dbi', g') = randomDBI g
+                    let (dbi', g') = randomDBI dbServer g
                     let dbi = dbi'
                             { dbiName = sanitize appname <> dbiName dbi'
                             , dbiUser = sanitize appname <> dbiUser dbi'
@@ -152,9 +182,10 @@ edbiToEnv :: Either SomeException DBInfo
           -> IO [(Text, Text)]
 edbiToEnv (Left e) = throwIO e
 edbiToEnv (Right dbi) = return
-    [ ("PGHOST", "localhost")
-    , ("PGPORT", "5432")
+    [ ("PGHOST", dbServer $ dbiServer dbi)
+    , ("PGPORT", T.pack . show . dbPort $ dbiServer dbi)
     , ("PGUSER", dbiUser dbi)
     , ("PGPASS", dbiPass dbi)
     , ("PGDATABASE", dbiName dbi)
     ]
+

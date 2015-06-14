@@ -188,6 +188,10 @@ plugins:
 ```
 
 Different webapps can be configured to use different servers using the above syntax.
+It should be noted that keter will prioritize it's own postgres.yaml record for an app. 
+So if moving an existing app from a local postgres server to a remote one (or 
+switching remote servers), the postgres.yaml file will need to be updated manually. 
+
 Keter will connect to the remote servers using the `postgres` account. This setup 
 assumes the remote server's `pg_hba.conf` file has been configured to allow connections
 from the keter-server IP using the `trust` method. 

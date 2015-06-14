@@ -50,7 +50,11 @@ instance Default Settings where
                     "';\nCREATE DATABASE " <> fromText dbiName <>
                     " OWNER "              <> fromText dbiUser <>
                     ";"
-            _ <- readProcess "sudo" ["-u", "postgres", "psql"] $ TL.unpack sql
+                cmd = [ "-u", "postgres", "psql"
+                      , "-h", (T.unpack $ dbServer dbiServer)
+                      , "-p", (show $ dbPort dbiServer)
+                      , "-U", "postgres"] 
+            _ <- readProcess "sudo" cmd $ TL.unpack sql
             return ()
         }
 
@@ -70,8 +74,8 @@ data DBServerInfo = DBServerInfo
     deriving Show
 
 randomDBI :: DBServerInfo -> R.StdGen -> (DBInfo, R.StdGen)
-randomDBI dbsi r =
-    S.runState (DBInfo <$> rt <*> rt <*> rt <*> (pure dbsi)) r
+randomDBI dbsi =
+    S.runState (DBInfo <$> rt <*> rt <*> rt <*> (pure dbsi)) 
   where
     rt = T.pack <$> replicateM 10 (S.state $ R.randomR ('a', 'z'))
 
@@ -127,21 +131,19 @@ load Settings{..} fp = do
         return Plugin
             { pluginGetEnv = \appname o ->
                 case HMap.lookup "postgres" o of
-                    Just (Array x) -> do
-                        let Object o' = V.head x
-                            dbServer = fromMaybe def . parseMaybe parseJSON  $ V.head x
-                        x <- newEmptyMVar
-                        writeChan chan $ GetConfig appname dbServer $ putMVar x
-                        edbi <- takeMVar x
-                        edbiToEnv edbi
+                    Just (Array v) -> do
+                        let dbServer = fromMaybe def . parseMaybe parseJSON $ V.head v
+                        doenv chan appname dbServer
                     Just (Bool True) -> do
-                        x <- newEmptyMVar
-                        writeChan chan $ GetConfig appname def $ putMVar x
-                        edbi <- takeMVar x
-                        edbiToEnv edbi
+                        doenv chan appname def
                     _ -> return []
             }
-
+      where doenv chan appname dbs = do
+            x <- newEmptyMVar
+            writeChan chan $ GetConfig appname dbs $ putMVar x
+            edbi <- takeMVar x
+            edbiToEnv edbi
+                    
     tmpfp = fp <.> "tmp"
 
     loop chan = do

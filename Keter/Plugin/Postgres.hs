@@ -50,16 +50,16 @@ instance Default Settings where
                     "';\nCREATE DATABASE " <> fromText dbiName <>
                     " OWNER "              <> fromText dbiUser <>
                     ";"
-                cmd 
+                (cmd, args) 
                     | (  dbServer dbiServer == "localhost" 
                       || dbServer dbiServer == "127.0.0.1") = 
-                        [ "-u", "postgres", "psql" ]
+                        ("sudo", ["-u", "postgres", "psql"])
                     | otherwise = 
-                        [ "psql"
-                        , "-h", (T.unpack $ dbServer dbiServer)
+                        ("psql",
+                        [ "-h", (T.unpack $ dbServer dbiServer)
                         , "-p", (show $ dbPort dbiServer)
-                        , "-U", "postgres"]
-            _ <- readProcess "sudo" cmd $ TL.unpack sql
+                        , "-U", "postgres"])
+            _ <- readProcess cmd args $ TL.unpack sql
             return ()
         }
 

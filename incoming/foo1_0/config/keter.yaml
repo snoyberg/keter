@@ -67,3 +67,7 @@ stanzas:
 
 plugins:
     #postgres: true
+# Syntax for remote-DB server:    
+#    postgres: 
+#       - server: remoteServerNameOrIP
+#         port: 1234

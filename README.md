@@ -276,3 +276,12 @@ listeners:
         or something like it, you may need to provide valid SSL certificates and keys
         or disable HTTPS, by uncommenting the key and certificate lines from
         `/opt/keter/etc/keter-config.yaml`.
+
+
+## Contributing
+
+If you are interested in contributing, see
+https://github.com/snoyberg/keter/blob/master/incoming/README.md for a
+complete testing workflow. If you have any questions, you can open an
+issue in the issue tracker, ask on the #yesod freenode irc channel, or
+send an email to yesodweb@googlegroups.com.

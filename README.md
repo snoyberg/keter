@@ -179,8 +179,26 @@ plugins:
   postgres: true
 ```
 
+* Keter can be configured to connect to a remote postgres server using the following syntax:
+```yaml
+plugins:
+  postgres: 
+     - server: remoteServerNameOrIP
+       port: 1234
+```
+
+Different webapps can be configured to use different servers using the above syntax.
+It should be noted that keter will prioritize it's own postgres.yaml record for an app. 
+So if moving an existing app from a local postgres server to a remote one (or 
+switching remote servers), the postgres.yaml file will need to be updated manually. 
+
+Keter will connect to the remote servers using the `postgres` account. This setup 
+assumes the remote server's `pg_hba.conf` file has been configured to allow connections
+from the keter-server IP using the `trust` method. 
+
 (Note: The `plugins` configuration option was added in v1.0 of the
-keter configuration syntax. If you are using v0.4 then use `postgres: true`.)
+keter configuration syntax. If you are using v0.4 then use `postgres: true`.
+The remote-postgres server syntax was added in v1.4.2.)
 
 * Modify your application to get its database connection settings from the following environment variables:
     * `PGHOST`

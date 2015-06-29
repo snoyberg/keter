@@ -409,6 +409,7 @@ data BackgroundConfig = BackgroundConfig
     , bgconfigEnvironment         :: !(Map Text Text)
     , bgconfigRestartCount        :: !RestartCount
     , bgconfigRestartDelaySeconds :: !Word
+    , bgconfigForwardEnv          :: !(Set Text)
     }
     deriving Show
 
@@ -426,6 +427,7 @@ instance ParseYamlFile BackgroundConfig where
         <*> o .:? "env" .!= Map.empty
         <*> o .:? "restart-count" .!= UnlimitedRestarts
         <*> o .:? "restart-delay-seconds" .!= 5
+        <*> o .:? "forward-env" .!= Set.empty
 
 instance ToJSON BackgroundConfig where
     toJSON BackgroundConfig {..} = object $ catMaybes
@@ -436,4 +438,5 @@ instance ToJSON BackgroundConfig where
             UnlimitedRestarts -> Nothing
             LimitedRestarts count -> Just $ "restart-count" .= count
         , Just $ "restart-delay-seconds" .= bgconfigRestartDelaySeconds
+        , Just $ "forward-env" .= bgconfigForwardEnv
         ]

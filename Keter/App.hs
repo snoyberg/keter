@@ -267,7 +267,7 @@ launchWebApp :: AppStartConfig
              -> IO a
 launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} f = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
-    systemEnv <- getEnvironment
+    forwardedEnv <- getForwardedEnv waconfigForwardEnv
     let httpPort  = kconfigExternalHttpPort  ascKeterConfig
         httpsPort = kconfigExternalHttpsPort ascKeterConfig
         (scheme, extport) =
@@ -278,7 +278,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             -- Ordering chosen specifically to precedence rules: app specific,
             -- plugins, global, and then auto-set Keter variables.
             [ waconfigEnvironment
-            , Map.filterWithKey (\k _ -> Set.member k waconfigForwardEnv) $ Map.fromList $ map (pack *** pack) systemEnv
+            , forwardedEnv
             , Map.fromList otherEnv
             , kconfigEnvironment ascKeterConfig
             , Map.singleton "PORT" $ pack $ show waconfigPort
@@ -345,6 +345,13 @@ withBackgroundApps asc aid bconfig mdir rlog configs f =
   where
     alloc = launchBackgroundApp asc aid bconfig mdir rlog
 
+getForwardedEnv :: Set Text -> IO (Map Text Text)
+getForwardedEnv vars = filterEnv <$> getEnvironment
+  where
+    filterEnv = Map.filterWithKey (\k _ -> Set.member k vars)
+              . Map.fromList
+              . map (pack *** pack)
+
 launchBackgroundApp :: AppStartConfig
                     -> AppId
                     -> BundleConfig
@@ -355,7 +362,14 @@ launchBackgroundApp :: AppStartConfig
                     -> IO a
 launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlog BackgroundConfig {..} f = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
-    let env = Map.toList bgconfigEnvironment ++ otherEnv
+    forwardedEnv <- getForwardedEnv bgconfigForwardEnv
+    let env = Map.toList $ Map.unions
+            -- Order matters as in launchWebApp
+            [ bgconfigEnvironment
+            , forwardedEnv
+            , Map.fromList otherEnv
+            , kconfigEnvironment ascKeterConfig
+            ]
     exec <- canonicalizePath bgconfigExec
 
     let delay = threadDelay $ fromIntegral $ bgconfigRestartDelaySeconds * 1000 * 1000

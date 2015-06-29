@@ -20,6 +20,8 @@ stanzas:
         - Keter Background Worker
       env:
         FROM_KETER_CONFIG: foo bar baz
+      forward-env:
+        - ENV_VAR_FOR_BACKGROUND
       restart-count: 10
       restart-delay-seconds: 6
 

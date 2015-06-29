@@ -102,6 +102,7 @@ data KeterConfig = KeterConfig
     , kconfigEnvironment         :: !(Map Text Text)
     -- ^ Environment variables to be passed to all apps.
     , kconfigConnectionTimeBound :: !Int
+    -- ^ Maximum request time in milliseconds per connection.
     }
 
 instance ToCurrent KeterConfig where

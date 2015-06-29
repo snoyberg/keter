@@ -80,6 +80,7 @@ data KeterConfig = KeterConfig
     , kconfigReverseProxy        :: Set ReverseProxyConfig
     , kconfigIpFromHeader        :: Bool
     , kconfigConnectionTimeBound :: Int
+    -- ^ Maximum request time in milliseconds per connection.
     }
 
 instance Default KeterConfig where
@@ -95,6 +96,8 @@ instance Default KeterConfig where
         , kconfigConnectionTimeBound = fiveMinutes
         }
 
+
+-- | Default connection time bound in milliseconds.
 fiveMinutes :: Int
 fiveMinutes = 5 * 60 * 1000
 

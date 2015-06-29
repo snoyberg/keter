@@ -345,13 +345,6 @@ withBackgroundApps asc aid bconfig mdir rlog configs f =
   where
     alloc = launchBackgroundApp asc aid bconfig mdir rlog
 
-getForwardedEnv :: Set Text -> IO (Map Text Text)
-getForwardedEnv vars = filterEnv <$> getEnvironment
-  where
-    filterEnv = Map.filterWithKey (\k _ -> Set.member k vars)
-              . Map.fromList
-              . map (pack *** pack)
-
 launchBackgroundApp :: AppStartConfig
                     -> AppId
                     -> BundleConfig
@@ -605,6 +598,16 @@ getTimestamp = readTVar . appModTime
 
 pluginsGetEnv :: Plugins -> Appname -> Object -> IO [(Text, Text)]
 pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
+
+-- | For the forward-env option. From a Set of desired variables, create a
+-- Map pulled from the system environment.
+getForwardedEnv :: Set Text -> IO (Map Text Text)
+getForwardedEnv vars = filterEnv <$> getEnvironment
+  where
+    filterEnv = Map.filterWithKey (\k _ -> Set.member k vars)
+              . Map.fromList
+              . map (pack *** pack)
+
 
     {- FIXME handle static stanzas
     let staticReverse r = do

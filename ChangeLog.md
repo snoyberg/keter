@@ -1,3 +1,7 @@
+## 1.4.2.1
+
+Bug fix: Change default connection time bound from 5 sec to 5 minutes [#107](https://github.com/snoyberg/keter/pull/107)
+
 ## 1.4.1
 
 * Add configurable timeouts [#93](https://github.com/snoyberg/keter/pull/93)

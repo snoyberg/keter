@@ -193,7 +193,9 @@ startListening KeterConfig {..} hostman = do
     manager <- HTTP.newManager HTTP.conduitManagerSettings
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
-        kconfigConnectionTimeBound
+        -- calculate the number of microseconds since the
+        -- configuration option is in milliseconds
+        (kconfigConnectionTimeBound * 1000)
         manager
         (HostMan.lookupAction hostman . CI.mk)
 

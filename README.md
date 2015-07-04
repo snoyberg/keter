@@ -90,7 +90,7 @@ start on (net-device-up and local-filesystems and runlevel [2345])
 stop on runlevel [016]
 respawn
 
-# NB: keter writes logs to /opt/keter/etc, but some exceptions occasionally
+# NB: keter writes logs to /opt/keter/log, but some exceptions occasionally
 # escape to standard error. This ensures they show up in system logs.
 console output
 

@@ -117,7 +117,7 @@ instance Show LogMessage where
         ]
     show SanityChecksPassed = "Sanity checks passed"
     show (ReservingHosts app hosts) = "Reserving hosts for app " ++ show app ++ ": " ++ unwords (map (unpack . original) $ Set.toList hosts)
-    show (ForgetingReservations app hosts) = "Forgeting host reservations for app " ++ show app ++ ": " ++ unwords (map (unpack . original) $ Set.toList hosts)
+    show (ForgetingReservations app hosts) = "Forgetting host reservations for app " ++ show app ++ ": " ++ unwords (map (unpack . original) $ Set.toList hosts)
     show (ActivatingApp app hosts) = "Activating app " ++ show app ++ " with hosts: " ++ unwords (map (unpack . original) $ Set.toList hosts)
     show (DeactivatingApp app hosts) = "Deactivating app " ++ show app ++ " with hosts: " ++ unwords (map (unpack . original) $ Set.toList hosts)
     show (ReactivatingApp app old new) = concat

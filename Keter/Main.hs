@@ -37,16 +37,19 @@ import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
 import           Data.Yaml.FilePath
-import           System.Directory          (createDirectoryIfMissing, doesFileExist, createDirectoryIfMissing, getDirectoryContents, doesDirectoryExist)
-import           System.FilePath           (takeExtension, (</>))
 import qualified Network.HTTP.Conduit      as HTTP (conduitManagerSettings,
                                                     newManager)
 import           Prelude                   hiding (FilePath, log)
+import           System.Directory          (createDirectoryIfMissing,
+                                            createDirectoryIfMissing,
+                                            doesDirectoryExist, doesFileExist,
+                                            getDirectoryContents)
+import           System.FilePath           (takeExtension, (</>))
 import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
-import Filesystem.Path.CurrentOS (encodeString) -- needed for fsnotify
+
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
@@ -149,18 +152,17 @@ startWatching kc@KeterConfig {..} appMan log = do
     -- File system watching
     wm <- FSN.startManager
     _ <- FSN.watchTree wm (fromString incoming) (const True) $ \e -> do
-        e' <- do
-            let toString = encodeString
+        e' <-
             case e of
                 FSN.Removed fp _ -> do
-                    log $ WatchedFile "removed" $ toString fp
-                    return $ Left $ toString fp
+                    log $ WatchedFile "removed" fp
+                    return $ Left fp
                 FSN.Added fp _ -> do
-                    log $ WatchedFile "added" $ toString fp
-                    return $ Right $ toString fp
+                    log $ WatchedFile "added" fp
+                    return $ Right fp
                 FSN.Modified fp _ -> do
-                    log $ WatchedFile "modified" $ toString fp
-                    return $ Right $ toString fp
+                    log $ WatchedFile "modified" fp
+                    return $ Right fp
         case e' of
             Left fp -> when (isKeter fp) $ AppMan.terminateApp appMan $ getAppname fp
             Right fp -> when (isKeter fp) $ AppMan.addApp appMan $ incoming </> fp

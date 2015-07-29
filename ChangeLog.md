@@ -1,3 +1,7 @@
+## 1.4.3.1
+
+* Add cabal flag `system-filepath` for compatibility with older versions of fsnotify.
+
 ## 1.4.3
 
 * Update fsnotify dependency version and remove system-filepath.

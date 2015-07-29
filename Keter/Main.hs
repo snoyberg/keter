@@ -185,12 +185,12 @@ startWatching kc@KeterConfig {..} appMan log = do
 
 -- compatibility with older versions of fsnotify which used
 -- 'Filesystem.Path'
-#if MIN_VERSION_fsnotify(0,2,0)
-fromFilePath :: forall a. a -> a
-fromFilePath = id
-#else
+#ifdef SYSTEM_FILEPATH
 fromFilePath :: FP.FilePath -> String
 fromFilePath = encodeString
+#else
+fromFilePath :: forall a. a -> a
+fromFilePath = id
 #endif
 
 listDirectoryTree :: FilePath -> IO [FilePath]

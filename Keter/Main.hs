@@ -50,7 +50,7 @@ import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
-#if !MIN_VERSION_fsnotify(0,2,0)
+#ifdef SYSTEM_FILEPATH
 import qualified Filesystem.Path as FP (FilePath)
 import           Filesystem.Path.CurrentOS (encodeString)
 #endif

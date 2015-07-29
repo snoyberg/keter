@@ -15,6 +15,10 @@ extra-source-files:  ChangeLog.md
 
 --Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
 
+flag system-filepath
+  description: Use system-filepath
+  default: False
+
 Library
   Build-depends:       base                      >= 4             && < 5
                      , directory
@@ -57,11 +61,16 @@ Library
                      , stm                       >= 2.4
                      , async
                      , lifted-base
-                     , fsnotify >= 0.0.11
-                     , system-filepath
+
   if impl(ghc < 7.6)
-    build-depends:
-                    ghc-prim
+    build-depends:     ghc-prim
+  if flag(system-filepath)
+    build-depends:     fsnotify >= 0.1 && < 0.2
+                     , system-filepath
+    cpp-options:       -DSYSTEM_FILEPATH
+  else
+    build-depends:     fsnotify >= 0.2.0.2
+
   Exposed-Modules:     Keter.Plugin.Postgres
                        Keter.Types
                        Keter.Types.V04

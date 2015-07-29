@@ -1,5 +1,5 @@
 Name:                keter
-Version:             1.4.2.1
+Version:             1.4.3
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:         Hackage documentation generation is not reliable. For up to date documentation, please see: <http://www.stackage.org/package/keter>.
 Homepage:            http://www.yesodweb.com/
@@ -58,7 +58,6 @@ Library
                      , stm                       >= 2.4
                      , async
                      , lifted-base
-                     , system-filepath
   if impl(ghc < 7.6)
     build-depends:
                     ghc-prim

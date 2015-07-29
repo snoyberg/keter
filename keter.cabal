@@ -58,7 +58,6 @@ Library
                      , stm                       >= 2.4
                      , async
                      , lifted-base
-                     , system-filepath
   if impl(ghc < 7.6)
     build-depends:
                     ghc-prim

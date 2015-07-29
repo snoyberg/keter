@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP                 #-}
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE RankNTypes          #-}
 {-# LANGUAGE RecordWildCards     #-}
@@ -49,6 +50,10 @@ import qualified System.FSNotify           as FSN
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
+#if !MIN_VERSION_fsnotify(0,2,0)
+import qualified Filesystem.Path as FP (FilePath)
+import           Filesystem.Path.CurrentOS (encodeString)
+#endif
 
 
 keter :: FilePath -- ^ root directory or config file
@@ -155,14 +160,14 @@ startWatching kc@KeterConfig {..} appMan log = do
         e' <-
             case e of
                 FSN.Removed fp _ -> do
-                    log $ WatchedFile "removed" fp
-                    return $ Left fp
+                    log $ WatchedFile "removed" (fromFilePath fp)
+                    return $ Left $ fromFilePath fp
                 FSN.Added fp _ -> do
-                    log $ WatchedFile "added" fp
-                    return $ Right fp
+                    log $ WatchedFile "added" (fromFilePath fp)
+                    return $ Right $ fromFilePath fp
                 FSN.Modified fp _ -> do
-                    log $ WatchedFile "modified" fp
-                    return $ Right fp
+                    log $ WatchedFile "modified" (fromFilePath fp)
+                    return $ Right $ fromFilePath fp
         case e' of
             Left fp -> when (isKeter fp) $ AppMan.terminateApp appMan $ getAppname fp
             Right fp -> when (isKeter fp) $ AppMan.addApp appMan $ incoming </> fp
@@ -176,6 +181,17 @@ startWatching kc@KeterConfig {..} appMan log = do
         AppMan.reloadAppList appMan newMap
   where
     incoming = getIncoming kc
+
+
+-- compatibility with older versions of fsnotify which used
+-- 'Filesystem.Path'
+#if MIN_VERSION_fsnotify(0,2,0)
+fromFilePath :: forall a. a -> a
+fromFilePath = id
+#else
+fromFilePath :: FP.FilePath -> String
+fromFilePath = encodeString
+#endif
 
 listDirectoryTree :: FilePath -> IO [FilePath]
 listDirectoryTree fp = do

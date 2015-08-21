@@ -226,6 +226,11 @@ The remote-postgres server syntax was added in v1.4.2.)
 
     This has not yet been confirmed to work in production. If you use this,
     please report either its success or failure back to me.
+    
+    Additionally, to make sure that nginx does not reset the `Host` header 
+    (which keter uses to choose the right target), you will need to add:
+
+        proxy_set_header Host $host;
 
 *   Keter does not handle password-protected SSL key files well.  When provided
     with such a key file, unlike Apache and Nginx, Keter will not pause to ask

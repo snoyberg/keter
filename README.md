@@ -281,7 +281,7 @@ listeners:
         Try to run `sudo /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml`.
         If it fails with `keter: etc/certificate.pem: openBinaryFile: does not exist`
         or something like it, you may need to provide valid SSL certificates and keys
-        or disable HTTPS, by uncommenting the key and certificate lines from
+        or disable HTTPS, by commenting the key and certificate lines from
         `/opt/keter/etc/keter-config.yaml`.
 
 

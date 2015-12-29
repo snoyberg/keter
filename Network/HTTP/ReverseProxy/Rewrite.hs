@@ -1,51 +1,64 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Network.HTTP.ReverseProxy.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
   , RPEntry (..)
+  , RewritePath (..)
+  , MatchType (..)
   , simpleReverseProxy
+  , rewritePathRule
+  , mergeQueries
+  , checkRegexVars
   )
   where
 
-import Control.Applicative
-import Control.Exception (bracket)
-import Data.Function (fix)
-import Data.Monoid ((<>))
+import           Control.Applicative         ((<$>), (<*>), (<|>))
+import           Control.Exception           (bracket)
+import           Data.Function               (fix)
+import           Data.List.Split             (splitOn)
+import           Data.Maybe                  (fromMaybe, mapMaybe)
+import           Data.Monoid                 ((<>))
+import           Text.Read                   (readMaybe)
 
-import qualified Data.Set as Set
-import Data.Set (Set)
-import qualified Data.Map as Map
-import Data.Map ( Map )
-import Data.Array ((!))
-import Data.Aeson
-import Control.Monad (unless)
+import           Control.Monad               (unless)
+import           Data.Aeson
+import           Data.Array                  (bounds, (!))
+import           Data.Map                    (Map)
+import qualified Data.Map                    as Map
+import           Data.Set                    (Set)
+import qualified Data.Set                    as Set
 
-import qualified Data.ByteString as S
-import qualified Data.Text as T
-import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import qualified Data.CaseInsensitive as CI
+import qualified Data.ByteString             as S
+import qualified Data.ByteString.Char8       as BSC
+import qualified Data.CaseInsensitive        as CI
+import           Data.Text                   (Text)
+import qualified Data.Text                   as T
+import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
 
-import Blaze.ByteString.Builder (fromByteString)
+import           Blaze.ByteString.Builder    (fromByteString)
 
 -- Configuration files
-import Data.Default
+import           Data.Default
 
 -- Regular expression parsing, replacement, matching
-import Data.Attoparsec.Text (string, takeWhile1, endOfInput, parseOnly, Parser)
-import Text.Regex.TDFA (makeRegex, matchOnceText, MatchText)
-import Text.Regex.TDFA.String (Regex)
-import Data.Char (isDigit)
+import           Data.Attoparsec.Text        (Parser, char, endOfInput,
+                                              parseOnly, string, takeWhile1)
+import           Data.Char                   (isDigit)
+import           Text.Regex.TDFA             (MatchText, makeRegex,
+                                              matchOnceText)
+import           Text.Regex.TDFA.Common      (Regex (..))
 
 -- Reverse proxy apparatus
-import qualified Network.Wai as Wai
-import Network.HTTP.Client.Conduit
-import qualified Network.HTTP.Client as NHC
-import Network.HTTP.Types
+import qualified Network.HTTP.Client         as NHC
+import           Network.HTTP.Client.Conduit
+import           Network.HTTP.Types
+import           Network.URI                 (URI (..), URIAuth (..), nullURI,
+                                              parseRelativeReference)
+import qualified Network.Wai                 as Wai
 
 data RPEntry = RPEntry
-    { config :: ReverseProxyConfig
+    { config      :: ReverseProxyConfig
     , httpManager :: Manager
     }
 
@@ -55,8 +68,8 @@ instance Show RPEntry where
 getGroup :: MatchText String -> Int -> String
 getGroup matches i = fst $ matches ! i
 
-rewrite :: (String, MatchText String, String) -> String -> String -> Text
-rewrite (before, match, after) input replacement =
+rewrite :: Char -> (String, MatchText String, String) -> String -> String -> Text
+rewrite varPrefix (before, match, after) input replacement =
   case parseOnly parseSubstitute (T.pack replacement) of
     Left _ -> T.pack input
     Right result -> T.pack before <> result <> T.pack after
@@ -70,13 +83,13 @@ rewrite (before, match, after) input replacement =
           ; return $ "\\" <> rest
           }
       <|> do
-          { _ <- string "\\"
-          ; n <- (fmap (read . T.unpack) $ takeWhile1 isDigit) :: Parser Int
+          { _ <- char varPrefix
+          ; n <- (read . T.unpack <$> takeWhile1 isDigit) :: Parser Int
           ; rest <- parseSubstitute
           ; return $ T.pack (getGroup match n) <> rest
           }
       <|> do
-          { text <- takeWhile1 (/= '\\')
+          { text <- takeWhile1 (/= varPrefix)
           ; rest <- parseSubstitute
           ; return $ text <> rest
           }
@@ -93,7 +106,7 @@ rewriteHeaders ruleMap = map (rewriteHeader ruleMap)
 regexRewrite :: RewriteRule -> S.ByteString -> S.ByteString
 regexRewrite (RewriteRule _ regex' replacement) input =
   case matchOnceText regex strInput of
-    Just  match -> encodeUtf8 $ rewrite match strInput strReplacement
+    Just  match -> encodeUtf8 $ rewrite '\\' match strInput strReplacement
     Nothing     -> input
   where
     strRegex = T.unpack regex'
@@ -113,38 +126,55 @@ filterHeaders = filter useHeader
 mkRuleMap :: Set RewriteRule -> Map HeaderName RewriteRule
 mkRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) . Set.toList
 
-mkRequest :: ReverseProxyConfig -> Wai.Request -> Request
+mkRequest :: ReverseProxyConfig -> Wai.Request -> (Request,Maybe URI)
 mkRequest rpConfig request =
-  def { method = Wai.requestMethod request
-      , secure = reverseUseSSL rpConfig
-      , host   = encodeUtf8 $ reversedHost rpConfig
-      , port   = reversedPort rpConfig
-      , path   = Wai.rawPathInfo request
-      , queryString = Wai.rawQueryString request
-      , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
-      , requestBody =
-          case Wai.requestBodyLength request of
-            Wai.ChunkedBody   -> RequestBodyStreamChunked ($ Wai.requestBody request)
-            Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ Wai.requestBody request)
-      , decompress = const False
-      , redirectCount = 0
-      , checkStatus = \_ _ _ -> Nothing
-      , responseTimeout = reverseTimeout rpConfig
-      , cookieJar = Nothing
-      }
+  (def {
+     method         = Wai.requestMethod request
+   , secure         = reverseUseSSL rpConfig
+   , host           = BSC.pack host
+   , port           = reversedPort rpConfig
+   , path           = BSC.pack $ uriPath  uri
+   , queryString    = BSC.pack $ uriQuery uri
+   , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap headers
+   , requestBody    =
+       case Wai.requestBodyLength request of
+         Wai.ChunkedBody   -> RequestBodyStreamChunked ($ Wai.requestBody request)
+         Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ Wai.requestBody request)
+   , decompress      = const False
+   , redirectCount   = 10 -- FIXMEE: Why is this reduced to 0 from default 10???
+   , checkStatus     = \_ _ _ -> Nothing
+   , responseTimeout = reverseTimeout rpConfig
+   , cookieJar       = Nothing
+   }
+  , mkURI)
   where
+    headers    = Wai.requestHeaders request
+    mkURI      = rewritePathRule (rewritePath rpConfig) rewURI
+    uri        = fromMaybe rewURI mkURI
     reqRuleMap = mkRuleMap $ rewriteRequestRules rpConfig
+    host       = T.unpack  $ reversedHost        rpConfig
+    rewURI     =
+      nullURI{uriAuthority = Just $ URIAuth ""
+                                            (maybe host BSC.unpack $ lookup "Host" headers)
+                                            "",
+              uriPath      = BSC.unpack $ Wai.rawPathInfo    request,
+              uriQuery     = BSC.unpack $ Wai.rawQueryString request}
+
 
 simpleReverseProxy :: Manager -> ReverseProxyConfig -> Wai.Application
 simpleReverseProxy mgr rpConfig request sendResponse = bracket
     (NHC.responseOpen proxiedRequest mgr)
-    responseClose
+    (\res -> do
+        responseClose res
+        case mRewrite of
+          Just rp -> putStrLn $ "Rewrite path: " <> show rp
+          _       -> return ())
     $ \res -> sendResponse $ Wai.responseStream
         (responseStatus res)
         (rewriteHeaders respRuleMap $ responseHeaders res)
         (sendBody $ responseBody res)
   where
-    proxiedRequest = mkRequest rpConfig request
+    (proxiedRequest,mRewrite) = mkRequest rpConfig request
     respRuleMap = mkRuleMap $ rewriteResponseRules rpConfig
     sendBody body send _flush = fix $ \loop -> do
         bs <- body
@@ -153,13 +183,14 @@ simpleReverseProxy mgr rpConfig request sendResponse = bracket
             loop
 
 data ReverseProxyConfig = ReverseProxyConfig
-    { reversedHost :: Text
-    , reversedPort :: Int
-    , reversingHost :: Text
-    , reverseUseSSL :: Bool
-    , reverseTimeout :: Maybe Int
+    { reversedHost         :: Text
+    , reversedPort         :: Int
+    , reversingHost        :: Text
+    , reverseUseSSL        :: Bool
+    , reverseTimeout       :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
-    , rewriteRequestRules :: Set RewriteRule
+    , rewriteRequestRules  :: Set RewriteRule
+    , rewritePath          :: [RewritePath]
     } deriving (Eq, Ord, Show)
 
 instance FromJSON ReverseProxyConfig where
@@ -171,6 +202,7 @@ instance FromJSON ReverseProxyConfig where
         <*> o .:? "timeout" .!= Nothing
         <*> o .:? "rewrite-response" .!= Set.empty
         <*> o .:? "rewrite-request" .!= Set.empty
+        <*> o .:? "rewrite-path"     .!= []
     parseJSON _ = fail "Wanted an object"
 
 instance ToJSON ReverseProxyConfig where
@@ -182,6 +214,7 @@ instance ToJSON ReverseProxyConfig where
         , "timeout" .= reverseTimeout
         , "rewrite-response" .= rewriteResponseRules
         , "rewrite-request" .= rewriteRequestRules
+        , "rewrite-path"     .= rewritePath
         ]
 
 instance Default ReverseProxyConfig where
@@ -193,11 +226,12 @@ instance Default ReverseProxyConfig where
         , reverseTimeout = Nothing
         , rewriteResponseRules = Set.empty
         , rewriteRequestRules = Set.empty
+        , rewritePath          = []
         }
 
 data RewriteRule = RewriteRule
-    { ruleHeader :: Text
-    , ruleRegex :: Text
+    { ruleHeader      :: Text
+    , ruleRegex       :: Text
     , ruleReplacement :: Text
     } deriving (Eq, Ord, Show)
 
@@ -214,3 +248,136 @@ instance ToJSON RewriteRule where
         , "from" .= ruleRegex
         , "to" .= ruleReplacement
         ]
+
+----------------------------------------------------------------------------------
+-- |
+-- | Rewriting path
+-- |
+----------------------------------------------------------------------------------
+
+----------------------------------------------------------------------------------
+-- | Types, records and instances
+----------------------------------------------------------------------------------
+
+-- | Which parts of URI get matched
+data MatchType = PathOnly | PathQuery | HostPath | HostPathQuery deriving (Eq,Ord)
+
+instance Show MatchType where
+  show PathOnly      = "path-only"
+  show PathQuery     = "path-query"
+  show HostPath      = "host-path"
+  show HostPathQuery = "host-path-query"
+
+instance Read MatchType where
+  readsPrec _ s = case s of
+    "path-only"       -> [(PathOnly,"")]
+    "path-query"      -> [(PathQuery,"")]
+    "host-path"       -> [(HostPath,"")]
+    "host-path-query" -> [(HostPathQuery,"")]
+    _                 -> []
+
+-- | Just optimization, for storing compiled regex in structure
+newtype PathRegex = PathRegex {unPathRegex :: Regex}
+instance Show PathRegex where show _        = "RewriteRule regex"
+instance Read PathRegex where readsPrec _ s = [(PathRegex $ makeRegex s,"")]
+-- | Eq and Ord needed for RewritePath which is part of ReverseProxyConfig
+instance Eq   PathRegex where _a == _b      = False   -- Should this be implemented?
+instance Ord  PathRegex where _a <= _b      = False   -- Should this be implemented?
+
+
+-- | Info needed for declaring rewrite rule
+data RewritePath = RewritePath
+    { pathMatchType   :: MatchType    -- ^ which parts of URI are passed for matching
+    , pathRegex       :: PathRegex    -- ^ regex for matching specified URI parts
+    , pathReplacement :: String       -- ^ new URI
+    } deriving (Eq, Ord, Show)
+
+instance FromJSON RewritePath where
+  parseJSON = withObject "RewritePath" $ \o -> do
+    pathMatchType   <- read <$> o .: "match-type"
+    pathRegex       <- read <$> o .: "if-matches"
+    pathReplacement <-          o .: "rewrite-to"
+    if checkRegexVars pathRegex pathReplacement
+      then return RewritePath{..}
+      else fail "Incorrect var indexes. 'if-matches' and 'rewrite-to' must match!"
+
+instance ToJSON RewritePath where
+    toJSON RewritePath {..} = object
+        [ "match-type" .= show pathMatchType
+        , "if-matches" .= show pathRegex
+        , "rewrite-to" .= pathReplacement
+        ]
+
+----------------------------------------------------------------------------------
+-- | Functions
+----------------------------------------------------------------------------------
+
+-- | Match URI with RewritePath rules and rewrite URL
+--   Rules are matched as "first-match-wins"
+--
+--   Matching types:
+--  - "path-only"    - Matched:   only path
+--                     Rewritten: only path
+--      example: /bar/baz
+--            >> /baz/bar
+--  - "path-query"   - Matched:   path and query
+--                     Rewritten: path and query
+--      example: /bar/baz/?query=Today
+--            >> /baz/bar/?today=Query
+--  - "host-path"    - Matched:   host and path
+--                     Rewritten: only path
+--                     Host is taken from "reversed-host"
+--                     New query is merged with Old query.
+--                     New query takes precedence, if equal exists in both.
+--                     Queries are reordered alphabetically.
+--      example: //sub-dom.foo.com/bar/baz
+--            >> //foo.com/baz/bar?a=sub-dom
+--  - "host-path-qs" - Matched:   host, path and query
+--                     Rewritten: path and query
+--                     Host is taken from "reversed-host"
+--                     New query is merged with Old query.
+--                     New query takes precedence, if equal exists in both.
+--                     Queries are reordered alphabetically.
+--      example: //sub-dom.foo.com/bar/baz?a=1&b=2&c
+--            >> //foo.com/baz/bar?a=sub-dom&b=1&c=
+rewritePathRule :: [RewritePath] -> URI -> Maybe URI
+rewritePathRule []     _           = Nothing
+rewritePathRule (x:xs) uri@URI{..} = regexPath x <|> rewritePathRule xs uri
+  where
+    regexPath RewritePath{..} =
+      case pathMatchType of
+        HostPath      -> mergeQueries uri <$> goH  (show uriHostPath)
+        HostPathQuery -> mergeQueries uri <$> goH  (show uriHostPathQuery)
+        PathQuery     -> mergeQueries uri <$> goPQ (show uriPathQuery)
+        PathOnly      ->                      goP        uriPath
+      where
+        goP sMatch  = (\p -> uri{uriPath = subst uriPath p}) <$> doMatch sMatch
+        goH sMatch  = doMatch sMatch >>= parseRelativeReference . subst sMatch
+        goPQ sMatch = doMatch sMatch >>= parseRelativeReference . subst sMatch
+                                     >>= (\u -> Just u{uriAuthority = uriAuthority})
+        doMatch     = matchOnceText (unPathRegex pathRegex)
+
+        uriHostPath        = nullURI    {uriPath  = uriPath, uriAuthority = uriAuthority}
+        uriPathQuery       = nullURI    {uriPath  = uriPath, uriQuery = uriQuery}
+        uriHostPathQuery   = uriHostPath{                    uriQuery = uriQuery}
+
+        subst sMatch match = T.unpack $ rewrite '$' match sMatch pathReplacement
+
+
+-- | Merge two queries. Keep NEW query item, and remove OLD query item, if both exist.
+mergeQueries :: URI -> URI -> URI
+mergeQueries old new = new{uriQuery = BSC.unpack mkQuery}
+  where
+    mkQuery = renderSimpleQuery True . Map.toList
+               $ queryToMap new `Map.union` queryToMap old
+    queryToMap = foldr go Map.empty . parseSimpleQuery . BSC.pack . uriQuery
+      where
+        go (key,value) = Map.insert key value
+
+
+-- | Check if rewrite rules fall inside regex bopunds
+checkRegexVars :: PathRegex -> String -> Bool
+checkRegexVars PathRegex{..} s = all (\i -> mn <= i && i <= mx) $ listVars s
+  where
+    (mn,mx)     = bounds $ regex_groups unPathRegex
+    listVars xs = mapMaybe (readMaybe . takeWhile isDigit) $ splitOn "$" xs

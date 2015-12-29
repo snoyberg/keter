@@ -54,9 +54,13 @@ stanzas:
              Access-Control-Allow-Origin : "*"
 
     - type: reverse-proxy
-      reversed-host: www.yesodweb.com
+      reversed-host: localhost
       reversed-port: 80
-      reversing-host: localhost
+      reversing-host: www.yesodweb.com
+      rewrite-path:
+        - match-type: host-path-query
+          if-matches: ^//(.*)-subdomain.host.com(/?)\\?query=(.*)
+          rewrite-to: //subdomain.host.com/abc?query=$3&part=$1
      # connection-time-bound: 0
      # middleware:
      #  - autohead
@@ -69,7 +73,7 @@ stanzas:
 
 plugins:
     #postgres: true
-# Syntax for remote-DB server:    
-#    postgres: 
+# Syntax for remote-DB server:
+#    postgres:
 #       - server: remoteServerNameOrIP
 #         port: 1234

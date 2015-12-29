@@ -2,15 +2,12 @@
 
 module RewritePathSpec where
 
--- import qualified Data.IORef     as I
+import           Data.Monoid
+import           Network.HTTP.ReverseProxy.Rewrite
+import           Network.URI                       (URI (..), URIAuth (..),
+                                                    nullURI,
+                                                    parseRelativeReference)
 import           Test.Hspec
--- import           Test.HUnit
-
-import Network.HTTP.ReverseProxy.Rewrite
-import           Network.URI                 (URI (..), URIAuth (..), nullURI,
-                                              parseRelativeReference)
-import Data.Monoid
--- import Control.Applicative
 
 site :: String
 site = "subdomain.host.com"
@@ -60,3 +57,7 @@ spec = do
 
       (parseRelativeReference url >>= rewritePathRule [rp])
          `shouldBe` Just nullURI{ uriPath  = "/path1/move-to-query/rest/?query=fruit"}
+    it "checks that vars in regex are inside the bounds" $ do
+      let url =                                  "//host.com/abc?query=$2&another=$4"
+          rp  = RewritePath HostPathQuery (read "^//host.com(/?)\\?query=(.*)&another=(.*)") url
+      checkRegexVars (pathRegex rp) url `shouldBe` False

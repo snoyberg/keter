@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
 module Network.HTTP.ReverseProxy.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
@@ -9,51 +9,56 @@ module Network.HTTP.ReverseProxy.Rewrite
   , simpleReverseProxy
   , rewritePathRule
   , mergeQueries
+  , checkRegexVars
   )
   where
 
-import Control.Applicative
-import Control.Exception (bracket)
-import Data.Function (fix)
-import Data.Monoid ((<>))
-import Data.Maybe (fromMaybe)
+import           Control.Applicative         ((<$>), (<*>), (<|>))
+import           Control.Exception           (bracket)
+import           Data.Function               (fix)
+import           Data.List.Split             (splitOn)
+import           Data.Maybe                  (fromMaybe, mapMaybe)
+import           Data.Monoid                 ((<>))
+import           Text.Read                   (readMaybe)
 
-import qualified Data.Set as Set
-import Data.Set (Set)
-import qualified Data.Map as Map
-import Data.Map ( Map )
-import Data.Array ((!),bounds)
-import Data.Aeson
-import Control.Monad (unless)
+import           Control.Monad               (unless)
+import           Data.Aeson
+import           Data.Array                  (bounds, (!))
+import           Data.Map                    (Map)
+import qualified Data.Map                    as Map
+import           Data.Set                    (Set)
+import qualified Data.Set                    as Set
 
-import qualified Data.ByteString as S
+import qualified Data.ByteString             as S
 import qualified Data.ByteString.Char8       as BSC
-import qualified Data.Text as T
-import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import qualified Data.CaseInsensitive as CI
+import qualified Data.CaseInsensitive        as CI
+import           Data.Text                   (Text)
+import qualified Data.Text                   as T
+import           Data.Text.Encoding          (decodeUtf8, encodeUtf8)
 
-import Blaze.ByteString.Builder (fromByteString)
+import           Blaze.ByteString.Builder    (fromByteString)
 
 -- Configuration files
-import Data.Default
+import           Data.Default
 
 -- Regular expression parsing, replacement, matching
-import Data.Attoparsec.Text (char,string, takeWhile1, endOfInput, parseOnly, Parser)
-import Text.Regex.TDFA (makeRegex, matchOnceText, MatchText)
-import Text.Regex.TDFA.String (Regex)
-import Data.Char (isDigit)
+import           Data.Attoparsec.Text        (Parser, char, endOfInput,
+                                              parseOnly, string, takeWhile1)
+import           Data.Char                   (isDigit)
+import           Text.Regex.TDFA             (MatchText, makeRegex,
+                                              matchOnceText)
+import           Text.Regex.TDFA.Common      (Regex (..))
 
 -- Reverse proxy apparatus
-import qualified Network.Wai as Wai
+import qualified Network.HTTP.Client         as NHC
 import           Network.HTTP.Client.Conduit
-import qualified Network.HTTP.Client as NHC
 import           Network.HTTP.Types
 import           Network.URI                 (URI (..), URIAuth (..), nullURI,
                                               parseRelativeReference)
+import qualified Network.Wai                 as Wai
 
 data RPEntry = RPEntry
-    { config :: ReverseProxyConfig
+    { config      :: ReverseProxyConfig
     , httpManager :: Manager
     }
 
@@ -61,9 +66,7 @@ instance Show RPEntry where
   show x = "RPEntry { config = " ++ (show $ config x) ++ " }"
 
 getGroup :: MatchText String -> Int -> String
-getGroup matches i
-  | i <= snd (bounds matches) = fst $ matches ! i
-  | otherwise = "Rewrite path rule: Var '" <> show i <> "' does not exist!"
+getGroup matches i = fst $ matches ! i
 
 rewrite :: Char -> (String, MatchText String, String) -> String -> String -> Text
 rewrite varPrefix (before, match, after) input replacement =
@@ -81,7 +84,7 @@ rewrite varPrefix (before, match, after) input replacement =
           }
       <|> do
           { _ <- char varPrefix
-          ; n <- (fmap (read . T.unpack) $ takeWhile1 isDigit) :: Parser Int
+          ; n <- (read . T.unpack <$> takeWhile1 isDigit) :: Parser Int
           ; rest <- parseSubstitute
           ; return $ T.pack (getGroup match n) <> rest
           }
@@ -180,13 +183,13 @@ simpleReverseProxy mgr rpConfig request sendResponse = bracket
             loop
 
 data ReverseProxyConfig = ReverseProxyConfig
-    { reversedHost :: Text
-    , reversedPort :: Int
-    , reversingHost :: Text
-    , reverseUseSSL :: Bool
-    , reverseTimeout :: Maybe Int
+    { reversedHost         :: Text
+    , reversedPort         :: Int
+    , reversingHost        :: Text
+    , reverseUseSSL        :: Bool
+    , reverseTimeout       :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
-    , rewriteRequestRules :: Set RewriteRule
+    , rewriteRequestRules  :: Set RewriteRule
     , rewritePath          :: [RewritePath]
     } deriving (Eq, Ord, Show)
 
@@ -227,8 +230,8 @@ instance Default ReverseProxyConfig where
         }
 
 data RewriteRule = RewriteRule
-    { ruleHeader :: Text
-    , ruleRegex :: Text
+    { ruleHeader      :: Text
+    , ruleRegex       :: Text
     , ruleReplacement :: Text
     } deriving (Eq, Ord, Show)
 
@@ -290,11 +293,13 @@ data RewritePath = RewritePath
     } deriving (Eq, Ord, Show)
 
 instance FromJSON RewritePath where
-    parseJSON (Object o) = RewritePath
-        <$> (read <$> o .: "match-type")
-        <*> (read <$> o .: "if-matches")
-        <*>           o .: "rewrite-to"
-    parseJSON _ = fail "Wanted an object"
+  parseJSON = withObject "RewritePath" $ \o -> do
+    pathMatchType   <- read <$> o .: "match-type"
+    pathRegex       <- read <$> o .: "if-matches"
+    pathReplacement <-          o .: "rewrite-to"
+    if checkRegexVars pathRegex pathReplacement
+      then return RewritePath{..}
+      else fail "Incorrect var indexes. 'if-matches' and 'rewrite-to' must match!"
 
 instance ToJSON RewritePath where
     toJSON RewritePath {..} = object
@@ -312,15 +317,15 @@ instance ToJSON RewritePath where
 --
 --   Matching types:
 --  - "path-only"    - Matched:   only path
---                     Rewritren: only path
+--                     Rewritten: only path
 --      example: /bar/baz
 --            >> /baz/bar
 --  - "path-query"   - Matched:   path and query
---                     Rewritren: path and query
+--                     Rewritten: path and query
 --      example: /bar/baz/?query=Today
 --            >> /baz/bar/?today=Query
 --  - "host-path"    - Matched:   host and path
---                     Rewritren: only path
+--                     Rewritten: only path
 --                     Host is taken from "reversed-host"
 --                     New query is merged with Old query.
 --                     New query takes precedence, if equal exists in both.
@@ -328,7 +333,7 @@ instance ToJSON RewritePath where
 --      example: //sub-dom.foo.com/bar/baz
 --            >> //foo.com/baz/bar?a=sub-dom
 --  - "host-path-qs" - Matched:   host, path and query
---                     Rewritren: only path
+--                     Rewritten: path and query
 --                     Host is taken from "reversed-host"
 --                     New query is merged with Old query.
 --                     New query takes precedence, if equal exists in both.
@@ -368,3 +373,11 @@ mergeQueries old new = new{uriQuery = BSC.unpack mkQuery}
     queryToMap = foldr go Map.empty . parseSimpleQuery . BSC.pack . uriQuery
       where
         go (key,value) = Map.insert key value
+
+
+-- | Check if rewrite rules fall inside regex bopunds
+checkRegexVars :: PathRegex -> String -> Bool
+checkRegexVars PathRegex{..} s = all (\i -> mn <= i && i <= mx) $ listVars s
+  where
+    (mn,mx)     = bounds $ regex_groups unPathRegex
+    listVars xs = mapMaybe (readMaybe . takeWhile isDigit) $ splitOn "$" xs

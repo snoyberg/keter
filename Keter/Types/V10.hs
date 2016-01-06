@@ -345,6 +345,7 @@ data WebAppConfig port = WebAppConfig
     { waconfigExec        :: !F.FilePath
     , waconfigArgs        :: !(Vector Text)
     , waconfigEnvironment :: !(Map Text Text)
+    , waconfigApproot     :: !(Maybe Text) -- ^ manually set approot
     , waconfigApprootHost :: !Host -- ^ primary host, used for approot
     , waconfigHosts       :: !(Set Host) -- ^ all hosts, not including the approot host
     , waconfigSsl         :: !Bool
@@ -360,6 +361,7 @@ instance ToCurrent (WebAppConfig ()) where
         { waconfigExec = exec
         , waconfigArgs = V.fromList args
         , waconfigEnvironment = Map.empty
+        , waconfigApproot = Nothing
         , waconfigApprootHost = CI.mk host
         , waconfigHosts = Set.map CI.mk hosts
         , waconfigSsl = ssl
@@ -383,6 +385,7 @@ instance ParseYamlFile (WebAppConfig ()) where
             <$> lookupBase basedir o "exec"
             <*> o .:? "args" .!= V.empty
             <*> o .:? "env" .!= Map.empty
+            <*> o .:? "approot"
             <*> return ahost
             <*> return hosts
             <*> o .:? "ssl" .!= False

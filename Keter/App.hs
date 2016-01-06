@@ -282,8 +282,11 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             , Map.fromList otherEnv
             , kconfigEnvironment ascKeterConfig
             , Map.singleton "PORT" $ pack $ show waconfigPort
-            , Map.singleton "APPROOT" $ scheme <> CI.original waconfigApprootHost <> pack extport
+            , Map.singleton "APPROOT" . fromMaybe computedApproot $
+                                                  waconfigApproot
             ]
+        computedApproot =
+          scheme <> CI.original waconfigApprootHost <> pack extport
     exec <- canonicalizePath waconfigExec
     bracketOnError
         (monitorProcess

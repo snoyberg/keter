@@ -12,7 +12,7 @@ sudo apt-get -y install postgresql stack zlib1g-dev
 
 stack update
 stack setup
-stack install keter -j1
+stack install keter
 
 sudo mkdir -p /opt/keter/bin
 sudo cp ~/.local/bin/keter /opt/keter/bin

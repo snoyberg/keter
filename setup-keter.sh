@@ -4,13 +4,18 @@ set -o errexit -o nounset -o xtrace
 # Quick start:
 # wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
 
-sudo apt-get update
-sudo apt-get install postgresql haskell-platform -y
+sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 575159689BEFB442
+echo "deb http://download.fpcomplete.com/ubuntu `lsb_release -sc` main"|sudo tee /etc/apt/sources.list.d/fpco.list
 
-cabal update
-cabal install keter --force-reinstalls
+sudo apt-get update
+sudo apt-get -y install postgresql stack zlib1g-dev
+
+stack update
+stack setup
+stack install keter
+
 sudo mkdir -p /opt/keter/bin
-sudo cp ~/.cabal/bin/keter /opt/keter/bin
+sudo cp ~/.local/bin/keter /opt/keter/bin
 
 sudo mkdir -p /opt/keter/etc
 cat > /tmp/keter-config.yaml <<EOF
@@ -58,4 +63,4 @@ sudo mv /tmp/keter.conf /etc/init
 sudo start keter
 
 sudo mkdir -p /opt/keter/incoming
-sudo chown "$USER" /opt/keter/incoming
+sudo chown `whoami` /opt/keter/incoming

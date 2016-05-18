@@ -240,7 +240,7 @@ lookupTree [] _ = Nothing
 lookupTree _ EmptyLabelMap = Nothing
 
 lookupTree [l] (Static t)   = Map.lookup (CI.mk l) t >>= getPortEntry
---lookupTree (_:_) (Wildcard w) = getPortEntry $ w
+lookupTree [_] (Wildcard w) = getPortEntry $ w
 lookupTree [l] (WildcardExcept w t) =
     case Map.lookup (CI.mk l) t >>= getPortEntry of
         Just e  -> Just e

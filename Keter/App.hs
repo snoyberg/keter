@@ -49,6 +49,7 @@ import           System.IO                 (hClose)
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
+import qualified Network.TLS as TLS
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
@@ -122,7 +123,7 @@ withConfig asc aid (AIBundle fp modtime) f = bracketOnError
 withReservations :: AppStartConfig
                  -> AppId
                  -> BundleConfig
-                 -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host ProxyAction -> IO a)
+                 -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
                  -> IO a
 withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs actions -> bracketOnError
     (reserveHosts (ascLog asc) (ascHostManager asc) aid $ Map.keysSet actions)
@@ -131,20 +132,31 @@ withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs actio
 
 withActions :: AppStartConfig
             -> BundleConfig
-            -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host ProxyAction -> IO a)
+            -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
             -> IO a
 withActions asc bconfig f =
     loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty
   where
     loop [] wacs backs actions = f wacs backs actions
     loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = bracketOnError
-        (getPort (ascLog asc) (ascPortPool asc) >>= either throwIO return)
-        (releasePort (ascPortPool asc))
-        (\port -> loop
+        (
+           getPort (ascLog asc) (ascPortPool asc) >>= either throwIO
+             (\p -> do
+                c <- case waconfigSsl wac of
+                       -- todo: add loading from relative location
+                       SSL certFile chainCertFiles keyFile ->
+                              either (const mempty) (TLS.Credentials . (:[])) <$>
+                                  TLS.credentialLoadX509Chain certFile (V.toList chainCertFiles) keyFile
+                       _ -> return mempty
+                return (p, c)
+             )
+        )
+        (\(port, cert) -> releasePort (ascPortPool asc) port)
+        (\(port, cert) -> loop
             stanzas
             (wac { waconfigPort = port } : wacs)
             backs
-            (Map.unions $ actions : map (\host -> Map.singleton host (PAPort port (waconfigTimeout wac), rs)) hosts))
+            (Map.unions $ actions : map (\host -> Map.singleton host ((PAPort port (waconfigTimeout wac), rs), cert)) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
     loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 =
@@ -152,19 +164,19 @@ withActions asc bconfig f =
       where
         actions = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host (PAStatic sfc, rs))
+                : map (\host -> Map.singleton host ((PAStatic sfc, rs), mempty))
                   (Set.toList (sfconfigHosts sfc))
     loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions
       where
         actions = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host (PARedirect red, rs))
+                : map (\host -> Map.singleton host ((PARedirect red, rs), mempty))
                   (Set.toList (redirconfigHosts red))
     loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions
       where
-        actions = Map.insert (CI.mk $ reversingHost rev) (PAReverseProxy rev mid to, rs) actions0
+        actions = Map.insert (CI.mk $ reversingHost rev) ((PAReverseProxy rev mid to, rs), mempty) actions0
     loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
@@ -271,9 +283,9 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
     let httpPort  = kconfigExternalHttpPort  ascKeterConfig
         httpsPort = kconfigExternalHttpsPort ascKeterConfig
         (scheme, extport) =
-            if waconfigSsl
-                then ("https://", if httpsPort == 443 then "" else ':' : show httpsPort)
-                else ("http://",  if httpPort  ==  80 then "" else ':' : show httpPort)
+            if waconfigSsl == SSLFalse
+                then ("http://",  if httpPort  ==  80 then "" else ':' : show httpPort)
+                else ("https://", if httpsPort == 443 then "" else ':' : show httpsPort)
         env = Map.toList $ Map.unions
             -- Ordering chosen specifically to precedence rules: app specific,
             -- plugins, global, and then auto-set Keter variables.

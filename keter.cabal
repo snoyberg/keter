@@ -61,6 +61,7 @@ Library
                      , stm                       >= 2.4
                      , async
                      , lifted-base
+                     , tls
 
   if impl(ghc < 7.6)
     build-depends:     ghc-prim

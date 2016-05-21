@@ -8,8 +8,8 @@ module Keter.Types.V10 where
 import           Control.Applicative               ((<$>), (<*>), (<|>))
 import           Data.Aeson                        (Object, ToJSON (..))
 import           Data.Aeson                        (FromJSON (..),
-                                                    Value (Object, String),
-                                                    withObject, (.!=), (.:),
+                                                    Value (Object, String, Bool),
+                                                    withObject, withBool, (.!=), (.:),
                                                     (.:?))
 import           Data.Aeson                        (Value (Bool), object, (.=))
 import qualified Data.CaseInsensitive              as CI
@@ -251,7 +251,7 @@ instance ToCurrent StaticFilesConfig where
 instance ParseYamlFile StaticFilesConfig where
     parseYamlFile basedir = withObject "StaticFilesConfig" $ \o -> StaticFilesConfig
         <$> lookupBase basedir o "root"
-        <*> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
+        <*> (Set.map CI.mk <$> (o .: "hosts" <|> (Set.singleton <$> (o .: "host"))))
         <*> o .:? "directory-listing" .!= False
         <*> o .:? "middleware" .!= []
         <*> o .:? "connection-time-bound"
@@ -341,13 +341,54 @@ instance ToJSON RedirectDest where
 
 type IsSecure = Bool
 
+data SSLConfig
+    = SSLFalse
+    | SSLTrue
+    | SSL !F.FilePath !(V.Vector F.FilePath) !F.FilePath
+    deriving (Show, Eq)
+
+instance ParseYamlFile SSLConfig where
+    parseYamlFile _ v@(Bool _) =
+        withBool "ssl" ( \b ->
+            return (if b then SSLTrue else SSLFalse) ) v
+    parseYamlFile basedir v =  withObject "ssl" ( \o -> do
+             mcert <- lookupBaseMaybe basedir o "certificate"
+             mkey <- lookupBaseMaybe basedir o "key"
+             case (mcert, mkey) of
+                 (Just cert, Just key) -> do
+                     chainCerts <- o .:? "chain-certificates"
+                         >>= maybe (return V.empty) (parseYamlFile basedir)
+                     return $ SSL cert chainCerts key
+                 _ -> return SSLFalse
+            ) v
+
+instance ToJSON SSLConfig where
+    toJSON SSLTrue = Bool True
+    toJSON SSLFalse = Bool False
+    toJSON (SSL c cc k) = object [ "certificate" .= c
+                                 , "chain-certificates" .= cc
+                                 , "key" .= k
+                                 ]
+instance FromJSON SSLConfig where
+    parseJSON v@(Bool _) = withBool "ssl" ( \b ->
+                    return (if b then SSLTrue else SSLFalse) ) v
+    parseJSON v = withObject "ssl" ( \o -> do
+                    mcert <- o .:? "certificate"
+                    mkey <- o .:? "key"
+                    case (mcert, mkey) of
+                        (Just cert, Just key) -> do
+                            chainCerts <- o .:? "chain-certificates" .!= V.empty
+                            return $ SSL cert chainCerts key
+                        _ -> return SSLFalse -- fail "Must provide both certificate and key files"
+                    ) v
+
 data WebAppConfig port = WebAppConfig
     { waconfigExec        :: !F.FilePath
     , waconfigArgs        :: !(Vector Text)
     , waconfigEnvironment :: !(Map Text Text)
     , waconfigApprootHost :: !Host -- ^ primary host, used for approot
     , waconfigHosts       :: !(Set Host) -- ^ all hosts, not including the approot host
-    , waconfigSsl         :: !Bool
+    , waconfigSsl         :: !SSLConfig
     , waconfigPort        :: !port
     , waconfigForwardEnv  :: !(Set Text)
     , waconfigTimeout     :: !(Maybe Int)
@@ -362,7 +403,7 @@ instance ToCurrent (WebAppConfig ()) where
         , waconfigEnvironment = Map.empty
         , waconfigApprootHost = CI.mk host
         , waconfigHosts = Set.map CI.mk hosts
-        , waconfigSsl = ssl
+        , waconfigSsl = if ssl then SSLTrue else SSLFalse
         , waconfigPort = ()
         , waconfigForwardEnv = Set.empty
         , waconfigTimeout = Nothing
@@ -385,7 +426,7 @@ instance ParseYamlFile (WebAppConfig ()) where
             <*> o .:? "env" .!= Map.empty
             <*> return ahost
             <*> return hosts
-            <*> o .:? "ssl" .!= False
+            <*> o .:? "ssl" .!= SSLFalse
             <*> return ()
             <*> o .:? "forward-env" .!= Set.empty
             <*> o .:? "connection-time-bound"

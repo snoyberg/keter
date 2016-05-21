@@ -2,5 +2,23 @@ flags:
   keter: {}
 packages:
 - '.'
+- location:
+    git: https://github.com/tolysz/hs-tls.git
+    commit: 0e5ba492a686b9aed32abbd1437860dbca2ebf4a
+  subdirs:
+    - core
+- location:
+    git: https://github.com/yesodweb/wai.git
+    commit: 7eded0855ea50dda4f3944f3d7ececb384b7eda3
+  subdirs:
+    - warp-tls
+    - wai
+    - warp
+    - wai-app-static
+    - auto-update
+    - mime-types
+  extra-dep: true
+
 extra-deps: []
-resolver: lts-3.5
+allow-newer: true
+resolver: nightly-2016-05-19

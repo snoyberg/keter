@@ -4,6 +4,13 @@ stanzas:
       args:
         - Hello World v1.0
       #ssl : true
+#      ssl:
+#        key: /opt/keter/etc/cert/hello.key
+#        certificate: /opt/keter/etc/cert/hello.crt
+#        chain-certificates:
+#          - /opt/keter/etc/middle.crt
+#          - /opt/keter/etc/root.crt
+
       env:
         FROM_KETER_CONFIG: foo bar baz
       forward-env:

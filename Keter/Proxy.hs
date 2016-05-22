@@ -9,7 +9,7 @@ module Keter.Proxy
     ) where
 
 import           Blaze.ByteString.Builder          (copyByteString)
-import           Control.Applicative               ((<|>))
+import           Control.Applicative               ((<$>), (<|>))
 import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8

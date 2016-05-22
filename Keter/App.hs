@@ -28,7 +28,7 @@ import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
 import           Data.IORef
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
-import           Data.Monoid               ((<>))
+import           Data.Monoid               ((<>), mempty)
 import qualified Data.Set                  as Set
 import           Data.Text                 (pack, unpack)
 import           Data.Text.Encoding        (decodeUtf8With, encodeUtf8)

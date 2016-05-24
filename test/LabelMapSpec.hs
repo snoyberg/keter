@@ -8,12 +8,14 @@ import           Test.Hspec
 import           Test.HUnit
 
 import qualified Keter.LabelMap as LM
+import           Data.Maybe
 
 
 spec :: Spec
 spec = do
   describe "LabelMap" $ do
     it "modified subdmonains" caseSubdomainIntegrity
+    it "assert wildcards" caseWildcards
 
 
 {-
@@ -57,3 +59,12 @@ caseSubdomainIntegrity = do
   print test3b
 
   assertBool msg $ test3a == test3b
+
+caseWildcards :: Assertion
+caseWildcards = do
+  let test0 = LM.empty
+      test1 = LM.insert "*.someapp.com"       () test0
+      test2 = LM.lookup "a.someapp.com"         test1
+      msg = "Wildcards domains"
+
+  assertBool msg $ isJust test2

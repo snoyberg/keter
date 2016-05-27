@@ -9,7 +9,7 @@ module Keter.Proxy
     ) where
 
 import           Blaze.ByteString.Builder          (copyByteString)
-import           Control.Applicative               ((<|>))
+import           Control.Applicative               ((<$>), (<|>))
 import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
@@ -43,9 +43,10 @@ import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import           Network.Wai.Middleware.Gzip       (gzip)
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
+import qualified Network.TLS as TLS
 
 -- | Mapping from virtual hostname to port number.
-type HostLookup = ByteString -> IO (Maybe ProxyAction)
+type HostLookup = ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
 
 reverseProxy :: Bool
              -> Int -> Manager -> HostLookup -> ListeningPort -> IO ()
@@ -57,11 +58,23 @@ reverseProxy useHeader timeBound manager hostLookup listener =
         case listener of
             LPInsecure host port -> (Warp.runSettings (warp host port), False)
             LPSecure host port cert chainCerts key -> (WarpTLS.runTLS
-                (WarpTLS.tlsSettingsChain
+                (connectClientCertificates hostLookup $ WarpTLS.tlsSettingsChain
                     cert
                     (V.toList chainCerts)
                     key)
                 (warp host port), True)
+
+connectClientCertificates :: HostLookup -> WarpTLS.TLSSettings -> WarpTLS.TLSSettings
+connectClientCertificates hl s =
+    let
+        newHooks@TLS.ServerHooks{..} = WarpTLS.tlsServerHooks s
+        -- todo: add nested lookup
+        newOnServerNameIndication (Just n) =
+             maybe mempty snd <$> hl (S8.pack n)
+        newOnServerNameIndication Nothing =
+             return mempty -- we could return default certificate here
+    in
+        s { WarpTLS.tlsServerHooks = newHooks{TLS.onServerNameIndication = newOnServerNameIndication}}
 
 withClient :: Bool -- ^ is secure?
            -> Bool -- ^ use incoming request header for IP address
@@ -120,7 +133,7 @@ withClient isSecure useHeader bound manager hostLookup =
                         else hostLookup host'
         case mport of
             Nothing -> return (def, WPRResponse $ unknownHostResponse host)
-            Just (action, requiresSecure)
+            Just ((action, requiresSecure), _)
                 | requiresSecure && not isSecure -> performHttpsRedirect host req
                 | otherwise -> performAction req action
 

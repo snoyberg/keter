@@ -274,6 +274,41 @@ listeners:
     certificate: certificate2.pem
 ```
 
+
+An alternative way to make this possible is adding the following `ssl:` argument
+to the `keter.yaml` file in your Yesod app's `config folder` as follows:
+
+```
+stanzas:
+    - type: webapp
+      exec: ../yourproject
+      ssl:
+        key: /opt/keter/etc/cert/yourproject.key
+        certificate: /opt/keter/etc/cert/yourproject.crt
+        chain-certificates: []
+```
+
+If you don't have your certificates bundled in one `.crt` file, you should add
+the other certificates in the following order
+
+```
+      ssl:
+        [..]
+        chain-certificates:
+          - /opt/keter/etc/middle.crt
+          - /opt/keter/etc/root.crt
+```
+
+This way you can designate certificates per Yesod App while still having one SSL certificate
+in your main `/opt/keter/etc/keter-config.yaml` for your other Yesod apps to default to
+if they don't have this `ssl:` argument in their `config/keter.yaml`.
+
+NOTE: If you get an error that a Bool was expected instead of an Object when adding the `ssl:`
+argument, then for this to work you might need to build Keter from Github, because at the time
+of writing the version of Keter on Hackage does not have this functionality. Just clone or 
+download this repository and build it using stack.
+
+
 ## FAQ
 
 *   Keter spawns multiple failing process when run with `sudo start keter`.

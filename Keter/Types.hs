@@ -7,6 +7,11 @@ import Keter.Types.V04 as X (PortSettings (..), TLSConfig (..))
 import Keter.Types.V10 as X
     ( BundleConfig (..)
     , WebAppConfig (..)
+
+    , ContainerName
+    , ContainerSpec(..)
+    , WebContainerSpec(..)
+
     , RedirectConfig (..)
     , StaticFilesConfig (..)
     , KeterConfig (..)

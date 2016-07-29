@@ -25,42 +25,50 @@ import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
                                             terminateMonitoredProcess)
+import qualified Data.Graph                as Graph
 import           Data.IORef
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
-import           Data.Monoid               ((<>), mempty)
+import           Data.Monoid               (mempty, (<>))
 import qualified Data.Set                  as Set
 import           Data.Text                 (pack, unpack)
 import           Data.Text.Encoding        (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error  (lenientDecode)
+import           Data.Traversable
 import qualified Data.Vector               as V
 import           Data.Yaml
 import           Data.Yaml.FilePath
-import System.FilePath ((</>))
-import           System.Directory          (canonicalizePath, doesFileExist,
-                                            removeDirectoryRecursive)
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
 import           Keter.Types
 import qualified Network
+import qualified Network.TLS               as TLS
 import           Prelude                   hiding (FilePath)
+import           System.Directory          (canonicalizePath, doesFileExist,
+                                            removeDirectoryRecursive)
 import           System.Environment        (getEnvironment)
+import           System.FilePath           ((</>))
 import           System.IO                 (hClose)
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
-import qualified Network.TLS as TLS
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
     , appRunningWebApps :: !(TVar [RunningWebApp])
     , appBackgroundApps :: !(TVar [RunningBackgroundApp])
+--    , appRunningPods    :: !(TVar [RunningPod])
     , appId             :: !AppId
     , appHosts          :: !(TVar (Set Host))
     , appDir            :: !(TVar (Maybe FilePath))
     , appAsc            :: !AppStartConfig
     , appRlog           :: !(TVar (Maybe RotatingLog))
     }
+
+data RunningPod = RunningPod
+  { rpProcesses :: ![MonitoredProcess]
+  , rpPort      :: !Port
+  }
 
 data RunningWebApp = RunningWebApp
     { rwaProcess :: !MonitoredProcess
@@ -86,17 +94,20 @@ unpackBundle AppStartConfig {..} bundle aid = do
             return $ if exists then yml
                                else dir </> "config" </> "keter.yaml"
 
-        mconfig <- decodeFileRelative configFP
-        config <-
-            case mconfig of
-                Right config -> return config
-                Left e -> throwIO $ InvalidConfigFile e
+        config <- decodeConfigFile configFP
         return (dir, config)
   where
     folderName =
         case aid of
             AIBuiltin -> "__builtin__"
             AINamed x -> x
+
+decodeConfigFile :: FilePath -> IO BundleConfig
+decodeConfigFile fp = do
+  mcfg <- decodeFileRelative fp
+  case mcfg of
+    Right cfg -> return cfg
+    Left err -> throwIO $ InvalidConfigFile err
 
 data AppStartConfig = AppStartConfig
     { ascTempFolder     :: !TempFolder
@@ -119,66 +130,87 @@ withConfig asc aid (AIBundle fp modtime) f = bracketOnError
     (unpackBundle asc fp aid)
     (\(newdir, _) -> removeDirectoryRecursive newdir)
     $ \(newdir, bconfig) -> f (Just newdir) bconfig (Just modtime)
+withConfig asc aid (AIPod fp modtime) f = do
+  config <- decodeConfigFile fp
+  f Nothing config (Just modtime)
 
 withReservations :: AppStartConfig
                  -> AppId
                  -> BundleConfig
-                 -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
+                 -> ([WebAppConfig Port] -> [BackgroundConfig] -> [(WebContainerSpec Port, [ContainerSpec])] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
                  -> IO a
-withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs actions -> bracketOnError
+withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs pods actions -> bracketOnError
     (reserveHosts (ascLog asc) (ascHostManager asc) aid $ Map.keysSet actions)
     (forgetReservations (ascLog asc) (ascHostManager asc) aid)
-    (const $ f wacs backs actions)
+    (const $ f wacs backs pods actions)
 
 withActions :: AppStartConfig
             -> BundleConfig
-            -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
+            -> ([WebAppConfig Port] -> [BackgroundConfig] -> [(WebContainerSpec Port, [ContainerSpec])]  -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
             -> IO a
 withActions asc bconfig f =
-    loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty
+    loop (V.toList $ bconfigStanzas bconfig) [] [] [] Map.empty
   where
-    loop [] wacs backs actions = f wacs backs actions
-    loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = bracketOnError
-        (
-           getPort (ascLog asc) (ascPortPool asc) >>= either throwIO
-             (\p -> do
-                c <- case waconfigSsl wac of
-                       -- todo: add loading from relative location
-                       SSL certFile chainCertFiles keyFile ->
-                              either (const mempty) (TLS.Credentials . (:[])) <$>
-                                  TLS.credentialLoadX509Chain certFile (V.toList chainCertFiles) keyFile
-                       _ -> return mempty
-                return (p, c)
-             )
-        )
-        (\(port, cert) -> releasePort (ascPortPool asc) port)
-        (\(port, cert) -> loop
+
+    reservePort sslConfig = do
+      eport <- getPort (ascLog asc) (ascPortPool asc)
+      case eport of
+        Left err   -> throwIO err
+        Right port ->
+          case sslConfig of
+            SSL certFile chainCertFiles keyFile -> do
+              cert <- either (const mempty) (TLS.Credentials . (:[])) <$>
+                    TLS.credentialLoadX509Chain certFile (V.toList chainCertFiles) keyFile
+              return (port, cert)
+            _ -> return (port, mempty)
+
+    loop [] wacs backs pods actions = f wacs backs pods actions
+    loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs pods actions =
+      bracketOnError
+      (reservePort (waconfigSsl wac))
+      (\(port, cert) -> releasePort (ascPortPool asc) port)
+      (\(port, cert) -> loop
             stanzas
             (wac { waconfigPort = port } : wacs)
             backs
+            pods
             (Map.unions $ actions : map (\host -> Map.singleton host ((PAPort port (waconfigTimeout wac), rs), cert)) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
-    loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+
+    loop (Stanza (StanzaPod wcs containers) rs:stanzas) wacs backs pods actions =
+      bracketOnError
+      (reservePort (wcsSSLConfig wcs))
+      (\(port, cert) -> releasePort (ascPortPool asc) port)
+      (\(port, cert) -> loop
+                        stanzas
+                        wacs
+                        backs
+                        ( (wcs { wcsPort = port}, containers) : pods )
+                        (Map.unions $ actions : map (\host -> Map.singleton host ((PAPort port (wcsTimeout wcs), rs), cert)) hosts))
+      where
+        hosts = Set.toList $ Set.insert (wcsApprootHost wcs) (wcsHosts wcs)
+
+    loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs pods actions0 =
+        loop stanzas wacs backs pods actions
       where
         actions = Map.unions
                 $ actions0
                 : map (\host -> Map.singleton host ((PAStatic sfc, rs), mempty))
                   (Set.toList (sfconfigHosts sfc))
-    loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+    loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs pods actions0 =
+        loop stanzas wacs backs pods actions
       where
         actions = Map.unions
                 $ actions0
                 : map (\host -> Map.singleton host ((PARedirect red, rs), mempty))
                   (Set.toList (redirconfigHosts red))
-    loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+    loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs pods actions0 =
+        loop stanzas wacs backs pods actions
       where
         actions = Map.insert (CI.mk $ reversingHost rev) ((PAReverseProxy rev mid to, rs), mempty) actions0
-    loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
-        loop stanzas wacs (back:backs) actions
+    loop (Stanza (StanzaBackground back) _:stanzas) wacs backs pods actions =
+        loop stanzas wacs (back:backs) pods actions
 
 withRotatingLog :: AppStartConfig
                 -> AppId
@@ -231,9 +263,10 @@ start asc aid input =
     withRotatingLog asc aid Nothing $ \trlog rlog ->
     withConfig asc aid input $ \newdir bconfig mmodtime ->
     withSanityChecks asc bconfig $
-    withReservations asc aid bconfig $ \webapps backs actions ->
+    withReservations asc aid bconfig $ \webapps backs pods actions ->
     withBackgroundApps asc aid bconfig newdir rlog backs $ \runningBacks ->
-    withWebApps asc aid bconfig newdir rlog webapps $ \runningWebapps -> do
+    withWebApps asc aid bconfig newdir rlog webapps $ \runningWebapps ->
+    withPods asc aid bconfig rlog pods $ \runningPods -> do
         mapM_ ensureAlive runningWebapps
         activateApp (ascLog asc) (ascHostManager asc) aid actions
         App
@@ -255,6 +288,59 @@ bracketedMap with inside =
   where
     loop front [] = inside $ front []
     loop front (c:cs) = with c $ \x -> loop (front . (x:)) cs
+
+withPods :: AppStartConfig
+         -> AppId
+         -> BundleConfig
+         -> RotatingLog
+         -> [(WebContainerSpec Port, [ContainerSpec])]
+         -> ([RunningPod] -> IO a)
+         -> IO a
+withPods asc aid bconfig rlog pods f =
+  bracketedMap (uncurry launchPod) f pods
+  where
+    -- launch a container. Port is only given for the
+    -- web container
+    launchContainer :: Maybe Port
+                    -> ContainerSpec
+                    -> (MonitoredProcess -> IO a)
+                    -> IO a
+    launchContainer port container cont = do
+      undefined
+
+    launchPod :: WebContainerSpec Port
+              -> [ContainerSpec]
+              -> (RunningPod -> IO a)
+              -> IO a
+    launchPod wcs containers cont = do
+
+      -- topologically sort containers
+      let
+        sccx :: [Graph.SCC ContainerSpec]
+        sccx = Graph.stronglyConnComp [ (container, name, links)
+                                      | container <- containers
+                                      , let name = csName container
+                                            links = V.toList (csLinks container)
+                                      ]
+
+      orderedContainers <- for sccx $ \scc -> case scc of
+        Graph.AcyclicSCC container -> pure container
+        Graph.CyclicSCC containers ->
+            error "you have a cycle in your containers definition"
+
+      -- run the containers one by one
+      bracketedMap
+        (\container ->
+            let p = if csName container == wcsName wcs
+                    then Just (wcsPort wcs)
+                    else Nothing
+            in launchContainer p container)
+        (\processes ->
+           cont RunningPod { rpProcesses = processes
+                           , rpPort      = wcsPort wcs
+                           }
+        )
+        orderedContainers
 
 withWebApps :: AppStartConfig
             -> AppId
@@ -540,7 +626,7 @@ reload App {..} input =
     withRotatingLog appAsc appId (Just appRlog) $ \_ rlog ->
     withConfig appAsc appId input $ \newdir bconfig mmodtime ->
     withSanityChecks appAsc bconfig $
-    withReservations appAsc appId bconfig $ \webapps backs actions ->
+    withReservations appAsc appId bconfig $ \webapps backs pods actions ->
     withBackgroundApps appAsc appId bconfig newdir rlog backs $ \runningBacks ->
     withWebApps appAsc appId bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps

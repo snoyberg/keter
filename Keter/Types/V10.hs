@@ -5,7 +5,7 @@
 {-# LANGUAGE TypeFamilies      #-}
 module Keter.Types.V10 where
 
-import           Control.Applicative               ((<$>), (<*>), (<|>))
+import           Control.Applicative               ((<$>), (<*>), (<|>), pure)
 import           Data.Aeson                        (Object, ToJSON (..))
 import           Data.Aeson                        (FromJSON (..), Value (Object, String, Bool),
                                                     withBool, withObject, (.!=),

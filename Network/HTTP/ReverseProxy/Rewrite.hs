@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE CPP               #-}
 module Network.HTTP.ReverseProxy.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
@@ -115,7 +116,16 @@ mkRuleMap = Map.fromList . map (\k -> (CI.mk . encodeUtf8 $ ruleHeader k, k)) . 
 
 mkRequest :: ReverseProxyConfig -> Wai.Request -> Request
 mkRequest rpConfig request =
-  def { method = Wai.requestMethod request
+#if MIN_VERSION_http_client(0, 5, 0)
+   NHC.defaultRequest
+      { NHC.checkResponse = \_ _ -> return ()
+      , NHC.responseTimeout = maybe NHC.responseTimeoutNone NHC.responseTimeoutMicro $ reverseTimeout rpConfig
+#else
+   def
+      { NHC.checkStatus = \_ _ _ -> Nothing
+      , NHC.responseTimeout = reverseTimeout rpConfig
+#endif
+      , method = Wai.requestMethod request
       , secure = reverseUseSSL rpConfig
       , host   = encodeUtf8 $ reversedHost rpConfig
       , port   = reversedPort rpConfig
@@ -128,8 +138,6 @@ mkRequest rpConfig request =
             Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ Wai.requestBody request)
       , decompress = const False
       , redirectCount = 0
-      , checkStatus = \_ _ _ -> Nothing
-      , responseTimeout = reverseTimeout rpConfig
       , cookieJar = Nothing
       }
   where

@@ -61,11 +61,12 @@ or similar strategy.
 
 ## Setup
 
-Instructions are for an Ubuntu system. Eventually, I hope to provide a PPA for
-this (please contact me if you would like to assist with this). For now, the
-following steps should be sufficient:
+### Debian, Ubuntu and derivatives
 
-First, install PostgreSQL
+Eventually, I hope to provide a PPA for this (please contact me if you would
+like to assist with this). For now, the following steps should be sufficient:
+
+First, install PostgreSQL:
 
     sudo apt-get install postgresql
 
@@ -100,6 +101,54 @@ exec /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
 Finally, start the job for the first time:
 
     sudo start keter
+
+Optionally, you may wish to change the owner on the `/opt/keter/incoming`
+folder to your user account, so that you can deploy without `sudo`ing.
+
+    sudo mkdir -p /opt/keter/incoming
+    sudo chown $USER /opt/keter/incoming
+
+### Redhat and derivatives (Centos, Fedora, etc)
+
+First, install PostgreSQL:
+
+    sudo dnf install postgresql
+
+Second, build the `keter` binary and place it at `/opt/keter/bin`. To do so,
+you'll need to install the Haskell Platform, and can then build with `cabal`.
+This would look something like:
+
+    sudo dnf install haskell-platform
+    cabal update
+    cabal install keter
+    sudo mkdir -p /opt/keter/bin
+    sudo cp ~/.cabal/bin/keter /opt/keter/bin
+
+Third, create a Keter config file. You can view a sample at
+https://github.com/snoyberg/keter/blob/master/etc/keter-config.yaml.
+
+Fourth, set up a Systemd unit to start `keter` when your system boots.
+
+```
+# /etc/systemd/system/keter.service
+[Unit]
+Description=Keter
+After=network.service
+
+[Service]
+Type=simple
+
+ExecStart=/opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
+```
+
+Finally, enable and start the unit (Note: You may need to disable SELinux):
+
+    sudo systemctl enable keter
+    sudo systemctl start keter
+
+Verify that it's actually running with:
+
+    sudo systemctl status keter
 
 Optionally, you may wish to change the owner on the `/opt/keter/incoming`
 folder to your user account, so that you can deploy without `sudo`ing.

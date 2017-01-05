@@ -137,8 +137,10 @@ After=network.service
 
 [Service]
 Type=simple
-
 ExecStart=/opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
+
+[Install]
+WantedBy=multi-user.target
 ```
 
 Finally, enable and start the unit (Note: You may need to disable SELinux):

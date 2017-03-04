@@ -30,6 +30,7 @@ import qualified Data.CaseInsensitive as CI
 
 import Blaze.ByteString.Builder (fromByteString)
 
+import Keter.Types.Common
 -- Configuration files
 import Data.Default
 
@@ -126,7 +127,7 @@ mkRequest rpConfig request =
       , NHC.responseTimeout = reverseTimeout rpConfig
 #endif
       , method = Wai.requestMethod request
-      , secure = reverseUseSSL rpConfig
+      , secure = SSLFalse /= reverseUseSSL rpConfig
       , host   = encodeUtf8 $ reversedHost rpConfig
       , port   = reversedPort rpConfig
       , path   = Wai.rawPathInfo request
@@ -164,7 +165,7 @@ data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text
     , reversedPort :: Int
     , reversingHost :: Text
-    , reverseUseSSL :: Bool
+    , reverseUseSSL :: !SSLConfig
     , reverseTimeout :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
     , rewriteRequestRules :: Set RewriteRule
@@ -175,7 +176,7 @@ instance FromJSON ReverseProxyConfig where
         <$> o .: "reversed-host"
         <*> o .: "reversed-port"
         <*> o .: "reversing-host"
-        <*> o .:? "ssl" .!= False
+        <*> o .:? "ssl" .!= SSLFalse
         <*> o .:? "timeout" .!= Nothing
         <*> o .:? "rewrite-response" .!= Set.empty
         <*> o .:? "rewrite-request" .!= Set.empty
@@ -197,7 +198,7 @@ instance Default ReverseProxyConfig where
         { reversedHost = ""
         , reversedPort = 80
         , reversingHost = ""
-        , reverseUseSSL = False
+        , reverseUseSSL = SSLFalse
         , reverseTimeout = Nothing
         , rewriteResponseRules = Set.empty
         , rewriteRequestRules = Set.empty

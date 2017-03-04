@@ -6,12 +6,10 @@
 module Keter.Types.V10 where
 
 import           Control.Applicative               ((<$>), (<*>), (<|>))
-import           Data.Aeson                        (Object, ToJSON (..))
-import           Data.Aeson                        (FromJSON (..),
+import           Data.Aeson                        (FromJSON (..), ToJSON (..), Object,
                                                     Value (Object, String, Bool),
-                                                    withObject, withBool, (.!=), (.:),
-                                                    (.:?))
-import           Data.Aeson                        (Value (Bool), object, (.=))
+                                                    withObject, (.!=), (.:),
+                                                    (.:?), object, (.=))
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
 import           Data.Default
@@ -351,47 +349,6 @@ instance ToJSON RedirectDest where
         ]
 
 type IsSecure = Bool
-
-data SSLConfig
-    = SSLFalse
-    | SSLTrue
-    | SSL !F.FilePath !(V.Vector F.FilePath) !F.FilePath
-    deriving (Show, Eq)
-
-instance ParseYamlFile SSLConfig where
-    parseYamlFile _ v@(Bool _) =
-        withBool "ssl" ( \b ->
-            return (if b then SSLTrue else SSLFalse) ) v
-    parseYamlFile basedir v =  withObject "ssl" ( \o -> do
-             mcert <- lookupBaseMaybe basedir o "certificate"
-             mkey <- lookupBaseMaybe basedir o "key"
-             case (mcert, mkey) of
-                 (Just cert, Just key) -> do
-                     chainCerts <- o .:? "chain-certificates"
-                         >>= maybe (return V.empty) (parseYamlFile basedir)
-                     return $ SSL cert chainCerts key
-                 _ -> return SSLFalse
-            ) v
-
-instance ToJSON SSLConfig where
-    toJSON SSLTrue = Bool True
-    toJSON SSLFalse = Bool False
-    toJSON (SSL c cc k) = object [ "certificate" .= c
-                                 , "chain-certificates" .= cc
-                                 , "key" .= k
-                                 ]
-instance FromJSON SSLConfig where
-    parseJSON v@(Bool _) = withBool "ssl" ( \b ->
-                    return (if b then SSLTrue else SSLFalse) ) v
-    parseJSON v = withObject "ssl" ( \o -> do
-                    mcert <- o .:? "certificate"
-                    mkey <- o .:? "key"
-                    case (mcert, mkey) of
-                        (Just cert, Just key) -> do
-                            chainCerts <- o .:? "chain-certificates" .!= V.empty
-                            return $ SSL cert chainCerts key
-                        _ -> return SSLFalse -- fail "Must provide both certificate and key files"
-                    ) v
 
 data WebAppConfig port = WebAppConfig
     { waconfigExec        :: !F.FilePath

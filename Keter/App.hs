@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 module Keter.App
     ( App
     , AppStartConfig (..)
@@ -132,26 +133,23 @@ withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs actio
 
 withActions :: AppStartConfig
             -> BundleConfig
-            -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
+            -> ([ WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
             -> IO a
 withActions asc bconfig f =
     loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty
   where
+    -- todo: add loading from relative location
+    loadCert (SSL certFile chainCertFiles keyFile) =
+         either (const mempty) (TLS.Credentials . (:[]))
+            <$> TLS.credentialLoadX509Chain certFile (V.toList chainCertFiles) keyFile
+    loadCert _ = return mempty
+
     loop [] wacs backs actions = f wacs backs actions
     loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = bracketOnError
-        (
-           getPort (ascLog asc) (ascPortPool asc) >>= either throwIO
-             (\p -> do
-                c <- case waconfigSsl wac of
-                       -- todo: add loading from relative location
-                       SSL certFile chainCertFiles keyFile ->
-                              either (const mempty) (TLS.Credentials . (:[])) <$>
-                                  TLS.credentialLoadX509Chain certFile (V.toList chainCertFiles) keyFile
-                       _ -> return mempty
-                return (p, c)
-             )
+        (getPort (ascLog asc) (ascPortPool asc) >>= either throwIO
+             (\p -> fmap (p,) <$> loadCert $ waconfigSsl wac)
         )
-        (\(port, cert) -> releasePort (ascPortPool asc) port)
+        (\(port, _)    -> releasePort (ascPortPool asc) port)
         (\(port, cert) -> loop
             stanzas
             (wac { waconfigPort = port } : wacs)
@@ -159,19 +157,21 @@ withActions asc bconfig f =
             (Map.unions $ actions : map (\host -> Map.singleton host ((PAPort port (waconfigTimeout wac), rs), cert)) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
-    loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+    loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 = do
+        cert <- loadCert $ sfconfigSsl sfc
+        loop stanzas wacs backs (actions cert)
       where
-        actions = Map.unions
+        actions cert = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host ((PAStatic sfc, rs), mempty))
+                : map (\host -> Map.singleton host ((PAStatic sfc, rs), cert))
                   (Set.toList (sfconfigHosts sfc))
-    loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+    loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 = do
+        cert <- loadCert $ redirconfigSsl red
+        loop stanzas wacs backs (actions cert)
       where
-        actions = Map.unions
+        actions cert = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host ((PARedirect red, rs), mempty))
+                : map (\host -> Map.singleton host ((PARedirect red, rs), cert))
                   (Set.toList (redirconfigHosts red))
     loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 =
         loop stanzas wacs backs actions

@@ -1,6 +1,8 @@
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE TypeFamilies       #-}
+{-# LANGUAGE OverloadedStrings  #-}
+
 module Keter.Types.Common
     ( module Keter.Types.Common
     , FilePath
@@ -13,7 +15,9 @@ module Keter.Types.Common
     ) where
 
 import           Control.Exception          (Exception, SomeException)
-import           Data.Aeson                 (Object)
+import           Data.Aeson                 (Object, FromJSON, ToJSON,
+                                            Value(Bool), (.=), (.!=), (.:?),
+                                            withObject, withBool, object)
 import           Data.ByteString            (ByteString)
 import           Data.CaseInsensitive       (CI, original)
 import           Data.Map                   (Map)
@@ -21,10 +25,13 @@ import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, pack, unpack)
 import           Data.Typeable              (Typeable)
+import           Data.Yaml.FilePath
+import           Data.Vector                (Vector)
+import qualified Data.Vector                as V
 import qualified Data.Yaml
 import qualified Language.Haskell.TH.Syntax as TH
 import           System.Exit                (ExitCode)
-import           System.FilePath            (takeBaseName)
+import           System.FilePath            (FilePath, takeBaseName)
 
 -- | Name of the application. Should just be the basename of the application
 -- file.
@@ -164,3 +171,44 @@ data AppId = AIBuiltin | AINamed !Appname
 instance Show AppId where
     show AIBuiltin = "/builtin/"
     show (AINamed t) = unpack t
+
+data SSLConfig
+    = SSLFalse
+    | SSLTrue
+    | SSL !FilePath !(Vector FilePath) !FilePath
+    deriving (Show, Eq, Ord)
+
+instance ParseYamlFile SSLConfig where
+    parseYamlFile _ v@(Bool _) =
+        withBool "ssl" ( \b ->
+            return (if b then SSLTrue else SSLFalse) ) v
+    parseYamlFile basedir v =  withObject "ssl" ( \o -> do
+             mcert <- lookupBaseMaybe basedir o "certificate"
+             mkey <- lookupBaseMaybe basedir o "key"
+             case (mcert, mkey) of
+                 (Just cert, Just key) -> do
+                     chainCerts <- o .:? "chain-certificates"
+                         >>= maybe (return V.empty) (parseYamlFile basedir)
+                     return $ SSL cert chainCerts key
+                 _ -> return SSLFalse
+            ) v
+
+instance ToJSON SSLConfig where
+    toJSON SSLTrue = Bool True
+    toJSON SSLFalse = Bool False
+    toJSON (SSL c cc k) = object [ "certificate" .= c
+                                 , "chain-certificates" .= cc
+                                 , "key" .= k
+                                 ]
+instance FromJSON SSLConfig where
+    parseJSON v@(Bool _) = withBool "ssl" ( \b ->
+                    return (if b then SSLTrue else SSLFalse) ) v
+    parseJSON v = withObject "ssl" ( \o -> do
+                    mcert <- o .:? "certificate"
+                    mkey <- o .:? "key"
+                    case (mcert, mkey) of
+                        (Just cert, Just key) -> do
+                            chainCerts <- o .:? "chain-certificates" .!= V.empty
+                            return $ SSL cert chainCerts key
+                        _ -> return SSLFalse -- fail "Must provide both certificate and key files"
+                    ) v

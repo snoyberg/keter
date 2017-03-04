@@ -83,6 +83,13 @@ stanzas:
      #             keter : rocks
      #     - headers:
      #         Access-Control-Allow-Origin : "*"
+     # ssl : true
+     # ssl:
+     #   key: /opt/keter/etc/cert/hello.key
+     #   certificate: /opt/keter/etc/cert/hello.crt
+     #   chain-certificates:
+     #     - /opt/keter/etc/middle.crt
+     #     - /opt/keter/etc/root.crt
     - type: redirect
       hosts:
         - asome.com

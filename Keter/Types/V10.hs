@@ -235,6 +235,7 @@ data StaticFilesConfig = StaticFilesConfig
     -- FIXME basic auth
     , sfconfigMiddleware :: ![ MiddlewareConfig ]
     , sfconfigTimeout    :: !(Maybe Int)
+    , sfconfigSsl        :: !SSLConfig
     }
     deriving Show
 
@@ -246,6 +247,7 @@ instance ToCurrent StaticFilesConfig where
         , sfconfigListings   = True
         , sfconfigMiddleware = []
         , sfconfigTimeout    = Nothing
+        , sfconfigSsl        = SSLFalse
         }
 
 instance ParseYamlFile StaticFilesConfig where
@@ -255,6 +257,7 @@ instance ParseYamlFile StaticFilesConfig where
         <*> o .:? "directory-listing" .!= False
         <*> o .:? "middleware" .!= []
         <*> o .:? "connection-time-bound"
+        <*> o .:? "ssl" .!= SSLFalse
 
 instance ToJSON StaticFilesConfig where
     toJSON StaticFilesConfig {..} = object
@@ -263,12 +266,14 @@ instance ToJSON StaticFilesConfig where
         , "directory-listing" .= sfconfigListings
         , "middleware" .= sfconfigMiddleware
         , "connection-time-bound" .= sfconfigTimeout
+        , "ssl" .= sfconfigSsl
         ]
 
 data RedirectConfig = RedirectConfig
     { redirconfigHosts   :: !(Set Host)
     , redirconfigStatus  :: !Int
     , redirconfigActions :: !(Vector RedirectAction)
+    , redirconfigSsl     :: !SSLConfig
     }
     deriving Show
 
@@ -279,6 +284,7 @@ instance ToCurrent RedirectConfig where
         , redirconfigStatus = 301
         , redirconfigActions = V.singleton $ RedirectAction SPAny
                              $ RDPrefix False (CI.mk to) Nothing
+        , redirconfigSsl = SSLFalse
         }
 
 instance ParseYamlFile RedirectConfig where
@@ -286,12 +292,14 @@ instance ParseYamlFile RedirectConfig where
         <$> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
         <*> o .:? "status" .!= 303
         <*> o .: "actions"
+        <*> o .:? "ssl" .!= SSLFalse
 
 instance ToJSON RedirectConfig where
     toJSON RedirectConfig {..} = object
         [ "hosts" .= Set.map CI.original redirconfigHosts
         , "status" .= redirconfigStatus
         , "actions" .= redirconfigActions
+        , "ssl" .= redirconfigSsl
         ]
 
 data RedirectAction = RedirectAction !SourcePath !RedirectDest

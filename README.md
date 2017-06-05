@@ -61,7 +61,7 @@ or similar strategy.
 
 ## Setup
 
-### Debian, Ubuntu and derivatives
+### Building keter for Debian, Ubuntu and derivatives
 
 Eventually, I hope to provide a PPA for this (please contact me if you would
 like to assist with this). For now, the following steps should be sufficient:
@@ -83,32 +83,13 @@ This would look something like:
 Third, create a Keter config file. You can view a sample at
 https://github.com/snoyberg/keter/blob/master/etc/keter-config.yaml.
 
-Fourth, set up an Upstart job to start `keter` when your system boots.
-
-```
-# /etc/init/keter.conf
-start on (net-device-up and local-filesystems and runlevel [2345])
-stop on runlevel [016]
-respawn
-
-# NB: keter writes logs to /opt/keter/log, but some exceptions occasionally
-# escape to standard error. This ensures they show up in system logs.
-console output
-
-exec /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
-```
-
-Finally, start the job for the first time:
-
-    sudo start keter
-
 Optionally, you may wish to change the owner on the `/opt/keter/incoming`
 folder to your user account, so that you can deploy without `sudo`ing.
 
     sudo mkdir -p /opt/keter/incoming
     sudo chown $USER /opt/keter/incoming
 
-### Redhat and derivatives (Centos, Fedora, etc)
+### Building keter for Redhat and derivatives (Centos, Fedora, etc)
 
 First, install PostgreSQL:
 
@@ -126,8 +107,10 @@ This would look something like:
 
 Third, create a Keter config file. You can view a sample at
 https://github.com/snoyberg/keter/blob/master/etc/keter-config.yaml.
+    
+### Configuring startup
 
-Fourth, set up a Systemd unit to start `keter` when your system boots.
+For versions of Ubuntu and derivatives 15.04 or greater and Redhat and derivatives (Centos, Fedora, etc) use systemd
 
 ```
 # /etc/systemd/system/keter.service
@@ -157,6 +140,26 @@ folder to your user account, so that you can deploy without `sudo`ing.
 
     sudo mkdir -p /opt/keter/incoming
     sudo chown $USER /opt/keter/incoming
+---    
+For versions of Ubuntu and derivatives less than 15.04, configure an Upstart job.
+
+```
+# /etc/init/keter.conf
+start on (net-device-up and local-filesystems and runlevel [2345])
+stop on runlevel [016]
+respawn
+
+# NB: keter writes logs to /opt/keter/log, but some exceptions occasionally
+# escape to standard error. This ensures they show up in system logs.
+console output
+
+exec /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
+```
+
+Finally, start the job for the first time:
+
+    sudo start keter
+
 
 ## Bundles
 

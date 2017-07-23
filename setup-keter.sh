@@ -5,7 +5,7 @@ set -o errexit -o nounset -o xtrace
 # wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
 
 sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 575159689BEFB442
-echo "deb http://download.fpcomplete.com/ubuntu `lsb_release -sc` main"|sudo tee /etc/apt/sources.list.d/fpco.list
+echo "deb http://download.fpcomplete.com/ubuntu \"$(lsb_release -sc)\" main"|sudo tee /etc/apt/sources.list.d/fpco.list
 
 sudo apt-get update
 sudo apt-get -y install postgresql stack zlib1g-dev
@@ -28,10 +28,10 @@ root: ..
 listeners:
     # HTTP
     - host: "*4" # Listen on all IPv4 hosts
-      #port: 80 # Could be used to modify port
+      port: 80 # Could be used to modify port
     # HTTPS
     - host: "*4"
-      #port: 443
+      port: 443
       key: key.pem
       certificate: certificate.pem
 
@@ -47,20 +47,23 @@ EOF
 sudo chown root:root /tmp/keter-config.yaml
 sudo mv /tmp/keter-config.yaml /opt/keter/etc
 
-cat > /tmp/keter.conf <<EOF
-# /etc/init/keter.conf
-start on (net-device-up and local-filesystems and runlevel [2345])
-stop on runlevel [016]
-respawn
+cat > /tmp/keter.service <<EOF
+[Unit]
+Description=Keter Web Server
+Documentation=man:keter(1p) http://github.com/snoyberg/keter
+After=network.service
 
-console none
+[Service]
+ExecStart=/opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
 
-exec /opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
+[Install]
+WantedBy=multi-user.target
 EOF
-sudo chown root:root /tmp/keter.conf
-sudo mv /tmp/keter.conf /etc/init
+sudo chown root:root /tmp/keter.service
+sudo mv /tmp/keter.service /etc/systemd/system/
 
-sudo start keter
+systemctl enable keter
+systemctl start keter
 
 sudo mkdir -p /opt/keter/incoming
-sudo chown `whoami` /opt/keter/incoming
+sudo chown "$(whoami)" /opt/keter/incoming

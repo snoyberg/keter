@@ -146,6 +146,7 @@ withClient isSecure useHeader bound manager hostLookup =
             , redirconfigStatus = 301
             , redirconfigActions = V.singleton $ RedirectAction SPAny
                                  $ RDPrefix True host' Nothing
+            , redirconfigSsl = SSLTrue
             }
 
     performAction req (PAPort port tbound) =

@@ -6,12 +6,10 @@
 module Keter.Types.V10 where
 
 import           Control.Applicative               ((<$>), (<*>), (<|>))
-import           Data.Aeson                        (Object, ToJSON (..))
-import           Data.Aeson                        (FromJSON (..),
+import           Data.Aeson                        (FromJSON (..), ToJSON (..), Object,
                                                     Value (Object, String, Bool),
-                                                    withObject, withBool, (.!=), (.:),
-                                                    (.:?))
-import           Data.Aeson                        (Value (Bool), object, (.=))
+                                                    withObject, (.!=), (.:),
+                                                    (.:?), object, (.=))
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
 import           Data.Default
@@ -235,6 +233,7 @@ data StaticFilesConfig = StaticFilesConfig
     -- FIXME basic auth
     , sfconfigMiddleware :: ![ MiddlewareConfig ]
     , sfconfigTimeout    :: !(Maybe Int)
+    , sfconfigSsl        :: !SSLConfig
     }
     deriving Show
 
@@ -246,6 +245,7 @@ instance ToCurrent StaticFilesConfig where
         , sfconfigListings   = True
         , sfconfigMiddleware = []
         , sfconfigTimeout    = Nothing
+        , sfconfigSsl        = SSLFalse
         }
 
 instance ParseYamlFile StaticFilesConfig where
@@ -255,6 +255,7 @@ instance ParseYamlFile StaticFilesConfig where
         <*> o .:? "directory-listing" .!= False
         <*> o .:? "middleware" .!= []
         <*> o .:? "connection-time-bound"
+        <*> o .:? "ssl" .!= SSLFalse
 
 instance ToJSON StaticFilesConfig where
     toJSON StaticFilesConfig {..} = object
@@ -263,12 +264,14 @@ instance ToJSON StaticFilesConfig where
         , "directory-listing" .= sfconfigListings
         , "middleware" .= sfconfigMiddleware
         , "connection-time-bound" .= sfconfigTimeout
+        , "ssl" .= sfconfigSsl
         ]
 
 data RedirectConfig = RedirectConfig
     { redirconfigHosts   :: !(Set Host)
     , redirconfigStatus  :: !Int
     , redirconfigActions :: !(Vector RedirectAction)
+    , redirconfigSsl     :: !SSLConfig
     }
     deriving Show
 
@@ -279,6 +282,7 @@ instance ToCurrent RedirectConfig where
         , redirconfigStatus = 301
         , redirconfigActions = V.singleton $ RedirectAction SPAny
                              $ RDPrefix False (CI.mk to) Nothing
+        , redirconfigSsl = SSLFalse
         }
 
 instance ParseYamlFile RedirectConfig where
@@ -286,12 +290,14 @@ instance ParseYamlFile RedirectConfig where
         <$> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
         <*> o .:? "status" .!= 303
         <*> o .: "actions"
+        <*> o .:? "ssl" .!= SSLFalse
 
 instance ToJSON RedirectConfig where
     toJSON RedirectConfig {..} = object
         [ "hosts" .= Set.map CI.original redirconfigHosts
         , "status" .= redirconfigStatus
         , "actions" .= redirconfigActions
+        , "ssl" .= redirconfigSsl
         ]
 
 data RedirectAction = RedirectAction !SourcePath !RedirectDest
@@ -340,47 +346,6 @@ instance ToJSON RedirectDest where
         ]
 
 type IsSecure = Bool
-
-data SSLConfig
-    = SSLFalse
-    | SSLTrue
-    | SSL !F.FilePath !(V.Vector F.FilePath) !F.FilePath
-    deriving (Show, Eq)
-
-instance ParseYamlFile SSLConfig where
-    parseYamlFile _ v@(Bool _) =
-        withBool "ssl" ( \b ->
-            return (if b then SSLTrue else SSLFalse) ) v
-    parseYamlFile basedir v =  withObject "ssl" ( \o -> do
-             mcert <- lookupBaseMaybe basedir o "certificate"
-             mkey <- lookupBaseMaybe basedir o "key"
-             case (mcert, mkey) of
-                 (Just cert, Just key) -> do
-                     chainCerts <- o .:? "chain-certificates"
-                         >>= maybe (return V.empty) (parseYamlFile basedir)
-                     return $ SSL cert chainCerts key
-                 _ -> return SSLFalse
-            ) v
-
-instance ToJSON SSLConfig where
-    toJSON SSLTrue = Bool True
-    toJSON SSLFalse = Bool False
-    toJSON (SSL c cc k) = object [ "certificate" .= c
-                                 , "chain-certificates" .= cc
-                                 , "key" .= k
-                                 ]
-instance FromJSON SSLConfig where
-    parseJSON v@(Bool _) = withBool "ssl" ( \b ->
-                    return (if b then SSLTrue else SSLFalse) ) v
-    parseJSON v = withObject "ssl" ( \o -> do
-                    mcert <- o .:? "certificate"
-                    mkey <- o .:? "key"
-                    case (mcert, mkey) of
-                        (Just cert, Just key) -> do
-                            chainCerts <- o .:? "chain-certificates" .!= V.empty
-                            return $ SSL cert chainCerts key
-                        _ -> return SSLFalse -- fail "Must provide both certificate and key files"
-                    ) v
 
 data WebAppConfig port = WebAppConfig
     { waconfigExec        :: !F.FilePath

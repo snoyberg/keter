@@ -1,3 +1,8 @@
+## 1.5
+
+* Builds with `process` 1.6
+* add dependency for `tls-session-manager`
+
 ## 1.4.3.1
 
 * Add cabal flag `system-filepath` for compatibility with older versions of fsnotify.

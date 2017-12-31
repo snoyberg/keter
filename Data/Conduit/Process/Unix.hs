@@ -61,7 +61,9 @@ import           System.Process.Internals        (ProcessHandle (..),
                                                   ProcessHandle__ (..))
 
 processHandleMVar :: ProcessHandle -> MVar ProcessHandle__
-#if MIN_VERSION_process(1, 2, 0)
+#if MIN_VERSION_process(1, 6, 0)
+processHandleMVar (ProcessHandle m _ _) = m
+#elif MIN_VERSION_process(1, 2, 0)
 processHandleMVar (ProcessHandle m _) = m
 #else
 processHandleMVar (ProcessHandle m) = m

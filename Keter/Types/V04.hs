@@ -5,6 +5,7 @@ module Keter.Types.V04 where
 
 import           Control.Applicative
 import           Data.Aeson
+import           Data.Bool
 import           Data.Conduit.Network              (HostPreference)
 import           Data.Default
 import qualified Data.Set                          as Set
@@ -15,6 +16,7 @@ import           Keter.Types.Common
 import           Network.HTTP.ReverseProxy.Rewrite
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
+import qualified Network.TLS.SessionManager        as TLSSession
 import           Prelude                           hiding (FilePath)
 
 data AppConfig = AppConfig
@@ -121,6 +123,7 @@ instance ParseYamlFile TLSConfig where
         key <- lookupBase basedir o "key"
         host <- (fmap fromString <$> o .:? "host") .!= "*"
         port <- o .:? "port" .!= 443
+        session <- bool Nothing (Just TLSSession.defaultConfig) <$> o .:? "session" .!= False
         return $! TLSConfig
             ( Warp.setHost host
             $ Warp.setPort port
@@ -128,6 +131,7 @@ instance ParseYamlFile TLSConfig where
             WarpTLS.defaultTlsSettings
                 { WarpTLS.certFile = cert
                 , WarpTLS.keyFile = key
+                , WarpTLS.tlsSessionManagerConfig = session
                 }
 
 -- | Controls execution of the nginx thread. Follows the settings type pattern.

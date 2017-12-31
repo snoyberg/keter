@@ -15,7 +15,7 @@ import           Data.Conduit.Network              (HostPreference)
 import           Data.Default
 import qualified Data.HashMap.Strict               as HashMap
 import qualified Data.Map                          as Map
-import           Data.Maybe                        (catMaybes, fromMaybe)
+import           Data.Maybe                        (catMaybes, fromMaybe, isJust)
 import qualified Data.Set                          as Set
 import           Data.String                       (fromString)
 import           Data.Vector                       (Vector)
@@ -68,6 +68,7 @@ instance ToJSON BundleConfig where
 
 data ListeningPort = LPSecure !HostPreference !Port
                               !F.FilePath !(V.Vector F.FilePath) !F.FilePath
+                              !Bool
                    | LPInsecure !HostPreference !Port
 
 instance ParseYamlFile ListeningPort where
@@ -75,6 +76,7 @@ instance ParseYamlFile ListeningPort where
         host <- (fmap fromString <$> o .:? "host") .!= "*"
         mcert <- lookupBaseMaybe basedir o "certificate"
         mkey <- lookupBaseMaybe basedir o "key"
+        session <- o .:? "session" .!= False
         case (mcert, mkey) of
             (Nothing, Nothing) -> do
                 port <- o .:? "port" .!= 80
@@ -83,7 +85,7 @@ instance ParseYamlFile ListeningPort where
                 port <- o .:? "port" .!= 443
                 chainCerts <- o .:? "chain-certificates"
                     >>= maybe (return V.empty) (parseYamlFile basedir)
-                return $ LPSecure host port cert chainCerts key
+                return $ LPSecure host port cert chainCerts key session
             _ -> fail "Must provide both certificate and key files"
 
 data KeterConfig = KeterConfig
@@ -125,6 +127,7 @@ instance ToCurrent KeterConfig where
             (WarpTLS.certFile ts)
             V.empty
             (WarpTLS.keyFile ts)
+            (isJust $ WarpTLS.tlsSessionManagerConfig ts)
 
 instance Default KeterConfig where
     def = KeterConfig

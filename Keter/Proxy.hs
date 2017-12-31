@@ -27,10 +27,15 @@ import qualified Data.Vector                       as V
 import           Keter.Types
 import           Keter.Types.Middleware
 import           Network.HTTP.Conduit              (Manager)
-#if MIN_VERSION_http_reverse_proxy(0,6,0)
-import           Network.HTTP.ReverseProxy         (defaultWaiProxySettings,
-                                                    defaultLocalWaiProxySettings)
+
+#if MIN_VERSION_http_reverse_proxy(0,4,2)
+import           Network.HTTP.ReverseProxy         (defaultLocalWaiProxySettings)
 #endif
+
+#if MIN_VERSION_http_reverse_proxy(0,6,0)
+import           Network.HTTP.ReverseProxy         (defaultWaiProxySettings)
+#endif
+
 import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     SetIpHeader (..),
                                                     WaiProxyResponse (..),
@@ -49,6 +54,7 @@ import           Network.Wai.Application.Static    (defaultFileServerSettings,
                                                     ssListing, staticApp)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
+import qualified Network.TLS.SessionManager        as TLSSession
 import           Network.Wai.Middleware.Gzip       (gzip, GzipSettings(..), GzipFiles(..))
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
@@ -56,6 +62,9 @@ import qualified Network.TLS as TLS
 
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
 defaultWaiProxySettings = def
+#endif
+
+#if !MIN_VERSION_http_reverse_proxy(0,4,2)
 defaultLocalWaiProxySettings = def
 #endif
 
@@ -72,15 +81,15 @@ reverseProxy useHeader timeBound manager hostLookup listener =
     (run, isSecure) =
         case listener of
             LPInsecure host port -> (Warp.runSettings (warp host port), False)
-            LPSecure host port cert chainCerts key -> (WarpTLS.runTLS
-                (connectClientCertificates hostLookup $ WarpTLS.tlsSettingsChain
+            LPSecure host port cert chainCerts key session -> (WarpTLS.runTLS
+                (connectClientCertificates hostLookup session $ WarpTLS.tlsSettingsChain
                     cert
                     (V.toList chainCerts)
                     key)
                 (warp host port), True)
 
-connectClientCertificates :: HostLookup -> WarpTLS.TLSSettings -> WarpTLS.TLSSettings
-connectClientCertificates hl s =
+connectClientCertificates :: HostLookup -> Bool -> WarpTLS.TLSSettings -> WarpTLS.TLSSettings
+connectClientCertificates hl session s =
     let
         newHooks@TLS.ServerHooks{..} = WarpTLS.tlsServerHooks s
         -- todo: add nested lookup
@@ -89,7 +98,8 @@ connectClientCertificates hl s =
         newOnServerNameIndication Nothing =
              return mempty -- we could return default certificate here
     in
-        s { WarpTLS.tlsServerHooks = newHooks{TLS.onServerNameIndication = newOnServerNameIndication}}
+        s { WarpTLS.tlsServerHooks = newHooks{TLS.onServerNameIndication = newOnServerNameIndication}
+          , WarpTLS.tlsSessionManagerConfig = if session then (Just TLSSession.defaultConfig) else Nothing }
 
 withClient :: Bool -- ^ is secure?
            -> Bool -- ^ use incoming request header for IP address
@@ -161,6 +171,7 @@ withClient isSecure useHeader bound manager hostLookup =
             , redirconfigStatus = 301
             , redirconfigActions = V.singleton $ RedirectAction SPAny
                                  $ RDPrefix True host' Nothing
+            , redirconfigSsl = SSLTrue
             }
 
     performAction req (PAPort port tbound) =

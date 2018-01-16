@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 set -o errexit -o nounset -o xtrace
 
 # Quick start:

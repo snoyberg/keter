@@ -2,17 +2,19 @@
 set -o errexit -o nounset -o xtrace
 
 # Quick start:
-# wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
-
-sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 575159689BEFB442
-echo "deb http://download.fpcomplete.com/ubuntu \"$(lsb_release -sc)\" main"|sudo tee /etc/apt/sources.list.d/fpco.list
+# wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -x
 
 sudo apt-get update
-sudo apt-get -y install postgresql stack zlib1g-dev
+sudo apt-get -y install postgresql zlib1g-dev
+
+# We pass `-f` to always upgrade to the latest stack.
+# It also makes sure that the script doesn't fail when
+# run for the second time, when stack is already installed.
+wget -qO- https://get.haskellstack.org/ | sh -s - -f
 
 stack update
 stack setup
-stack install keter
+stack install keter --resolver lts-7.19
 
 sudo mkdir -p /opt/keter/bin
 sudo cp ~/.local/bin/keter /opt/keter/bin

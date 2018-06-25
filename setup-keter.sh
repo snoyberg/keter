@@ -4,17 +4,39 @@ set -o errexit -o nounset -o xtrace
 # Quick start:
 # wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
 
-LSB_RELEASE=$(lsb_release -sc)
+# If you're using your own Keter binary, you can skip the installation of keter by passing in -s as a parameter
+# wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -exs - -s
 
-sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 575159689BEFB442
-echo "deb http://download.fpcomplete.com/ubuntu \"${LSB_RELEASE}\" main"|sudo tee /etc/apt/sources.list.d/fpco.list
+# A POSIX variable
+OPTIND=1         # Reset in case getopts has been used previously in the shell.
 
-sudo apt-get update
-sudo apt-get -y install postgresql stack zlib1g-dev
+# Initialize our own variables:
+skip_install=0
 
-stack update
-stack setup
-stack install keter
+while getopts "s" opt; do
+    case "$opt" in
+    s)  skip_install=1
+        ;;
+    esac
+done
+
+shift $((OPTIND-1))
+
+[ "${1:-}" = "--" ] && shift
+
+if [ "$skip_install" -eq 0 ]; then
+    LSB_RELEASE=$(lsb_release -sc)
+
+    sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 575159689BEFB442
+    echo "deb http://download.fpcomplete.com/ubuntu \"${LSB_RELEASE}\" main"|sudo tee /etc/apt/sources.list.d/fpco.list
+
+    sudo apt-get update
+    sudo apt-get -y install postgresql stack zlib1g-dev
+
+    stack update
+    stack setup
+    stack install keter
+fi
 
 sudo mkdir -p /opt/keter/bin
 sudo cp ~/.local/bin/keter /opt/keter/bin

@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE CPP #-}
 -- | A light-weight, minimalistic reverse HTTP proxy.
 module Keter.Proxy
     ( reverseProxy
@@ -14,7 +15,11 @@ import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
 import qualified Data.CaseInsensitive              as CI
+#if MIN_VERSION_http_reverse_proxy(0,6,0)
+import           Network.Wai.Middleware.Gzip       (def)
+#else
 import           Data.Default                      (Default (..))
+#endif
 import           Data.Monoid                       (mappend, mempty)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
@@ -22,6 +27,10 @@ import qualified Data.Vector                       as V
 import           Keter.Types
 import           Keter.Types.Middleware
 import           Network.HTTP.Conduit              (Manager)
+#if MIN_VERSION_http_reverse_proxy(0,6,0)
+import           Network.HTTP.ReverseProxy         (defaultWaiProxySettings,
+                                                    defaultLocalWaiProxySettings)
+#endif
 import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     SetIpHeader (..),
                                                     WaiProxyResponse (..),
@@ -44,6 +53,12 @@ import           Network.Wai.Middleware.Gzip       (gzip, GzipSettings(..), Gzip
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
 import qualified Network.TLS as TLS
+
+#if !MIN_VERSION_http_reverse_proxy(0,6,0)
+defaultWaiProxySettings = def
+defaultLocalWaiProxySettings = def
+#endif
+
 
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
@@ -85,7 +100,7 @@ withClient :: Bool -- ^ is secure?
 withClient isSecure useHeader bound manager hostLookup =
     waiProxyToSettings
        (error "First argument to waiProxyToSettings forced, even thought wpsGetDest provided")
-       def
+       defaultWaiProxySettings
         { wpsSetIpHeader =
             if useHeader
                 then SIHFromHeader
@@ -106,7 +121,7 @@ withClient isSecure useHeader bound manager hostLookup =
     -- leak from occurring.
 
     addjustGlobalBound :: Maybe Int -> LocalWaiProxySettings
-    addjustGlobalBound to = go `setLpsTimeBound` def
+    addjustGlobalBound to = go `setLpsTimeBound` defaultLocalWaiProxySettings
       where
         go = case to <|> Just bound of
                Just x | x > 0 -> Just x
@@ -115,7 +130,7 @@ withClient isSecure useHeader bound manager hostLookup =
     getDest :: Wai.Request -> IO (LocalWaiProxySettings, WaiProxyResponse)
     getDest req =
         case Wai.requestHeaderHost req of
-            Nothing -> return (def, WPRResponse missingHostResponse)
+            Nothing -> return (defaultLocalWaiProxySettings, WPRResponse missingHostResponse)
             Just host -> processHost req host
 
     processHost :: Wai.Request -> S.ByteString -> IO (LocalWaiProxySettings, WaiProxyResponse)
@@ -132,7 +147,7 @@ withClient isSecure useHeader bound manager hostLookup =
                         then return Nothing
                         else hostLookup host'
         case mport of
-            Nothing -> return (def, WPRResponse $ unknownHostResponse host)
+            Nothing -> return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host)
             Just ((action, requiresSecure), _)
                 | requiresSecure && not isSecure -> performHttpsRedirect host req
                 | otherwise -> performAction req action

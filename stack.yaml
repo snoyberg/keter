@@ -1,6 +1,4 @@
-flags:
-  keter: {}
+
+resolver: lts-12.7
 packages:
-- '.'
-extra-deps: []
-resolver: lts-7.19
+  - '.'

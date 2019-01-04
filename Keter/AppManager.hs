@@ -16,21 +16,23 @@ module Keter.AppManager
     ) where
 
 import           Control.Applicative
-import           Control.Concurrent        (forkIO)
-import           Control.Concurrent.MVar   (MVar, newMVar, withMVar)
+import           Control.Concurrent      (forkIO)
+import           Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import           Control.Concurrent.STM
-import qualified Control.Exception         as E
-import           Control.Monad             (void)
-import qualified Data.Map                  as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.Maybe                (catMaybes)
-import qualified Data.Set                  as Set
-import           Keter.App                 (App, AppStartConfig)
-import qualified Keter.App                 as App
+import qualified Control.Exception       as E
+import           Control.Monad           (void)
+import qualified Data.Map                as Map
+import           Data.Maybe              (mapMaybe)
+import           Data.Maybe              (catMaybes)
+import qualified Data.Set                as Set
+import           Keter.App               (App, AppStartConfig)
+import qualified Keter.App               as App
 import           Keter.Types
-import           Prelude                   hiding (FilePath, log)
-import           System.Posix.Files        (getFileStatus, modificationTime)
-import           System.Posix.Types        (EpochTime)
+import           Prelude                 hiding (FilePath, log)
+import           System.FilePath         (takeExtension, (</>))
+import           System.Posix.Files      (getFileStatus, modificationTime)
+import           System.Posix.Types      (EpochTime)
+
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
@@ -138,6 +140,11 @@ getAllApps AppManager {..} = atomically $ do
     return $ Set.fromList $ mapMaybe toAppName $ Map.keys m
     -}
 
+appInputTimestamp :: AppInput -> Maybe EpochTime
+appInputTimestamp (AIBundle _ ts) = Just ts
+appInputTimestamp (AIPod _ ts)    = Just ts
+appInputTimestamp _               = Nothing
+
 perform :: AppManager -> AppId -> Action -> IO ()
 perform am appid action = withMVar (mutex am) $ const $ performNoLock am appid action
 
@@ -157,8 +164,7 @@ performNoLock am@AppManager {..} aid action = E.mask_ $ do
                         tmnext <- newTVar Nothing
                         tmtimestamp <- newTVar $
                             case action of
-                                Reload (AIBundle _fp timestamp) -> Just timestamp
-                                Reload (AIData _) -> Nothing
+                                Reload ai -> appInputTimestamp ai
                                 Terminate -> Nothing
                         writeTVar tstate $ ASStarting (Just runningApp) tmtimestamp tmnext
                         return $ launchWorker am aid tstate tmnext (Just runningApp) action
@@ -172,10 +178,7 @@ performNoLock am@AppManager {..} aid action = E.mask_ $ do
         case action of
             Reload input -> do
                 tmnext <- newTVar Nothing
-                tmtimestamp <- newTVar $
-                    case input of
-                        AIBundle _fp timestamp -> Just timestamp
-                        AIData _ -> Nothing
+                tmtimestamp <- newTVar $ appInputTimestamp input
                 tstate <- newTVar $ ASStarting Nothing tmtimestamp tmnext
                 modifyTVar apps $ Map.insert aid tstate
                 return $ launchWorker am aid tstate tmnext Nothing action
@@ -204,8 +207,7 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
                 Just _next -> do
                     tmtimestamp <- newTVar $
                         case action of
-                            Reload (AIBundle _fp timestamp) -> Just timestamp
-                            Reload (AIData _) -> Nothing
+                            Reload ai -> appInputTimestamp ai
                             Terminate -> Nothing
                     writeTVar tstate $ ASStarting mRunningApp tmtimestamp tmnext
             return mnext
@@ -239,15 +241,24 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
             AIBuiltin -> "<builtin>"
             AINamed x -> x
 
+isPod :: FilePath -> Bool
+isPod fp = case takeExtension fp of
+             ".pod"      -> True
+             ".pod.json" -> True
+             _           -> False
+
 addApp :: AppManager -> FilePath -> IO ()
-addApp appMan bundle = do
-    (input, action) <- getInputForBundle bundle
+addApp appMan bundleOrPod = do
+    (input, action) <- getInputForBundle bundleOrPod
     perform appMan input action
 
 getInputForBundle :: FilePath -> IO (AppId, Action)
-getInputForBundle bundle = do
-    time <- modificationTime <$> getFileStatus bundle
-    return (AINamed $ getAppname bundle, Reload $ AIBundle bundle time)
+getInputForBundle bundleOrPod = do
+    time <- modificationTime <$> getFileStatus bundleOrPod
+    let
+      action | isPod bundleOrPod = AIPod bundleOrPod time
+             | otherwise = AIBundle bundleOrPod time
+    return (AINamed $ getAppname bundleOrPod, Reload action)
 
 terminateApp :: AppManager -> Appname -> IO ()
 terminateApp appMan appname = perform appMan (AINamed appname) Terminate

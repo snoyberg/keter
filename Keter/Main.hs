@@ -150,7 +150,11 @@ getIncoming :: KeterConfig -> FilePath
 getIncoming kc = kconfigDir kc </> "incoming"
 
 isKeter :: FilePath -> Bool
-isKeter fp = takeExtension fp == ".keter"
+isKeter fp = case takeExtension fp of
+               ".keter"    -> True
+               ".pod"      -> True
+               ".pod.json" -> True
+               _           -> False
 
 startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO ()
 startWatching kc@KeterConfig {..} appMan log = do

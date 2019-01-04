@@ -5,12 +5,11 @@
 {-# LANGUAGE TypeFamilies      #-}
 module Keter.Types.V10 where
 
-import           Control.Applicative               ((<$>), (<*>), (<|>))
+import           Control.Applicative               ((<$>), (<*>), (<|>), pure)
 import           Data.Aeson                        (Object, ToJSON (..))
-import           Data.Aeson                        (FromJSON (..),
-                                                    Value (Object, String, Bool),
-                                                    withObject, withBool, (.!=), (.:),
-                                                    (.:?))
+import           Data.Aeson                        (FromJSON (..), Value (Object, String, Bool),
+                                                    withBool, withObject, (.!=),
+                                                    (.:), (.:?))
 import           Data.Aeson                        (Value (Bool), object, (.=))
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
@@ -24,13 +23,13 @@ import           Data.Vector                       (Vector)
 import qualified Data.Vector                       as V
 import           Data.Word                         (Word)
 import           Data.Yaml.FilePath
-import qualified System.FilePath                   as F
 import           Keter.Types.Common
 import           Keter.Types.Middleware
 import qualified Keter.Types.V04                   as V04
 import           Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
+import qualified System.FilePath                   as F
 import           System.Posix.Types                (EpochTime)
 
 data BundleConfig = BundleConfig
@@ -170,6 +169,7 @@ data StanzaRaw port
     = StanzaStaticFiles !StaticFilesConfig
     | StanzaRedirect !RedirectConfig
     | StanzaWebApp !(WebAppConfig port)
+    | StanzaPod !(WebContainerSpec port) ![ ContainerSpec ]
     | StanzaReverseProxy !ReverseProxyConfig ![ MiddlewareConfig ] !(Maybe Int)
     | StanzaBackground !BackgroundConfig
             -- FIXME console app
@@ -199,6 +199,9 @@ instance ParseYamlFile (Stanza ()) where
             "static-files"  -> fmap StanzaStaticFiles $ parseYamlFile basedir $ Object o
             "redirect"      -> fmap StanzaRedirect $ parseYamlFile basedir $ Object o
             "webapp"        -> fmap StanzaWebApp $ parseYamlFile basedir $ Object o
+            "pod"           -> do
+              webcontainer <- parseYamlFile basedir =<< o .: "web-container"
+              StanzaPod webcontainer <$> o .: "containers"
             "reverse-proxy" -> StanzaReverseProxy <$> parseJSON (Object o)
                                                   <*> o .:? "middleware" .!= []
                                                   <*> o .:? "connection-time-bound"
@@ -442,7 +445,74 @@ instance ToJSON (WebAppConfig ()) where
         , "connection-time-bound" .= waconfigTimeout
         ]
 
+type ContainerName = Text
+type ImageName     = Text
+type Repository    = Text
+type MountName     = Text
+
+data VolumeMount =
+  VolumeMount { vmMountPath :: FilePath
+              , vmName      :: MountName
+              } deriving (Show)
+
+data ContainerSpec =
+  ContainerSpec { csName       :: !ContainerName
+                , csImage      :: !ImageName
+                , csRepository :: !(Maybe Repository)
+                , csEnv        :: !(Map Text Text)
+                , csForwardEnv :: !(Set Text)
+                , csMounts     :: Vector VolumeMount
+                , csLinks      :: Vector ContainerName
+                } deriving (Show)
+
+data WebContainerSpec port =
+  WebContainerSpec { wcsName        :: !ContainerName
+                   , wcsApprootHost :: !Host
+                   , wcsHosts       :: !(Set Host) -- ^ all hosts, not including the approot host
+                   , wcsSSLConfig   :: !SSLConfig
+                   , wcsTimeout     :: !(Maybe Int)
+                   , wcsPort        :: !port
+                   } deriving (Show)
+
+isWebContainerSpec :: ContainerSpec -> Bool
+isWebContainerSpec cs = csName cs == "web"
+
+instance FromJSON VolumeMount where
+  parseJSON = withObject "VolumeMount" $ \o ->
+    VolumeMount <$> o .: "mountPath"
+                <*> o .: "name"
+
+instance FromJSON ContainerSpec where
+  parseJSON = withObject "ContainerSpec" $ \o ->
+    ContainerSpec <$> o .: "name"
+                  <*> o .: "image"
+                  <*> o .:? "repository"
+                  <*> o .:? "env" .!= Map.empty
+                  <*> o .:? "forward-env" .!= Set.empty
+                  <*> o .:? "volumeMounts" .!= V.empty
+                  <*> o .:? "links" .!= V.empty
+
+instance ParseYamlFile (WebContainerSpec ()) where
+  parseYamlFile _ = withObject "WebContainerSpec" $ \o -> do
+    (ahost, hosts) <-
+      (do
+          h <- o .: "host"
+          return (CI.mk h, Set.empty)) <|>
+      (do
+          hs <- o .: "hosts"
+          case hs of
+            [] -> fail "Must provide at least one host"
+            h:hs' -> return (CI.mk h, Set.fromList $ map CI.mk hs'))
+
+    WebContainerSpec <$> o .: "name"
+                     <*> pure ahost
+                     <*> pure hosts
+                     <*> o .: "ssl"
+                     <*> o .:? "connection-time-bound"
+                     <*> pure ()
+
 data AppInput = AIBundle !FilePath !EpochTime
+              | AIPod !FilePath !EpochTime
               | AIData !BundleConfig
 
 data BackgroundConfig = BackgroundConfig

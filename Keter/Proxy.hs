@@ -55,7 +55,10 @@ import           WaiAppStatic.Listing              (defaultListing)
 import qualified Network.TLS as TLS
 
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
+defaultWaiProxySettings :: WaiProxySettings
 defaultWaiProxySettings = def
+
+defaultWaiProxySettings :: WaiProxySettings
 defaultLocalWaiProxySettings = def
 #endif
 

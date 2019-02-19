@@ -133,7 +133,7 @@ withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs actio
 
 withActions :: AppStartConfig
             -> BundleConfig
-            -> ([ WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
+            -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
             -> IO a
 withActions asc bconfig f =
     loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty

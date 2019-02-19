@@ -2,6 +2,7 @@ flags:
   keter: {}
 packages:
 - '.'
+extra-deps: []
 resolver: lts-13.8
 
 allow-newer: true

@@ -174,7 +174,7 @@ withActions asc bconfig f =
                 : map (\host -> Map.singleton host ((PARedirect red, rs), cert))
                   (Set.toList (redirconfigHosts red))
     loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 = do
-        cert <- loadCert $ reverseUseSSL rev
+        cert <- loadCert $ reversingUseSSL rev
         loop stanzas wacs backs (actions cert)
       where
         actions cert = Map.insert (CI.mk $ reversingHost rev) ((PAReverseProxy rev mid to, rs), cert) actions0

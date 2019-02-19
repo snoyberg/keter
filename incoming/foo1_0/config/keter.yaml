@@ -73,6 +73,7 @@ stanzas:
     - type: reverse-proxy
       reversed-host: www.yesodweb.com
       reversed-port: 80
+      reversed-ssl: false
       reversing-host: localhost
      # connection-time-bound: 0
      # middleware:

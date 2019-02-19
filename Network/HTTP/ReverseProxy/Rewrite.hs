@@ -127,7 +127,7 @@ mkRequest rpConfig request =
       , NHC.responseTimeout = reverseTimeout rpConfig
 #endif
       , method = Wai.requestMethod request
-      , secure = SSLFalse /= reverseUseSSL rpConfig
+      , secure = reversedUseSSL rpConfig
       , host   = encodeUtf8 $ reversedHost rpConfig
       , port   = reversedPort rpConfig
       , path   = Wai.rawPathInfo request
@@ -140,6 +140,7 @@ mkRequest rpConfig request =
       , decompress = const False
       , redirectCount = 0
       , cookieJar = Nothing
+      , requestVersion = Wai.httpVersion request
       }
   where
     reqRuleMap = mkRuleMap $ rewriteRequestRules rpConfig
@@ -164,8 +165,9 @@ simpleReverseProxy mgr rpConfig request sendResponse = bracket
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text
     , reversedPort :: Int
+    , reversedUseSSL :: Bool
     , reversingHost :: Text
-    , reverseUseSSL :: !SSLConfig
+    , reversingUseSSL :: !SSLConfig
     , reverseTimeout :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
     , rewriteRequestRules :: Set RewriteRule
@@ -175,6 +177,7 @@ instance FromJSON ReverseProxyConfig where
     parseJSON (Object o) = ReverseProxyConfig
         <$> o .: "reversed-host"
         <*> o .: "reversed-port"
+        <*> o .: "reversed-ssl" .!= False
         <*> o .: "reversing-host"
         <*> o .:? "ssl" .!= SSLFalse
         <*> o .:? "timeout" .!= Nothing
@@ -186,8 +189,9 @@ instance ToJSON ReverseProxyConfig where
     toJSON ReverseProxyConfig {..} = object
         [ "reversed-host" .= reversedHost
         , "reversed-port" .= reversedPort
+        , "reversed-ssl" .= reversedUseSSL
         , "reversing-host" .= reversingHost
-        , "ssl" .= reverseUseSSL
+        , "ssl" .= reversingUseSSL
         , "timeout" .= reverseTimeout
         , "rewrite-response" .= rewriteResponseRules
         , "rewrite-request" .= rewriteRequestRules
@@ -197,8 +201,9 @@ instance Default ReverseProxyConfig where
     def = ReverseProxyConfig
         { reversedHost = ""
         , reversedPort = 80
+        , reversedUseSSL = False
         , reversingHost = ""
-        , reverseUseSSL = SSLFalse
+        , reversingUseSSL = SSLFalse
         , reverseTimeout = Nothing
         , rewriteResponseRules = Set.empty
         , rewriteRequestRules = Set.empty

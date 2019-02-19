@@ -37,6 +37,8 @@ import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     LocalWaiProxySettings,
                                                     setLpsTimeBound,
                                                     waiProxyToSettings,
+                                                    defaultWaiProxySettings,
+                                                    defaultLocalWaiProxySettings,
                                                     wpsSetIpHeader,
                                                     wpsGetDest)
 import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite

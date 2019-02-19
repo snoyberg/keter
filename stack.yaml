@@ -2,5 +2,6 @@ flags:
   keter: {}
 packages:
 - '.'
-extra-deps: []
-resolver: lts-10.1
+resolver: lts-13.8
+
+allow-newer: true

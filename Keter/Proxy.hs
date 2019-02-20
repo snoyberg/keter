@@ -27,18 +27,21 @@ import qualified Data.Vector                       as V
 import           Keter.Types
 import           Keter.Types.Middleware
 import           Network.HTTP.Conduit              (Manager)
-#if MIN_VERSION_http_reverse_proxy(0,6,0)
-import           Network.HTTP.ReverseProxy         (defaultWaiProxySettings,
-                                                    defaultLocalWaiProxySettings)
+
+#if MIN_VERSION_http_reverse_proxy(0,4,2)
+import           Network.HTTP.ReverseProxy         (defaultLocalWaiProxySettings)
 #endif
+
+#if MIN_VERSION_http_reverse_proxy(0,6,0)
+import           Network.HTTP.ReverseProxy         (defaultWaiProxySettings)
+#endif
+
 import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     SetIpHeader (..),
                                                     WaiProxyResponse (..),
                                                     LocalWaiProxySettings,
                                                     setLpsTimeBound,
                                                     waiProxyToSettings,
-                                                    defaultWaiProxySettings,
-                                                    defaultLocalWaiProxySettings,
                                                     wpsSetIpHeader,
                                                     wpsGetDest)
 import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
@@ -59,6 +62,9 @@ import qualified Network.TLS as TLS
 
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
 defaultWaiProxySettings = def
+#endif
+
+#if !MIN_VERSION_http_reverse_proxy(0,4,2)
 defaultLocalWaiProxySettings = def
 #endif
 

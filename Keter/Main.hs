@@ -152,6 +152,12 @@ getIncoming kc = kconfigDir kc </> "incoming"
 isKeter :: FilePath -> Bool
 isKeter fp = takeExtension fp == ".keter"
 
+#if MIN_VERSION_fsnotify(3,0,0)
+#define IGNORE _
+#else
+#define IGNORE
+#endif
+
 startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO ()
 startWatching kc@KeterConfig {..} appMan log = do
     -- File system watching
@@ -159,13 +165,13 @@ startWatching kc@KeterConfig {..} appMan log = do
     _ <- FSN.watchTree wm (fromString incoming) (const True) $ \e -> do
         e' <-
             case e of
-                FSN.Removed fp _ _ -> do
+                FSN.Removed fp _ IGNORE -> do
                     log $ WatchedFile "removed" (fromFilePath fp)
                     return $ Left $ fromFilePath fp
-                FSN.Added fp _ _ -> do
+                FSN.Added fp _ IGNORE -> do
                     log $ WatchedFile "added" (fromFilePath fp)
                     return $ Right $ fromFilePath fp
-                FSN.Modified fp _ _ -> do
+                FSN.Modified fp _ IGNORE -> do
                     log $ WatchedFile "modified" (fromFilePath fp)
                     return $ Right $ fromFilePath fp
         case e' of

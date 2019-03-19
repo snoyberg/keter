@@ -152,7 +152,7 @@ getIncoming kc = kconfigDir kc </> "incoming"
 isKeter :: FilePath -> Bool
 isKeter fp = takeExtension fp == ".keter"
 
-#if MIN_VERSION_fsnotify(3,0,0)
+#if MIN_VERSION_fsnotify(0,3,0)
 #define IGNORE _
 #else
 #define IGNORE
@@ -174,6 +174,12 @@ startWatching kc@KeterConfig {..} appMan log = do
                 FSN.Modified fp _ IGNORE -> do
                     log $ WatchedFile "modified" (fromFilePath fp)
                     return $ Right $ fromFilePath fp
+#if MIN_VERSION_fsnotify(0,3,0)
+                FSN.Unknown fp _ _ -> do
+                    log $ WatchedFile "unknown" (fromFilePath fp)
+                    return $ Right $ fromFilePath fp
+#endif
+
         case e' of
             Left fp -> when (isKeter fp) $ AppMan.terminateApp appMan $ getAppname fp
             Right fp -> when (isKeter fp) $ AppMan.addApp appMan $ incoming </> fp

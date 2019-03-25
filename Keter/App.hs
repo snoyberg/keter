@@ -345,7 +345,7 @@ ensureAlive RunningWebApp {..} = do
                 Right handle -> do
                     hClose handle
                     return True
-        connectTo hos pr = do
+        connectTo host serv = do
             let hints = defaultHints { addrFlags = [AI_ADDRCONFIG]
                                      , addrSocketType = Stream }
             addrs <- getAddrInfo (Just hints) (Just host) (Just serv)

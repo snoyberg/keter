@@ -18,8 +18,8 @@ import           Control.Arrow             ((***))
 import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception         (IOException, bracketOnError,
-                                            throwIO, try)
-import           Control.Monad             (void, when)
+                                            throwIO, try, catch)
+import           Control.Monad             (void, when, liftM)
 import qualified Data.CaseInsensitive      as CI
 import           Data.Conduit.LogFile      (RotatingLog)
 import qualified Data.Conduit.LogFile      as LogFile
@@ -370,7 +370,7 @@ ensureAlive RunningWebApp {..} = do
                   go Nothing  [] = ioError $ userError $ "connectTo firstSuccessful: empty list"
                   go (Just e) [] = throwIO e
                   tryIO :: IO a -> IO (Either IOException a)
-                  tryIO m = catchIO (liftM Right m) (return . Left)
+                  tryIO m = catch (liftM Right m) (return . Left)
 
 
 withBackgroundApps :: AppStartConfig

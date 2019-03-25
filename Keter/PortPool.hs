@@ -43,8 +43,8 @@ getPort log (PortPool mstate) =
                     Left (_ :: SomeException) -> do
                         log $ RemovingPort p
                         loop next
-                    Right socket -> do
-                        res' <- try $ close socket
+                    Right socket' -> do
+                        res' <- try $ close socket'
                         case res' of
                             Left e -> do
                                 $logEx log e

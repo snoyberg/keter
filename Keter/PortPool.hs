@@ -39,7 +39,7 @@ getPort log (PortPool mstate) =
         case ppAvail of
             p:ps -> do
                 let next = PPState ps ppRecycled
-                res <- try $ listenOn $ fromIntegral p
+                res <- try $ listenOn $ show p
                 case res of
                     Left (_ :: SomeException) -> do
                         log $ RemovingPort p

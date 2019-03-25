@@ -93,7 +93,6 @@ Library
                        Data.Conduit.Process.Unix
   ghc-options:         -Wall
   c-sources:           cbits/process-tracker.c
-  other-modules:       LabelMapSpec
   
 Executable keter
   Main-is:             keter.hs

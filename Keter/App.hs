@@ -369,6 +369,8 @@ ensureAlive RunningWebApp {..} = do
                  -- All operations failed, throw error if one exists
                   go Nothing  [] = ioError $ userError $ "connectTo firstSuccessful: empty list"
                   go (Just e) [] = throwIO e
+                  tryIO :: IO a -> IO (Either IOException a)
+                  tryIO m = catchIO (liftM Right m) (return . Left)
 
 
 withBackgroundApps :: AppStartConfig

@@ -46,7 +46,7 @@ import           Keter.Types
 import qualified Network
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
-import           System.IO                 (hClose, ioError, userError)
+import           System.IO                 (hClose)
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)

@@ -46,13 +46,13 @@ caseSubdomainIntegrity = do
       test3a = LM.delete "someapp.com"           test2
       test3b = LM.insert "api.someapp.com"    () test0 -- case from the bug report
 
-  let test3 = LM.insert "ipa.someapp.com"     () test2
-      test4 = LM.insert "bla.api.someapp.com" () test3
-      test5 = LM.delete "someapp.com"            test4
-      test6 = LM.delete "ipa.someapp.com"        test5
-      test7 = LM.delete "api.someapp.com"        test6
-      test8 = LM.delete "bla.api.someapp.com"    test7
-      test9 = LM.delete "bla.api.someapp.com"    test4
+  let -- test3 = LM.insert "ipa.someapp.com"     () test2
+      -- test4 = LM.insert "bla.api.someapp.com" () test3
+      -- test5 = LM.delete "someapp.com"            test4
+      -- test6 = LM.delete "ipa.someapp.com"        test5
+      -- test7 = LM.delete "api.someapp.com"        test6
+      -- test8 = LM.delete "bla.api.someapp.com"    test7
+      -- test9 = LM.delete "bla.api.someapp.com"    test4
       msg = "Subdomains inserted and deleted between bundles"
 
   print test3a

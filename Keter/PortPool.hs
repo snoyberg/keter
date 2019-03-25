@@ -17,6 +17,7 @@ import           Control.Concurrent.MVar
 import           Control.Exception
 import           Keter.Types
 import qualified Network
+import           Network.Socket
 import           Prelude                 hiding (log)
 
 data PPState = PPState
@@ -38,13 +39,13 @@ getPort log (PortPool mstate) =
         case ppAvail of
             p:ps -> do
                 let next = PPState ps ppRecycled
-                res <- try $ Network.listenOn $ Network.PortNumber $ fromIntegral p
+                res <- try $ listenOn $ fromIntegral p
                 case res of
                     Left (_ :: SomeException) -> do
                         log $ RemovingPort p
                         loop next
                     Right socket -> do
-                        res' <- try $ Network.sClose socket
+                        res' <- try $ close socket
                         case res' of
                             Left e -> do
                                 $logEx log e
@@ -55,6 +56,22 @@ getPort log (PortPool mstate) =
                 case ppRecycled [] of
                     [] -> return (PPState [] id, Left $ toException NoPortsAvailable)
                     ps -> loop $ PPState ps id
+
+    listenOn port = do
+        let hints = defaultHints {
+                addrFlags = [AI_PASSIVE]
+              , addrSocketType = Stream
+              }
+        addr:_ <- getAddrInfo (Just hints) Nothing (Just port)
+        bracketOnError
+             (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
+             (close)
+             (\sock -> do
+                 setSocketOption sock ReuseAddr 1
+                 bind sock (addrAddress addr)
+                 listen sock maxListenQueue
+                 return sock
+             )
 
 -- | Return a port to the recycled collection of the pool.  Note that recycling
 -- puts the new ports at the end of the queue (FIFO), so that if an application

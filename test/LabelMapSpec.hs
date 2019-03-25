@@ -3,7 +3,7 @@
 
 module LabelMapSpec where
 
-import qualified Data.IORef     as I
+-- import qualified Data.IORef     as I
 import           Test.Hspec
 import           Test.HUnit
 

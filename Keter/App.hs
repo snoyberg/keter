@@ -46,7 +46,7 @@ import           Keter.Types
 import qualified Network
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
-import           System.IO                 (hClose)
+import           System.IO                 (hClose, ioError, userError)
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
@@ -338,12 +338,37 @@ ensureAlive RunningWebApp {..} = do
       where
         testApp' = do
             threadDelay $ 2 * 1000 * 1000
-            eres <- try $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
+            eres <- try $ connectTo "127.0.0.1" $ show port
             case eres of
                 Left (_ :: IOException) -> testApp'
                 Right handle -> do
                     hClose handle
                     return True
+        connectTo hos pr = do
+            let hints = defaultHints { addrFlags = [AI_ADDRCONFIG]
+                                     , addrSocketType = Stream }
+            addrs <- getAddrInfo (Just hints) (Just host) (Just serv)
+            firstSuccessful $ map tryToConnect addrs
+            where
+              tryToConnect addr =
+                bracketOnError
+                  (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
+                  (close)  -- only done if there's an error
+                  (\sock -> do
+                    connect sock (addrAddress addr)
+                    socketToHandle sock ReadWriteMode
+                  )
+              firstSuccessful = go Nothing
+                where
+                  go _ (p:ps) = do
+                    r <- tryIO p
+                    case r of
+                          Right x -> return x
+                          Left  e -> go (Just e) ps
+                 -- All operations failed, throw error if one exists
+                  go Nothing  [] = ioError $ userError $ "connectTo firstSuccessful: empty list"
+                  go (Just e) [] = throwIO e
+
 
 withBackgroundApps :: AppStartConfig
                    -> AppId

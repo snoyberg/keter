@@ -43,7 +43,6 @@ import           System.Directory          (canonicalizePath, doesFileExist,
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
 import           Keter.Types
-import qualified Network
 import           Network.Socket
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)

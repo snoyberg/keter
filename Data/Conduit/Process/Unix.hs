@@ -33,7 +33,7 @@ import           Control.Exception               (Exception, SomeException,
 import           Control.Monad                   (void)
 import           Data.ByteString                 (ByteString)
 import qualified Data.ByteString.Char8           as S8
-import           Data.Conduit                    (Source, ($$))
+import           Data.Conduit                    (ConduitT, (.|), runConduit)
 import           Data.Conduit.Binary             (sinkHandle, sourceHandle)
 import qualified Data.Conduit.List               as CL
 import           Data.IORef                      (IORef, newIORef, readIORef,
@@ -191,7 +191,7 @@ forkExecuteLog :: ByteString -- ^ command
                -> [ByteString] -- ^ args
                -> Maybe [(ByteString, ByteString)] -- ^ environment
                -> Maybe ByteString -- ^ working directory
-               -> Maybe (Source IO ByteString) -- ^ stdin
+               -> Maybe (ConduitT () ByteString IO ()) -- ^ stdin
                -> (ByteString -> IO ()) -- ^ both stdout and stderr will be sent to this location
                -> IO ProcessHandle
 forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
@@ -215,6 +215,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
             , std_err = UseHandle writerH
             , close_fds = True
             , create_group = True
+            , use_process_jobs = False
 #if MIN_VERSION_process(1, 2, 0)
             , delegate_ctlc = False
 #endif
@@ -230,10 +231,10 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
             }
         ignoreExceptions $ addAttachMessage pipes ph
         void $ forkIO $ ignoreExceptions $
-            (sourceHandle readerH $$ CL.mapM_ rlog) `finally` hClose readerH
+            (runConduit $ sourceHandle readerH .| CL.mapM_ rlog) `finally` hClose readerH
         case (min, mstdin) of
             (Just h, Just source) -> void $ forkIO $ ignoreExceptions $
-                (source $$ sinkHandle h) `finally` hClose h
+                (runConduit $ source .| sinkHandle h) `finally` hClose h
             (Nothing, Nothing) -> return ()
             _ -> error $ "Invariant violated: Data.Conduit.Process.Unix.forkExecuteLog"
         return ph

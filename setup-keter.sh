@@ -1,25 +1,8 @@
 #!/bin/bash
-set -o errexit -o nounset -o xtrace
+mkdir -p /opt/keter/bin
+cp ~/.local/bin/keter /opt/keter/bin
 
-# Quick start:
-# wget -O - https://raw.github.com/snoyberg/keter/master/setup-keter.sh | bash -ex
-
-LSB_RELEASE=$(lsb_release -sc)
-
-sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 575159689BEFB442
-echo "deb http://download.fpcomplete.com/ubuntu \"${LSB_RELEASE}\" main"|sudo tee /etc/apt/sources.list.d/fpco.list
-
-sudo apt-get update
-sudo apt-get -y install postgresql stack zlib1g-dev
-
-stack update
-stack setup
-stack install keter
-
-sudo mkdir -p /opt/keter/bin
-sudo cp ~/.local/bin/keter /opt/keter/bin
-
-sudo mkdir -p /opt/keter/etc
+mkdir -p /opt/keter/etc
 cat > /tmp/keter-config.yaml <<EOF
 # Directory containing incoming folder, where to store logs, etc. Relative to
 # the config file directory.
@@ -29,10 +12,10 @@ root: ..
 # have HTTPS either enabled or disabled.
 listeners:
     # HTTP
-    - host: "*4" # Listen on all IPv4 hosts
+    - host: "!6" # Listen on all IPv4 hosts
       port: 80 # Could be used to modify port
     # HTTPS
-    - host: "*4"
+    - host: "!6"
       port: 443
       key: key.pem
       certificate: certificate.pem
@@ -46,8 +29,8 @@ listeners:
 
 # ip-from-header: true
 EOF
-sudo chown root:root /tmp/keter-config.yaml
-sudo mv /tmp/keter-config.yaml /opt/keter/etc
+chown root:root /tmp/keter-config.yaml
+mv /tmp/keter-config.yaml /opt/keter/etc
 
 cat > /tmp/keter.service <<EOF
 [Unit]
@@ -61,11 +44,11 @@ ExecStart=/opt/keter/bin/keter /opt/keter/etc/keter-config.yaml
 [Install]
 WantedBy=multi-user.target
 EOF
-sudo chown root:root /tmp/keter.service
-sudo mv /tmp/keter.service /etc/systemd/system/
+chown root:root /tmp/keter.service
+mv /tmp/keter.service /etc/systemd/system/
 
 systemctl enable keter
 systemctl start keter
 
-sudo mkdir -p /opt/keter/incoming
-sudo chown "$(whoami)" /opt/keter/incoming
+mkdir -p /opt/keter/incoming
+chown "$(whoami)" /opt/keter/incoming

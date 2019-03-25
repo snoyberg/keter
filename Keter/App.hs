@@ -47,7 +47,7 @@ import qualified Network
 import           Network.Socket
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
-import           System.IO                 (hClose)
+import           System.IO                 (hClose, ReadWriteMode)
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)

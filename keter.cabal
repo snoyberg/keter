@@ -28,7 +28,7 @@ Library
                      , text
                      , containers
                      , transformers
-                     , process
+                     , process                   >= 1.4.3         && < 1.5.0
                      , random
                      , data-default
                      , filepath

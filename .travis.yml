@@ -120,11 +120,11 @@ install:
   - cat cabal.project || true
   - cat cabal.project.local || true
   - if [ -f "./configure.ac" ]; then (cd "." && autoreconf -i); fi
-#  - ${CABAL} v2-freeze $WITHCOMPILER ${TEST} ${BENCH} | color_cabal_output
-#  - "cat cabal.project.freeze | sed -E 's/^(constraints: *| *)//' | sed 's/any.//'"
-#  - rm  cabal.project.freeze
-#  - ${CABAL} v2-build $WITHCOMPILER ${TEST} ${BENCH} --dep -j2 all | color_cabal_output
-#  - ${CABAL} v2-build $WITHCOMPILER --disable-tests --disable-benchmarks --dep -j2 all | color_cabal_output
+  - ${CABAL} v2-freeze --constraint="process == 1.4.3.0" --allow-newer=process:base $WITHCOMPILER
+  - "cat cabal.project.freeze | sed -E 's/^(constraints: *| *)//' | sed 's/any.//'"
+  - rm  cabal.project.freeze
+  - ${CABAL} v2-build --constraint="process == 1.4.3.0" --allow-newer=process:base $WITHCOMPILER ${TEST} ${BENCH} --dep -j2 all | color_cabal_output
+  - ${CABAL} v2-build --constraint="process == 1.4.3.0" --allow-newer=process:base $WITHCOMPILER --disable-tests --disable-benchmarks --dep -j2 all | color_cabal_output
 script:
   - DISTDIR=$(mktemp -d /tmp/dist-test.XXXX)
   # Packaging...
@@ -146,20 +146,20 @@ script:
   - cat cabal.project.local || true
   # Building...
   # this builds all libraries and executables (without tests/benchmarks)
-  - stack build
-#  - ${CABAL} v2-build $WITHCOMPILER --disable-tests --disable-benchmarks all | color_cabal_output
+#  - stack build
+  - ${CABAL} v2-build --constraint="process == 1.4.3.0" --allow-newer=process:base $WITHCOMPILER --disable-tests --disable-benchmarks all | color_cabal_output
   # Building with tests and benchmarks...
   # build & run tests, build benchmarks
-#  - ${CABAL} v2-build $WITHCOMPILER ${TEST} ${BENCH} all | color_cabal_output
+  - ${CABAL} v2-build --constraint="process == 1.4.3.0" --allow-newer=process:base $WITHCOMPILER ,"haskell-stack"${TEST} ${BENCH} all | color_cabal_output
   # Testing...
-#  - ${CABAL} v2-test $WITHCOMPILER ${TEST} ${BENCH} all | color_cabal_output
+  - ${CABAL} v2-test $WITHCOMPILER ${TEST} ${BENCH} all | color_cabal_output
   # cabal check...
-#  - (cd ${PKGDIR_keter} && ${CABAL} -vnormal check)
+  - (cd ${PKGDIR_keter} && ${CABAL} -vnormal check)
   # haddock...
-#  - ${CABAL} v2-haddock $WITHCOMPILER --with-haddock $HADDOCK ${TEST} ${BENCH} all | color_cabal_output
+  - ${CABAL} v2-haddock $WITHCOMPILER --with-haddock $HADDOCK ${TEST} ${BENCH} all | color_cabal_output
   # Building without installed constraints for packages in global-db...
   - rm -f cabal.project.local
-#  - ${CABAL} v2-build $WITHCOMPILER --disable-tests --disable-benchmarks all | color_cabal_output
+  - ${CABAL} v2-build $WITHCOMPILER --disable-tests --disable-benchmarks all | color_cabal_output
 
 # REGENDATA ("0.9.20191213",["./keter.cabal","-o","travisNew.yml"])
 # EOF

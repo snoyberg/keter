@@ -72,7 +72,7 @@ Library
                      , system-filepath
     cpp-options:       -DSYSTEM_FILEPATH
   else
-    build-depends:     fsnotify >= 0.2.0.2
+    build-depends:     fsnotify >= 0.2.0.2 && < 0.3.0.0
 
   Exposed-Modules:     Keter.Plugin.Postgres
                        Keter.Types

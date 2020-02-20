@@ -79,27 +79,11 @@ jobs:
     compiler: ": #stack default"
     addons: {apt: {packages: [libgmp-dev]}}
 
-  #- env: BUILD=stack ARGS="--resolver lts-2"
-  #  compiler: ": #stack 7.8.4"
-  #  addons: {apt: {packages: [libgmp-dev]}}
-
-  #- env: BUILD=stack ARGS="--resolver lts-3"
-  #  compiler: ": #stack 7.10.2"
-  #  addons: {apt: {packages: [libgmp-dev]}}
-
-  #- env: BUILD=stack ARGS="--resolver lts-6"
-  #  compiler: ": #stack 7.10.3"
-  #  addons: {apt: {packages: [libgmp-dev]}}
-
-  #- env: BUILD=stack ARGS="--resolver lts-7"
-  #  compiler: ": #stack 8.0.1"
-  #  addons: {apt: {packages: [libgmp-dev]}}
-
   - env: BUILD=stack ARGS="--resolver lts-9"
     compiler: ": #stack 8.0.2"
     addons: {apt: {packages: [libgmp-dev]}}
 
-  - env: BUILD=stack ARGS="--resolver lts-11"
+  - env: BUILD=stack ARGS="--resolver lts-10.1"
     compiler: ": #stack 8.2.2"
     addons: {apt: {packages: [libgmp-dev]}}
 

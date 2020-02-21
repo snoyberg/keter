@@ -46,10 +46,9 @@ jobs:
   # - env: BUILD=cabal GHCVER=8.4.4 CABALVER=2.2 HAPPYVER=1.19.5 ALEXVER=3.1.7
   #   compiler: ": #GHC 8.4.4"
   #   addons: {apt: {packages: [cabal-install-2.2,ghc-8.4.4,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-  # - env: BUILD=cabal GHCVER=8.6.5 CABALVER=2.4 HAPPYVER=1.19.5 ALEXVER=3.1.7
-  #   compiler: ": #GHC 8.6.5"
-  #   addons: {apt: {packages: [cabal-install-2.4,ghc-8.6.5,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
-
+  - env: BUILD=cabal GHCVER="8.6.4 CABALVER=3.0 HAPPYVER=1.19.5 ALEXVER=3.1.7
+    compiler: ": #GHC 8.6.4"
+    addons: {apt: {packages: [cabal-install-3.0,ghc-8.6.4,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
   # Build with the newest GHC and cabal-install. This is an accepted failure,
   # see below.
   # - env: BUILD=cabal GHCVER=head  CABALVER=head HAPPYVER=1.19.5 ALEXVER=3.1.7
@@ -84,7 +83,6 @@ jobs:
 before_install:
 # Using compiler above sets CC to an invalid value, so unset it
 - unset CC
-
 # We want to always allow newer versions of packages when building on GHC HEAD
 - CABALARGS=""
 - if [ "x$GHCVER" = "xhead" ]; then CABALARGS=--allow-newer; fi
@@ -94,7 +92,6 @@ before_install:
 - mkdir -p ~/.local/bin
 - |
   travis_retry curl -L https://get.haskellstack.org/stable/linux-x86_64.tar.gz | tar xz --wildcards --strip-components=1 -C ~/.local/bin '*/stack'
-
   # Use the more reliable S3 mirror of Hackage
   mkdir -p $HOME/.cabal
   echo 'remote-repo: hackage.haskell.org:http://hackage.fpcomplete.com/' > $HOME/.cabal/config
@@ -129,8 +126,8 @@ install:
       # this will also implicitly run hpack as necessary to generate
       # the .cabal files needed by cabal-install.
       PACKAGES=$(stack --install-ghc query locals | grep '^ *path' | sed 's@^ *path:@@')
-
-      cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
+      echo $PACKAGES
+      # cabal install --only-dependencies --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
       ;;
   esac
   set +ex
@@ -143,8 +140,8 @@ script:
       stack --no-terminal $ARGS test --bench --no-run-benchmarks --haddock --no-haddock-deps
       ;;
     cabal)
+      echo "Building with cabal... stay tuned"
       cabal install --enable-tests --enable-benchmarks --force-reinstalls --ghc-options=-O0 --reorder-goals --max-backjumps=-1 $CABALARGS $PACKAGES
-
       ORIGDIR=$(pwd)
       for dir in $PACKAGES
       do

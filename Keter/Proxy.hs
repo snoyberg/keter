@@ -34,6 +34,7 @@ import           Network.HTTP.ReverseProxy         (defaultWaiProxySettings,
 import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     SetIpHeader (..),
                                                     WaiProxyResponse (..),
+                                                    WaiProxySettings,
                                                     LocalWaiProxySettings,
                                                     setLpsTimeBound,
                                                     waiProxyToSettings,
@@ -55,7 +56,10 @@ import           WaiAppStatic.Listing              (defaultListing)
 import qualified Network.TLS as TLS
 
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
+defaultWaiProxySettings :: WaiProxySettings
 defaultWaiProxySettings = def
+
+defaultLocalWaiProxySettings :: LocalWaiProxySettings
 defaultLocalWaiProxySettings = def
 #endif
 

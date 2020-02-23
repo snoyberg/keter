@@ -11,7 +11,7 @@ import           Data.Aeson                        (FromJSON (..),
                                                     Value (Object, String, Bool),
                                                     withObject, withBool, (.!=), (.:),
                                                     (.:?))
-import           Data.Aeson                        (Value (Bool), object, (.=))
+import           Data.Aeson                        (object, (.=))
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
 import           Data.Default

@@ -151,7 +151,7 @@ withActions asc bconfig f =
                 return (p, c)
              )
         )
-        (\(port, cert) -> releasePort (ascPortPool asc) port)
+        (\(port, _) -> releasePort (ascPortPool asc) port)
         (\(port, cert) -> loop
             stanzas
             (wac { waconfigPort = port } : wacs)

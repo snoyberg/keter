@@ -1,0 +1,8 @@
+flags:
+  keter: {}
+packages:
+- '.'
+extra-deps:
+  - unix-compat-0.4.3.1@sha256:a291f209e9c9723204c49c978ed2c53997dbc9666e53fe7bf7a3548b2c8bb22c,2030
+  - process-1.4.3.0@sha256:cf30533f073721fd059790f0b963fb9b57e3507cffef5141e9377449570b07ca,2021
+resolver: lts-10.1

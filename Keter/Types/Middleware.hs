@@ -9,7 +9,6 @@ import Network.Wai
 
 import Control.Monad
 import Control.Arrow ((***))
-import Control.Applicative
 
 -- various Middlewares
 import Network.Wai.Middleware.AcceptOverride  (acceptOverride)

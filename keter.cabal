@@ -97,7 +97,7 @@ Executable keter
   Main-is:             keter.hs
   hs-source-dirs:      main
   Build-depends:       base, keter, data-default, filepath
-  ghc-options:         -threaded -Wall
+  ghc-options:         -threaded -Weverything -Wcompat
   other-modules:       Paths_keter
 
 test-suite test

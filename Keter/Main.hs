@@ -38,7 +38,7 @@ import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
 import           Data.Yaml.FilePath
-import qualified Network.HTTP.Conduit      as HTTP (conduitManagerSettings,
+import qualified Network.HTTP.Conduit      as HTTP (tlsManagerSettings,
                                                     newManager)
 import           Prelude                   hiding (FilePath, log)
 import           System.Directory          (createDirectoryIfMissing,
@@ -208,7 +208,7 @@ listDirectoryTree fp = do
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
 startListening KeterConfig {..} hostman = do
-    manager <- HTTP.newManager HTTP.conduitManagerSettings
+    manager <- HTTP.newManager HTTP.tlsManagerSettings
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
         -- calculate the number of microseconds since the

@@ -63,6 +63,10 @@ jobs:
     compiler: ": #stack 8.2.2"
     addons: {apt: {packages: [libgmp-dev]}}
 
+  - env: BUILD=stack ARGS="--stack-yaml stack_lts-1319.yaml"
+    compiler: ": #stack 8.6.4"
+    addons: {apt: {packages: [libgmp-dev]}}
+
   # - env: BUILD=stack ARGS="--resolver lts-12"
   #   compiler: ": #stack 8.4.4"
   #   addons: {apt: {packages: [libgmp-dev]}}

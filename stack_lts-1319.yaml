@@ -1,0 +1,6 @@
+flags:
+  keter: {}
+packages:
+- '.'
+extra-deps:
+resolver: lts-13.19

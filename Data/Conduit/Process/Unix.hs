@@ -215,7 +215,9 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
             , std_err = UseHandle writerH
             , close_fds = True
             , create_group = True
+#if MIN_VERSION_process(1, 5, 0)
             , use_process_jobs = False
+#endif
 #if MIN_VERSION_process(1, 2, 0)
             , delegate_ctlc = False
 #endif

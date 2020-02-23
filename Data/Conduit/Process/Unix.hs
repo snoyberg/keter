@@ -33,7 +33,7 @@ import           Control.Exception               (Exception, SomeException,
 import           Control.Monad                   (void)
 import           Data.ByteString                 (ByteString)
 import qualified Data.ByteString.Char8           as S8
-import           Data.Conduit                    (ConduitT, (.|), runConduit)
+import           Data.Conduit                    (ConduitM, (.|), runConduit)
 import           Data.Conduit.Binary             (sinkHandle, sourceHandle)
 import qualified Data.Conduit.List               as CL
 import           Data.IORef                      (IORef, newIORef, readIORef,
@@ -191,7 +191,7 @@ forkExecuteLog :: ByteString -- ^ command
                -> [ByteString] -- ^ args
                -> Maybe [(ByteString, ByteString)] -- ^ environment
                -> Maybe ByteString -- ^ working directory
-               -> Maybe (ConduitT () ByteString IO ()) -- ^ stdin
+               -> Maybe (ConduitM () ByteString IO ()) -- ^ stdin
                -> (ByteString -> IO ()) -- ^ both stdout and stderr will be sent to this location
                -> IO ProcessHandle
 forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError

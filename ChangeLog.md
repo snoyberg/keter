@@ -1,3 +1,11 @@
+## 1.5
+
+* Builds with `process` 1.6
+* add dependency for `tls-session-manager`, and it's support
+* add support for ssl certs for redirects, static-files, reverse proxies
+* fix http2 on reverse proxies
+* make it compile with ghc-8.6.3
+
 ## 1.4.3.1
 
 * Add cabal flag `system-filepath` for compatibility with older versions of fsnotify.

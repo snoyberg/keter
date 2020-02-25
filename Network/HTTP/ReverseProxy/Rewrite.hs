@@ -30,6 +30,7 @@ import qualified Data.CaseInsensitive as CI
 
 import Blaze.ByteString.Builder (fromByteString)
 
+import Keter.Types.Common
 -- Configuration files
 import Data.Default
 
@@ -44,6 +45,13 @@ import qualified Network.Wai as Wai
 import Network.HTTP.Client.Conduit
 import qualified Network.HTTP.Client as NHC
 import Network.HTTP.Types
+
+getRequestBodyChunk :: Wai.Request -> IO ByteString
+#if MIN_VERSION_wai(3, 2, 2)
+getRequestBodyChunk = Wai.getRequestBodyChunk
+#else
+getRequestBodyChunk = Wai.requestBody
+#endif
 
 data RPEntry = RPEntry
     { config :: ReverseProxyConfig
@@ -126,7 +134,7 @@ mkRequest rpConfig request =
       , NHC.responseTimeout = reverseTimeout rpConfig
 #endif
       , method = Wai.requestMethod request
-      , secure = reverseUseSSL rpConfig
+      , secure = reversedUseSSL rpConfig
       , host   = encodeUtf8 $ reversedHost rpConfig
       , port   = reversedPort rpConfig
       , path   = Wai.rawPathInfo request
@@ -134,11 +142,12 @@ mkRequest rpConfig request =
       , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
       , requestBody =
           case Wai.requestBodyLength request of
-            Wai.ChunkedBody   -> RequestBodyStreamChunked ($ Wai.requestBody request)
-            Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ Wai.requestBody request)
+            Wai.ChunkedBody   -> RequestBodyStreamChunked ($ getRequestBodyChunk request)
+            Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ getRequestBodyChunk request)
       , decompress = const False
       , redirectCount = 0
       , cookieJar = Nothing
+      , requestVersion = Wai.httpVersion request
       }
   where
     reqRuleMap = mkRuleMap $ rewriteRequestRules rpConfig
@@ -163,8 +172,9 @@ simpleReverseProxy mgr rpConfig request sendResponse = bracket
 data ReverseProxyConfig = ReverseProxyConfig
     { reversedHost :: Text
     , reversedPort :: Int
+    , reversedUseSSL :: Bool
     , reversingHost :: Text
-    , reverseUseSSL :: Bool
+    , reversingUseSSL :: !SSLConfig
     , reverseTimeout :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
     , rewriteRequestRules :: Set RewriteRule
@@ -174,8 +184,9 @@ instance FromJSON ReverseProxyConfig where
     parseJSON (Object o) = ReverseProxyConfig
         <$> o .: "reversed-host"
         <*> o .: "reversed-port"
+        <*> o .: "reversed-ssl" .!= False
         <*> o .: "reversing-host"
-        <*> o .:? "ssl" .!= False
+        <*> o .:? "ssl" .!= SSLFalse
         <*> o .:? "timeout" .!= Nothing
         <*> o .:? "rewrite-response" .!= Set.empty
         <*> o .:? "rewrite-request" .!= Set.empty
@@ -185,8 +196,9 @@ instance ToJSON ReverseProxyConfig where
     toJSON ReverseProxyConfig {..} = object
         [ "reversed-host" .= reversedHost
         , "reversed-port" .= reversedPort
+        , "reversed-ssl" .= reversedUseSSL
         , "reversing-host" .= reversingHost
-        , "ssl" .= reverseUseSSL
+        , "ssl" .= reversingUseSSL
         , "timeout" .= reverseTimeout
         , "rewrite-response" .= rewriteResponseRules
         , "rewrite-request" .= rewriteRequestRules
@@ -196,8 +208,9 @@ instance Default ReverseProxyConfig where
     def = ReverseProxyConfig
         { reversedHost = ""
         , reversedPort = 80
+        , reversedUseSSL = False
         , reversingHost = ""
-        , reverseUseSSL = False
+        , reversingUseSSL = SSLFalse
         , reverseTimeout = Nothing
         , rewriteResponseRules = Set.empty
         , rewriteRequestRules = Set.empty

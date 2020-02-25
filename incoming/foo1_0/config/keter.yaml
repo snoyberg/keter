@@ -3,13 +3,13 @@ stanzas:
       exec: ../hello
       args:
         - Hello World v1.0
-      #ssl : true
-#      ssl:
-#        key: /opt/keter/etc/cert/hello.key
-#        certificate: /opt/keter/etc/cert/hello.crt
-#        chain-certificates:
-#          - /opt/keter/etc/middle.crt
-#          - /opt/keter/etc/root.crt
+      # ssl : true
+      # ssl:
+      #   key: /opt/keter/etc/cert/hello.key
+      #   certificate: /opt/keter/etc/cert/hello.crt
+      #   chain-certificates:
+      #     - /opt/keter/etc/middle.crt
+      #     - /opt/keter/etc/root.crt
 
       env:
         FROM_KETER_CONFIG: foo bar baz
@@ -38,6 +38,16 @@ stanzas:
       requires-secure: true
       root: ../../
       #connection-time-bound: 0
+      # true will use the default certificate
+      # ssl: true
+
+      # or we can have some additional certificate which supports unsafe1_1_0
+      # ssl:
+      #   key: /opt/keter/etc/cert/hello.key
+      #   certificate: /opt/keter/etc/cert/hello.crt
+      #   chain-certificates:
+      #     - /opt/keter/etc/middle.crt
+      #     - /opt/keter/etc/root.crt
 
     - type: static-files
       host: unsafe2_1_0
@@ -63,6 +73,7 @@ stanzas:
     - type: reverse-proxy
       reversed-host: www.yesodweb.com
       reversed-port: 80
+      reversed-ssl: false
       reversing-host: localhost
      # connection-time-bound: 0
      # middleware:
@@ -73,7 +84,27 @@ stanzas:
      #             keter : rocks
      #     - headers:
      #         Access-Control-Allow-Origin : "*"
-
+     # ssl : true
+     # ssl:
+     #   key: /opt/keter/etc/cert/hello.key
+     #   certificate: /opt/keter/etc/cert/hello.crt
+     #   chain-certificates:
+     #     - /opt/keter/etc/middle.crt
+     #     - /opt/keter/etc/root.crt
+    - type: redirect
+      hosts:
+        - asome.com
+        - www.asome.com
+        - bsome.com
+        - www.bsome.com
+      actions:
+        - host: keter1_0
+          secure: true
+      # ssl:
+      #     key: /opt/certs/a_b_wa_wb/privkey.pem
+      #     certificate: /opt/certs/a_b_wa_wb/cert.pem
+      #     chain-certificates:
+      #     - /opt/certs/a_b_wa_wb/chain.pem
 plugins:
     #postgres: true
 # Syntax for remote-DB server:    

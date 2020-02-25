@@ -38,7 +38,7 @@ import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
 import           Data.Yaml.FilePath
-import qualified Network.HTTP.Conduit      as HTTP (conduitManagerSettings,
+import qualified Network.HTTP.Conduit      as HTTP (tlsManagerSettings,
                                                     newManager)
 import           Prelude                   hiding (FilePath, log)
 import           System.Directory          (createDirectoryIfMissing,
@@ -152,6 +152,12 @@ getIncoming kc = kconfigDir kc </> "incoming"
 isKeter :: FilePath -> Bool
 isKeter fp = takeExtension fp == ".keter"
 
+#if MIN_VERSION_fsnotify(0,3,0)
+#define IGNORE _
+#else
+#define IGNORE
+#endif
+
 startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO ()
 startWatching kc@KeterConfig {..} appMan log = do
     -- File system watching
@@ -159,15 +165,21 @@ startWatching kc@KeterConfig {..} appMan log = do
     _ <- FSN.watchTree wm (fromString incoming) (const True) $ \e -> do
         e' <-
             case e of
-                FSN.Removed fp _ -> do
+                FSN.Removed fp _ IGNORE -> do
                     log $ WatchedFile "removed" (fromFilePath fp)
                     return $ Left $ fromFilePath fp
-                FSN.Added fp _ -> do
+                FSN.Added fp _ IGNORE -> do
                     log $ WatchedFile "added" (fromFilePath fp)
                     return $ Right $ fromFilePath fp
-                FSN.Modified fp _ -> do
+                FSN.Modified fp _ IGNORE -> do
                     log $ WatchedFile "modified" (fromFilePath fp)
                     return $ Right $ fromFilePath fp
+#if MIN_VERSION_fsnotify(0,3,0)
+                FSN.Unknown fp _ _ -> do
+                    log $ WatchedFile "unknown" (fromFilePath fp)
+                    return $ Right $ fromFilePath fp
+#endif
+
         case e' of
             Left fp -> when (isKeter fp) $ AppMan.terminateApp appMan $ getAppname fp
             Right fp -> when (isKeter fp) $ AppMan.addApp appMan $ incoming </> fp
@@ -208,7 +220,7 @@ listDirectoryTree fp = do
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
 startListening KeterConfig {..} hostman = do
-    manager <- HTTP.newManager HTTP.conduitManagerSettings
+    manager <- HTTP.newManager HTTP.tlsManagerSettings
     runAndBlock kconfigListeners $ Proxy.reverseProxy
         kconfigIpFromHeader
         -- calculate the number of microseconds since the

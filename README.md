@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.com/idcm/keter.svg?branch=modernize)](https://travis-ci.com/idcm/keter)
+
+
 Deployment system for web applications, originally intended for hosting Yesod
 applications. Keter does the following actions for your application:
 

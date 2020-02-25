@@ -2,6 +2,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TupleSections       #-}
 module Keter.App
     ( App
     , AppStartConfig (..)
@@ -17,8 +18,8 @@ import           Control.Arrow             ((***))
 import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
 import           Control.Exception         (IOException, bracketOnError,
-                                            throwIO, try)
-import           Control.Monad             (void, when)
+                                            throwIO, try, catch)
+import           Control.Monad             (void, when, liftM)
 import qualified Data.CaseInsensitive      as CI
 import           Data.Conduit.LogFile      (RotatingLog)
 import qualified Data.Conduit.LogFile      as LogFile
@@ -42,10 +43,10 @@ import           System.Directory          (canonicalizePath, doesFileExist,
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
 import           Keter.Types
-import qualified Network
+import           Network.Socket
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
-import           System.IO                 (hClose)
+import           System.IO                 (hClose, IOMode(..))
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
@@ -137,21 +138,18 @@ withActions :: AppStartConfig
 withActions asc bconfig f =
     loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty
   where
+    -- todo: add loading from relative location
+    loadCert (SSL certFile chainCertFiles keyFile) =
+         either (const mempty) (TLS.Credentials . (:[]))
+            <$> TLS.credentialLoadX509Chain certFile (V.toList chainCertFiles) keyFile
+    loadCert _ = return mempty
+
     loop [] wacs backs actions = f wacs backs actions
     loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = bracketOnError
-        (
-           getPort (ascLog asc) (ascPortPool asc) >>= either throwIO
-             (\p -> do
-                c <- case waconfigSsl wac of
-                       -- todo: add loading from relative location
-                       SSL certFile chainCertFiles keyFile ->
-                              either (const mempty) (TLS.Credentials . (:[])) <$>
-                                  TLS.credentialLoadX509Chain certFile (V.toList chainCertFiles) keyFile
-                       _ -> return mempty
-                return (p, c)
-             )
+        (getPort (ascLog asc) (ascPortPool asc) >>= either throwIO
+             (\p -> fmap (p,) <$> loadCert $ waconfigSsl wac)
         )
-        (\(port, cert) -> releasePort (ascPortPool asc) port)
+        (\(port, _)    -> releasePort (ascPortPool asc) port)
         (\(port, cert) -> loop
             stanzas
             (wac { waconfigPort = port } : wacs)
@@ -159,24 +157,27 @@ withActions asc bconfig f =
             (Map.unions $ actions : map (\host -> Map.singleton host ((PAPort port (waconfigTimeout wac), rs), cert)) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
-    loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+    loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 = do
+        cert <- loadCert $ sfconfigSsl sfc
+        loop stanzas wacs backs (actions cert)
       where
-        actions = Map.unions
+        actions cert = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host ((PAStatic sfc, rs), mempty))
+                : map (\host -> Map.singleton host ((PAStatic sfc, rs), cert))
                   (Set.toList (sfconfigHosts sfc))
-    loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+    loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 = do
+        cert <- loadCert $ redirconfigSsl red
+        loop stanzas wacs backs (actions cert)
       where
-        actions = Map.unions
+        actions cert = Map.unions
                 $ actions0
-                : map (\host -> Map.singleton host ((PARedirect red, rs), mempty))
+                : map (\host -> Map.singleton host ((PARedirect red, rs), cert))
                   (Set.toList (redirconfigHosts red))
-    loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 =
-        loop stanzas wacs backs actions
+    loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 = do
+        cert <- loadCert $ reversingUseSSL rev
+        loop stanzas wacs backs (actions cert)
       where
-        actions = Map.insert (CI.mk $ reversingHost rev) ((PAReverseProxy rev mid to, rs), mempty) actions0
+        actions cert = Map.insert (CI.mk $ reversingHost rev) ((PAReverseProxy rev mid to, rs), cert) actions0
     loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
@@ -337,12 +338,39 @@ ensureAlive RunningWebApp {..} = do
       where
         testApp' = do
             threadDelay $ 2 * 1000 * 1000
-            eres <- try $ Network.connectTo "127.0.0.1" $ Network.PortNumber $ fromIntegral port
+            eres <- try $ connectTo "127.0.0.1" $ show port
             case eres of
                 Left (_ :: IOException) -> testApp'
                 Right handle -> do
                     hClose handle
                     return True
+        connectTo host serv = do
+            let hints = defaultHints { addrFlags = [AI_ADDRCONFIG]
+                                     , addrSocketType = Stream }
+            addrs <- getAddrInfo (Just hints) (Just host) (Just serv)
+            firstSuccessful $ map tryToConnect addrs
+            where
+              tryToConnect addr =
+                bracketOnError
+                  (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
+                  (close)  -- only done if there's an error
+                  (\sock -> do
+                    connect sock (addrAddress addr)
+                    socketToHandle sock ReadWriteMode
+                  )
+              firstSuccessful = go Nothing
+                where
+                  go _ (p:ps) = do
+                    r <- tryIO p
+                    case r of
+                          Right x -> return x
+                          Left  e -> go (Just e) ps
+                 -- All operations failed, throw error if one exists
+                  go Nothing  [] = ioError $ userError $ "connectTo firstSuccessful: empty list"
+                  go (Just e) [] = throwIO e
+                  tryIO :: IO a -> IO (Either IOException a)
+                  tryIO m = catch (liftM Right m) (return . Left)
+
 
 withBackgroundApps :: AppStartConfig
                    -> AppId

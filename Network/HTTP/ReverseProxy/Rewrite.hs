@@ -42,10 +42,16 @@ import Data.Char (isDigit)
 
 -- Reverse proxy apparatus
 import qualified Network.Wai as Wai
-import qualified Network.Wai.Internal as I
 import Network.HTTP.Client.Conduit
 import qualified Network.HTTP.Client as NHC
 import Network.HTTP.Types
+
+getRequestBodyChunk :: Wai.Request -> IO ByteString
+#if MIN_VERSION_wai(3, 2, 2)
+getRequestBodyChunk = Wai.getRequestBodyChunk
+#else
+getRequestBodyChunk = Wai.requestBody
+#endif
 
 data RPEntry = RPEntry
     { config :: ReverseProxyConfig
@@ -136,8 +142,8 @@ mkRequest rpConfig request =
       , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
       , requestBody =
           case Wai.requestBodyLength request of
-            Wai.ChunkedBody   -> RequestBodyStreamChunked ($ I.getRequestBodyChunk request)
-            Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ I.getRequestBodyChunk request)
+            Wai.ChunkedBody   -> RequestBodyStreamChunked ($ getRequestBodyChunk request)
+            Wai.KnownLength n -> RequestBodyStream (fromIntegral n) ($ getRequestBodyChunk request)
       , decompress = const False
       , redirectCount = 0
       , cookieJar = Nothing

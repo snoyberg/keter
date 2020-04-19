@@ -22,6 +22,7 @@ flag system-filepath
 Library
   Build-depends:       base                      >= 4             && < 5
                      , directory
+                     , fsnotify >= 0.3
                      , bytestring
                      , text
                      , containers
@@ -67,11 +68,9 @@ Library
   if impl(ghc < 7.6)
     build-depends:     ghc-prim
   if flag(system-filepath)
-    build-depends:     fsnotify >= 0.1 && < 0.2
-                     , system-filepath
+    build-depends:
+                     system-filepath
     cpp-options:       -DSYSTEM_FILEPATH
-  else
-    build-depends:     fsnotify >= 0.2.0.2 && <= 0.3.0.1
 
   Exposed-Modules:     Keter.Plugin.Postgres
                        Keter.Types

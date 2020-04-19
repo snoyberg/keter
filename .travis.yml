@@ -55,10 +55,6 @@ jobs:
   #   compiler: ": #GHC HEAD"
   #   addons: {apt: {packages: [cabal-install-head,ghc-head,happy-1.19.5,alex-3.1.7], sources: [hvr-ghc]}}
 
-  - env: BUILD=stack ARGS="--stack-yaml stack_lts-921.yaml"
-    compiler: ": #stack 8.0.2"
-    addons: {apt: {packages: [libgmp-dev]}}
-
   - env: BUILD=stack ARGS="--stack-yaml stack_lts-101.yaml"
     compiler: ": #stack 8.2.2"
     addons: {apt: {packages: [libgmp-dev]}}

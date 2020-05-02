@@ -15,6 +15,7 @@ listeners:
       #port: 443
       key: key.pem
       certificate: certificate.pem
+      session: true
 
 # User to run applications as
 

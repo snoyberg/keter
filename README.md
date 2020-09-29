@@ -17,10 +17,11 @@ allows for easy management of your web apps.
 
 ## Quick Start
 
-To get Keter up-and-running quickly on an Ubuntu system, run:
+To get Keter up-and-running quickly for development purposes, on an Ubuntu system (not on your production server), run:
 
     wget -O - https://raw.githubusercontent.com/snoyberg/keter/master/setup-keter.sh | bash
 
+(Note: This assumes you already have keter installed via cabal.)
 (Note: you may need to run the above command twice, if the shell exits after
 `apt-get` but before running the rest of its instructions.) This will download
 and build Keter from source and get it running with a

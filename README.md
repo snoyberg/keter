@@ -39,6 +39,12 @@ or similar strategy.
 
 ## Bundling your app for Keter
 
+There is an example that you can try. Go to the servant-example directory and type
+```
+stack build --copy-bins --local-bin-path config && tar cfvz app.tar.gz config && mv app.tar.gz app.keter
+```
+It implements the first three of the following steps:
+
 1.  Modify your web app to check for the `PORT` environment variable, and have
     it listen for incoming HTTP requests on that port. Keter automatically
     assigns arbitrary ports to each web app it manages. When building an app

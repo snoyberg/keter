@@ -215,9 +215,11 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
 
     processAction Nothing Terminate = return Nothing
     processAction (Just app) Terminate = do
+        log $ Terminating $ show app
         App.terminate app
         return Nothing
     processAction Nothing (Reload input) = do
+        log $ ReloadFrom Nothing $ show input
         eres <- E.try $ App.start appStartConfig appid input
         case eres of
             Left e -> do
@@ -225,6 +227,7 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
                 return Nothing
             Right app -> return $ Just app
     processAction (Just app) (Reload input) = do
+        log $ ReloadFrom (Just $ show app) (show input)
         eres <- E.try $ App.reload app input
         case eres of
             Left e -> do

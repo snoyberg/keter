@@ -3,6 +3,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
+{-# LANGUAGE NamedFieldPuns      #-}
 module Keter.App
     ( App
     , AppStartConfig (..)
@@ -62,6 +63,8 @@ data App = App
     , appAsc            :: !AppStartConfig
     , appRlog           :: !(TVar (Maybe RotatingLog))
     }
+instance Show App where
+  show App {appId, ..} = "App{appId=" <> show appId <> "}"
 
 data RunningWebApp = RunningWebApp
     { rwaProcess :: !MonitoredProcess

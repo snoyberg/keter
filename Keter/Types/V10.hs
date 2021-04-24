@@ -34,7 +34,7 @@ import           System.Posix.Types                (EpochTime)
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
     , bconfigPlugins :: !Object -- ^ settings used for plugins
-    }
+    } deriving Show
 
 instance ToCurrent BundleConfig where
     type Previous BundleConfig = V04.BundleConfig
@@ -166,6 +166,7 @@ instance ParseYamlFile KeterConfig where
 type RequiresSecure = Bool
 
 data Stanza port = Stanza (StanzaRaw port) RequiresSecure
+  deriving Show
 
 data StanzaRaw port
     = StanzaStaticFiles !StaticFilesConfig
@@ -412,6 +413,7 @@ instance ToJSON (WebAppConfig ()) where
 
 data AppInput = AIBundle !FilePath !EpochTime
               | AIData !BundleConfig
+              deriving Show
 
 data BackgroundConfig = BackgroundConfig
     { bgconfigExec                :: !F.FilePath

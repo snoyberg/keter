@@ -84,9 +84,13 @@ data LogMessage
     | DeactivatingApp AppId (Set Host)
     | ReactivatingApp AppId (Set Host) (Set Host)
     | WatchedFile Text FilePath
+    | ReloadFrom (Maybe String) String
+    | Terminating String
 
 instance Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ f
+    show (ReloadFrom app input) = "Reloading from: " ++ show app  ++ " to " ++ show input
+    show (Terminating app) = "Terminating " ++ show app
     show (InvalidBundle f e) = concat
         [ "Unable to parse bundle file '"
         , f

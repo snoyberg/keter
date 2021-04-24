@@ -7,13 +7,17 @@ applications. Keter does the following actions for your application:
 * Binds to the main port (usually port 80) and reverse proxies requests to your application based on virtual hostnames.
 * Provides SSL support if requested.
 * Automatically launches applications, monitors processes, and relaunches any processes which die.
-* Provides graceful redeployment support, by launching a second copy of your application, performing a health check, and then switching reverse proxying to the new process.
+* Provides graceful redeployment support, by launching a second copy of your application, performing a health check[1], and then switching reverse proxying to the new process.
 * Management of log files.
 
 Keter provides many more advanced features and extension points. It allows
 configuration of static hosts, redirect rules, management of PostgreSQL
 databases, and more. It supports a simple bundle format for applications which
 allows for easy management of your web apps.
+
+[1]: The health check happens trough checking if a port is opened.
+     If your app doesn't open a port after 30 seconds it's presumed
+     not healthy and gets a term signal.
 
 ## Quick Start
 

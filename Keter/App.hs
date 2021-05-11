@@ -14,6 +14,7 @@ module Keter.App
     , Keter.App.terminate
     ) where
 
+import Data.Foldable
 import           Codec.Archive.TempTarball
 import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))
@@ -54,6 +55,7 @@ import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
 import qualified Network.TLS as TLS
+import qualified Data.Text.Encoding as Text
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
@@ -330,8 +332,9 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             AIBuiltin -> "__builtin__"
             AINamed x -> x
 
-killWebApp :: RunningWebApp -> IO ()
-killWebApp RunningWebApp {..} = do
+killWebApp :: Maybe RotatingLog -> RunningWebApp -> IO ()
+killWebApp rlog RunningWebApp {..} = do
+    traverse_ (`LogFile.addChunk` ("Killing " <> Text.encodeUtf8 (pack $ show rwaPort))) rlog
     terminateMonitoredProcess rwaProcess
 
 ensureAlive :: RunningWebApp -> IO ()
@@ -583,18 +586,19 @@ reload App {..} input =
     withWebApps appAsc appId bconfig newdir rlog webapps $ \runningWebapps -> do
         mapM_ ensureAlive runningWebapps
         readTVarIO appHosts >>= reactivateApp (ascLog appAsc) (ascHostManager appAsc) appId actions
-        (oldApps, oldBacks, oldDir) <- atomically $ do
+        (oldApps, oldBacks, oldDir, oldRlog) <- atomically $ do
             oldApps <- readTVar appRunningWebApps
             oldBacks <- readTVar appBackgroundApps
             oldDir <- readTVar appDir
+            oldRlog <- readTVar appRlog
 
             writeTVar appModTime mmodtime
             writeTVar appRunningWebApps runningWebapps
             writeTVar appBackgroundApps runningBacks
             writeTVar appHosts $ Map.keysSet actions
             writeTVar appDir newdir
-            return (oldApps, oldBacks, oldDir)
-        void $ forkIO $ terminateHelper appAsc appId oldApps oldBacks oldDir
+            return (oldApps, oldBacks, oldDir, oldRlog)
+        void $ forkIO $ terminateHelper appAsc appId oldApps oldBacks oldDir oldRlog
 
 terminate :: App -> IO ()
 terminate App {..} = do
@@ -615,7 +619,7 @@ terminate App {..} = do
         return (hosts, apps, backs, mdir, rlog)
 
     deactivateApp ascLog ascHostManager appId hosts
-    void $ forkIO $ terminateHelper appAsc appId apps backs mdir
+    void $ forkIO $ terminateHelper appAsc appId apps backs mdir rlog
     maybe (return ()) LogFile.close rlog
   where
     AppStartConfig {..} = appAsc
@@ -625,11 +629,12 @@ terminateHelper :: AppStartConfig
                 -> [RunningWebApp]
                 -> [RunningBackgroundApp]
                 -> Maybe FilePath
+                -> Maybe RotatingLog
                 -> IO ()
-terminateHelper AppStartConfig {..} aid apps backs mdir = do
+terminateHelper AppStartConfig {..} aid apps backs mdir rlog = do
     threadDelay $ 20 * 1000 * 1000
     ascLog $ TerminatingOldProcess aid
-    mapM_ killWebApp apps
+    mapM_ (killWebApp rlog) apps
     mapM_ killBackgroundApp backs
     threadDelay $ 60 * 1000 * 1000
     case mdir of

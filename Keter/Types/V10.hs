@@ -121,13 +121,13 @@ instance ToCurrent KeterConfig where
         }
       where
         getSSL Nothing = V.empty
-        getSSL (Just (V04.TLSConfig s ts)) = V.singleton $ LPSecure
+        getSSL (Just (V04.TLSConfig s cert key session)) = V.singleton $ LPSecure
             (Warp.getHost s)
             (Warp.getPort s)
-            (WarpTLS.certFile ts)
+            cert
             V.empty
-            (WarpTLS.keyFile ts)
-            (isJust $ WarpTLS.tlsSessionManagerConfig ts)
+            key
+            (isJust session)
 
 instance Default KeterConfig where
     def = KeterConfig

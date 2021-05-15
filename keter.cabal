@@ -55,7 +55,7 @@ Library
                      , array
                      , mtl
                      , warp
-                     , warp-tls                  >= 3.0.3         && < 3.3.0
+                     , warp-tls                  >= 3.0.3         && < 3.4.0
                      , aeson
                      , unordered-containers
                      , vector
@@ -92,7 +92,7 @@ Library
                        Data.Conduit.Process.Unix
   ghc-options:         -Wall
   c-sources:           cbits/process-tracker.c
-  
+
 Executable keter
   Main-is:             keter.hs
   hs-source-dirs:      main

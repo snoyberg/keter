@@ -115,7 +115,7 @@ instance ParseYamlFile KeterConfig where
         <*> o .:? "ip-from-header" .!= False
         <*> o .:? "connection-time-bound" .!= fiveMinutes
 
-data TLSConfig = TLSConfig !Warp.Settings !WarpTLS.TLSSettings
+data TLSConfig = TLSConfig !Warp.Settings !FilePath !FilePath (Maybe TLSSession.Config)
 
 instance ParseYamlFile TLSConfig where
     parseYamlFile basedir = withObject "TLSConfig" $ \o -> do
@@ -125,14 +125,10 @@ instance ParseYamlFile TLSConfig where
         port <- o .:? "port" .!= 443
         session <- bool Nothing (Just TLSSession.defaultConfig) <$> o .:? "session" .!= False
         return $! TLSConfig
-            ( Warp.setHost host
-            $ Warp.setPort port
-              Warp.defaultSettings)
-            WarpTLS.defaultTlsSettings
-                { WarpTLS.certFile = cert
-                , WarpTLS.keyFile = key
-                , WarpTLS.tlsSessionManagerConfig = session
-                }
+            (Warp.setHost host $ Warp.setPort port Warp.defaultSettings)
+            cert
+            key
+            session
 
 -- | Controls execution of the nginx thread. Follows the settings type pattern.
 -- See: <http://www.yesodweb.com/book/settings-types>.

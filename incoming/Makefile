@@ -18,6 +18,7 @@ all: foo.keter foo1_0.keter websockets
 foo: foo.keter
 foo1_0: foo1_0.keter
 websockets: websockets.keter
+nc: nc.keter
 
 
 foo.keter: ./foo/*.hs ./foo/config/*.yaml
@@ -26,6 +27,8 @@ foo.keter: ./foo/*.hs ./foo/config/*.yaml
 	strip ./foo/hello
 	cd foo; tar czfv ../foo.keter *
 
+nc.keter:
+	cd nc; tar czfv ../nc.keter *
 
 foo1_0.keter: ./foo1_0/*.hs ./foo1_0/config/*.yaml
 	@echo "Build foo1_0"

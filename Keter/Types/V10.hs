@@ -360,7 +360,11 @@ data WebAppConfig port = WebAppConfig
     , waconfigSsl         :: !SSLConfig
     , waconfigPort        :: !port
     , waconfigForwardEnv  :: !(Set Text)
+     -- | how long are connections supposed to last
     , waconfigTimeout     :: !(Maybe Int)
+     -- | how long in microseconds the app gets before we expect it to bind to
+     --   a port (default 90 seconds)
+    , waconfigEnsureAliveTimeout :: !(Maybe Int)
     }
     deriving Show
 
@@ -376,6 +380,7 @@ instance ToCurrent (WebAppConfig ()) where
         , waconfigPort = ()
         , waconfigForwardEnv = Set.empty
         , waconfigTimeout = Nothing
+        , waconfigEnsureAliveTimeout = Nothing
         }
 
 instance ParseYamlFile (WebAppConfig ()) where
@@ -399,6 +404,7 @@ instance ParseYamlFile (WebAppConfig ()) where
             <*> return ()
             <*> o .:? "forward-env" .!= Set.empty
             <*> o .:? "connection-time-bound"
+            <*> o .:? "ensure-alive-time-bound"
 
 instance ToJSON (WebAppConfig ()) where
     toJSON WebAppConfig {..} = object

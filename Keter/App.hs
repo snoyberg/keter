@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE NamedFieldPuns      #-}
+
 module Keter.App
     ( App
     , AppStartConfig (..)
@@ -27,6 +28,7 @@ import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
                                             terminateMonitoredProcess)
+import           Data.Foldable             (for_)
 import           Data.IORef
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
@@ -67,8 +69,9 @@ instance Show App where
   show App {appId, ..} = "App{appId=" <> show appId <> "}"
 
 data RunningWebApp = RunningWebApp
-    { rwaProcess :: !MonitoredProcess
-    , rwaPort    :: !Port
+    { rwaProcess            :: !MonitoredProcess
+    , rwaPort               :: !Port
+    , rwaEnsureAliveTimeOut :: !Int
     }
 
 newtype RunningBackgroundApp = RunningBackgroundApp
@@ -213,7 +216,10 @@ withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
     ascLog SanityChecksPassed
     f
   where
-    go (Stanza (StanzaWebApp WebAppConfig {..}) _) = isExec waconfigExec
+    go (Stanza (StanzaWebApp WebAppConfig {..}) _) = do
+      isExec waconfigExec
+      for_ waconfigEnsureAliveTimeout
+        $ \x -> when (x < 1) $ throwIO $ EnsureAliveShouldBeBiggerThenZero x
     go (Stanza (StanzaBackground BackgroundConfig {..}) _) = isExec bgconfigExec
     go _ = return ()
 
@@ -316,6 +322,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
         $ \mp -> f RunningWebApp
             { rwaProcess = mp
             , rwaPort = waconfigPort
+            , rwaEnsureAliveTimeOut = fromMaybe (90 * 1000 * 1000) waconfigEnsureAliveTimeout
             }
   where
     name =
@@ -336,7 +343,7 @@ ensureAlive RunningWebApp {..} = do
   where
     testApp :: Port -> IO Bool
     testApp port = do
-        res <- timeout (90 * 1000 * 1000) testApp'
+        res <- timeout rwaEnsureAliveTimeOut testApp'
         return $ fromMaybe False res
       where
         testApp' = do

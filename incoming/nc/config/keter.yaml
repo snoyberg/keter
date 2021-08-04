@@ -1,0 +1,6 @@
+stanzas:
+    - host: localhost
+      type: webapp
+      exec: ../nc.sh
+      # 15 secends in microseconds
+      ensure-alive-time-bound: 15000000

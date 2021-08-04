@@ -155,6 +155,7 @@ data KeterException = CannotParsePostgres FilePath
                     | CannotReserveHosts !AppId !(Map Host AppId)
                     | FileNotExecutable !FilePath
                     | ExecutableNotFound !FilePath
+                    | EnsureAliveShouldBeBiggerThenZero { keterExceptionGot:: !Int }
     deriving (Show, Typeable)
 instance Exception KeterException
 

@@ -68,6 +68,9 @@ or similar strategy.
     directory for file updates, and automatically redeploy new versions of your
     bundle.
 
+Examples are available in the [incoming](https://github.com/snoyberg/keter/tree/master/incoming)
+directory.
+
 ## Setup
 
 ### Building keter for Debian, Ubuntu and derivatives

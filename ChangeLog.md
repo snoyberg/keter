@@ -1,6 +1,7 @@
 ## 1.6
-
-
+* Make keter more chatty on boot.
+  This allows you to figure out in code where things go wrong.
+* Add debug CLI, allowing you to inspect keters' internal state.
 
 ## 1.5
 

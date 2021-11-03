@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE OverloadedStrings  #-}
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE TypeFamilies       #-}
-{-# LANGUAGE OverloadedStrings  #-}
 
 module Keter.Types.Common
     ( module Keter.Types.Common
@@ -15,9 +15,9 @@ module Keter.Types.Common
     ) where
 
 import           Control.Exception          (Exception, SomeException)
-import           Data.Aeson                 (Object, FromJSON, ToJSON,
-                                            Value(Bool), (.=), (.!=), (.:?),
-                                            withObject, withBool, object)
+import           Data.Aeson                 (FromJSON, Object, ToJSON,
+                                             Value (Bool), object, withBool,
+                                             withObject, (.!=), (.:?), (.=))
 import           Data.ByteString            (ByteString)
 import           Data.CaseInsensitive       (CI, original)
 import           Data.Map                   (Map)
@@ -25,11 +25,12 @@ import           Data.Set                   (Set)
 import qualified Data.Set                   as Set
 import           Data.Text                  (Text, pack, unpack)
 import           Data.Typeable              (Typeable)
-import           Data.Yaml.FilePath
 import           Data.Vector                (Vector)
 import qualified Data.Vector                as V
 import qualified Data.Yaml
+import           Data.Yaml.FilePath
 import qualified Language.Haskell.TH.Syntax as TH
+import           Network.Socket             (AddrInfo, SockAddr)
 import           System.Exit                (ExitCode)
 import           System.FilePath            (FilePath, takeBaseName)
 
@@ -86,6 +87,12 @@ data LogMessage
     | WatchedFile Text FilePath
     | ReloadFrom (Maybe String) String
     | Terminating String
+    | LaunchInitial
+    | LaunchCli
+    | StartWatching
+    | StartListening
+    | BindCli AddrInfo
+    | ReceivedCliConnection SockAddr
 
 instance Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ f
@@ -146,6 +153,12 @@ instance Show LogMessage where
         , ": "
         , fp
         ]
+    show LaunchInitial = "Launching initial"
+    show LaunchCli     = "Launching cli"
+    show StartWatching = "Started watching"
+    show StartListening = "Started listening"
+    show (BindCli addr) = "Bound cli to " <> show addr
+    show (ReceivedCliConnection peer) = "CLI Connection from " <> show peer
 
 data KeterException = CannotParsePostgres FilePath
                     | ExitCodeFailure FilePath ExitCode
@@ -174,7 +187,7 @@ logEx = do
 data AppId = AIBuiltin | AINamed !Appname
     deriving (Eq, Ord)
 instance Show AppId where
-    show AIBuiltin = "/builtin/"
+    show AIBuiltin   = "/builtin/"
     show (AINamed t) = unpack t
 
 data SSLConfig

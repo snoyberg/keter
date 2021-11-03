@@ -12,9 +12,9 @@ module Keter.App
     , reload
     , getTimestamp
     , Keter.App.terminate
+    , showApp
     ) where
 
-import Data.Foldable
 import           Codec.Archive.TempTarball
 import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))
@@ -29,7 +29,7 @@ import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
                                             terminateMonitoredProcess)
-import           Data.Foldable             (for_)
+import           Data.Foldable             (for_, traverse_)
 import           Data.IORef
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
@@ -70,11 +70,25 @@ data App = App
 instance Show App where
   show App {appId, ..} = "App{appId=" <> show appId <> "}"
 
+-- | within an stm context we can show a lot more then the show instance can do
+showApp :: App -> STM Text
+showApp App{..} = do
+  appModTime' <- readTVar appModTime
+  appRunning' <- readTVar appRunningWebApps
+  appHosts'   <- readTVar appHosts
+  pure $ pack $
+    (show appId) <>
+    " modtime: " <> (show appModTime') <>  ", webappsRunning: " <>  show appRunning' <> ", hosts: " <> show appHosts'
+
+
 data RunningWebApp = RunningWebApp
     { rwaProcess            :: !MonitoredProcess
     , rwaPort               :: !Port
     , rwaEnsureAliveTimeOut :: !Int
     }
+
+instance Show RunningWebApp where
+  show (RunningWebApp {..})  = "RunningWebApp{rwaPort=" <> show rwaPort <> ", rwaEnsureAliveTimeOut=" <> show rwaEnsureAliveTimeOut <> ",..}"
 
 newtype RunningBackgroundApp = RunningBackgroundApp
     { rbaProcess :: MonitoredProcess

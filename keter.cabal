@@ -65,6 +65,8 @@ Library
                      , lifted-base
                      , tls                       >= 1.4
                      , tls-session-manager
+                     , optparse-applicative
+                     , indexed-traversable
 
   if impl(ghc < 7.6)
     build-depends:     ghc-prim
@@ -82,6 +84,7 @@ Library
                        Keter.App
                        Keter.AppManager
                        Keter.LabelMap
+                       Keter.Cli
                        Keter.Main
                        Keter.PortPool
                        Keter.Proxy

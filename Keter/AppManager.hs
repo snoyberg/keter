@@ -13,6 +13,8 @@ module Keter.AppManager
     , terminateApp
       -- * Initialize
     , initialize
+      -- * Show
+    , renderApps
     ) where
 
 import           Control.Applicative
@@ -22,15 +24,20 @@ import           Control.Concurrent.STM
 import qualified Control.Exception         as E
 import           Control.Monad             (void)
 import qualified Data.Map                  as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.Maybe                (catMaybes)
+import           Data.Maybe                (catMaybes, mapMaybe)
 import qualified Data.Set                  as Set
-import           Keter.App                 (App, AppStartConfig)
+import           Keter.App                 (App, AppStartConfig, showApp)
 import qualified Keter.App                 as App
 import           Keter.Types
 import           Prelude                   hiding (FilePath, log)
 import           System.Posix.Files        (getFileStatus, modificationTime)
 import           System.Posix.Types        (EpochTime)
+import           Text.Printf(printf)
+import           Data.Text(pack, unpack)
+import Data.Traversable.WithIndex(itraverse)
+import qualified Data.Text.Lazy.Builder as Builder
+import qualified Data.Text.Lazy as LT
+import Data.Foldable(fold)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
@@ -46,7 +53,27 @@ data AppState = ASRunning App
                     !(TVar (Maybe Action)) -- ^ the next one to try
               | ASTerminated
 
+showAppState :: AppState -> STM Text
+showAppState (ASRunning x) = (\x -> "running(" <> x <> ")") <$> showApp x
+showAppState (ASStarting mapp tmtime tmaction) = do
+  mtime   <- readTVar tmtime
+  maction <- readTVar tmaction
+  mtext <- traverse showApp mapp
+  pure $ pack $ printf "starting app %s, time %s, action %s \n" (unpack $ fold mtext) (show mtime) (show maction)
+showAppState ASTerminated = pure "terminated"
+
+renderApps :: AppManager -> STM Text
+renderApps mngr = do
+  appMap <- readTVar $ apps mngr
+  x <- itraverse (\appId tappState -> do
+                state <- readTVar tappState
+                res <- showAppState state
+                pure $ Builder.fromText $ res <> " \n"
+               ) appMap
+  pure $ LT.toStrict $ Builder.toLazyText $ fold x
+
 data Action = Reload AppInput | Terminate
+ deriving Show
 
 initialize :: (LogMessage -> IO ())
            -> AppStartConfig
@@ -254,3 +281,4 @@ getInputForBundle bundle = do
 
 terminateApp :: AppManager -> Appname -> IO ()
 terminateApp appMan appname = perform appMan (AINamed appname) Terminate
+

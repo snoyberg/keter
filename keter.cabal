@@ -20,7 +20,7 @@ flag system-filepath
   default: False
 
 Library
-  default-language:    Haskell2010
+  default-language:    Haskell98
   Build-depends:       base                      >= 4             && < 5
                      , directory
                      , fsnotify >= 0.3
@@ -95,7 +95,7 @@ Library
   c-sources:           cbits/process-tracker.c
 
 Executable keter
-  default-language:    Haskell2010
+  default-language:    Haskell98
   Main-is:             keter.hs
   hs-source-dirs:      main
   Build-depends:       base, keter, data-default, filepath
@@ -103,7 +103,7 @@ Executable keter
   other-modules:       Paths_keter
 
 test-suite test
-    default-language:    Haskell2010
+    default-language:    Haskell98
     hs-source-dirs: test
     main-is: Spec.hs
     type: exitcode-stdio-1.0

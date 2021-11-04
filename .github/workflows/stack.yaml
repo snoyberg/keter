@@ -21,9 +21,7 @@ jobs:
         resolver: [nightly, lts-18, lts-17, lts-16]
         # Bugs in GHC make it crash too often to be worth running
         exclude:
-          - os: windows-latest
-            resolver: nightly
-          - os: windows-latest
+          - os: macos-latest # no Cocoa ?? https://github.com/snoyberg/keter/runs/4103876510?check_suite_focus=true
             resolver: lts-16
     steps:
       - name: Clone project

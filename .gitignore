@@ -21,4 +21,3 @@ log/
 .stack-work/
 cabal.sandbox.config
 *.sublime-*
-stack.yaml

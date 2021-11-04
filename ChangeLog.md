@@ -2,6 +2,9 @@
 
 * Builds with `process` 1.6
 * add dependency for `tls-session-manager`
+* Add show instance for App
+* Add ensure alive timeout config
+* Add `nc` example in incoming
 
 ## 1.4.3.1
 

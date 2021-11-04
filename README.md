@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/idcm/keter.svg?branch=modernize)](https://travis-ci.com/idcm/keter)
+[![Githbu actions build status](https://img.shields.io/github/workflow/status/snoyberg/keter/Stack)](https://github.com/snoyberg/keter/actions)
 
 
 Deployment system for web applications, originally intended for hosting Yesod

@@ -5,6 +5,9 @@
 * Add show instance for App
 * Add ensure alive timeout config
 * Add `nc` example in incoming
+* Change to github actions because travis ci stopped working.
+* Fix hackage issues in cabal file
+* Fix breaking changes with warp-tls.
 
 ## 1.4.3.1
 

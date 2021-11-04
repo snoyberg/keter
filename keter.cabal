@@ -1,6 +1,6 @@
 Cabal-version:       >=1.10
 Name:                keter
-Version:             1.5
+Version:             1.6
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:         Hackage documentation generation is not reliable. For up to date documentation, please see: <http://www.stackage.org/package/keter>.
 Homepage:            http://www.yesodweb.com/

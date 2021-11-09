@@ -3,6 +3,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
+
 module Data.Conduit.Process.Unix
     ( -- * Process tracking
       -- $processTracker
@@ -16,16 +17,18 @@ module Data.Conduit.Process.Unix
     , MonitoredProcess
     , monitorProcess
     , terminateMonitoredProcess
+    , printStatus
     ) where
 
-import           Control.Applicative             ((<$>), (<*>))
+import           Data.Text(Text, pack)
+import           Control.Applicative             ((<$>), (<*>), pure)
 import           Control.Arrow                   ((***))
 import           Control.Concurrent              (forkIO)
 import           Control.Concurrent              (threadDelay)
 import           Control.Concurrent.MVar         (MVar, modifyMVar, modifyMVar_,
                                                   newEmptyMVar, newMVar,
                                                   putMVar, readMVar, swapMVar,
-                                                  takeMVar)
+                                                  takeMVar, tryReadMVar)
 import           Control.Exception               (Exception, SomeException,
                                                   bracketOnError, finally,
                                                   handle, mask_,
@@ -56,9 +59,11 @@ import           System.Posix.Signals            (sigKILL, signalProcess)
 import           System.Posix.Types              (CPid (..))
 import           System.Process                  (CmdSpec (..), CreateProcess (..),
                                                   StdStream (..), createProcess,
-                                                  terminateProcess, waitForProcess)
+                                                  terminateProcess, waitForProcess,
+                                                  getPid)
 import           System.Process.Internals        (ProcessHandle (..),
                                                   ProcessHandle__ (..))
+import Data.Monoid ((<>)) -- sauron
 
 processHandleMVar :: ProcessHandle -> MVar ProcessHandle__
 #if MIN_VERSION_process(1, 6, 0)
@@ -320,6 +325,19 @@ monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart 
 
 -- | Abstract type containing information on a process which will be restarted.
 newtype MonitoredProcess = MonitoredProcess (MVar Status)
+
+printStatus :: MonitoredProcess -> IO Text
+printStatus (MonitoredProcess mstatus) = do
+  mStatus <- tryReadMVar mstatus
+  case mStatus of
+    Nothing -> pure "no status set"
+    Just NeedsRestart -> pure "needs restart"
+    Just NoRestart -> pure "no restart"
+    Just (Running running) -> do
+      x <- getPid running
+      case x of
+        Just y -> pure ("running" <> pack (show y))
+        Nothing -> pure "just closed"
 
 -- | Terminate the process and prevent it from being restarted.
 terminateMonitoredProcess :: MonitoredProcess -> IO ()

@@ -93,6 +93,7 @@ data LogMessage
     | StartListening
     | BindCli AddrInfo
     | ReceivedCliConnection SockAddr
+    | KillingApp Port Text
 
 instance Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ f
@@ -154,6 +155,7 @@ instance Show LogMessage where
         , fp
         ]
     show LaunchInitial = "Launching initial"
+    show (KillingApp port txt) = "Killing " <> show port <> " - " <> unpack txt
     show LaunchCli     = "Launching cli"
     show StartWatching = "Started watching"
     show StartListening = "Started listening"

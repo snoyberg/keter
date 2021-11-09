@@ -28,7 +28,7 @@ import           Data.Conduit.LogFile      (RotatingLog)
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
-                                            terminateMonitoredProcess)
+                                            terminateMonitoredProcess, printStatus)
 import           Data.Foldable             (for_, traverse_)
 import           Data.IORef
 import qualified Data.Map                  as Map
@@ -346,9 +346,10 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {.
             AIBuiltin -> "__builtin__"
             AINamed x -> x
 
-killWebApp :: Maybe RotatingLog -> RunningWebApp -> IO ()
-killWebApp rlog RunningWebApp {..} = do
-    traverse_ (`LogFile.addChunk` ("Killing " <> Text.encodeUtf8 (pack $ show rwaPort))) rlog
+killWebApp :: (LogMessage -> IO ()) -> RunningWebApp -> IO ()
+killWebApp asclog RunningWebApp {..} = do
+    status <- printStatus rwaProcess
+    asclog $ KillingApp rwaPort status
     terminateMonitoredProcess rwaProcess
 
 ensureAlive :: RunningWebApp -> IO ()
@@ -648,7 +649,7 @@ terminateHelper :: AppStartConfig
 terminateHelper AppStartConfig {..} aid apps backs mdir rlog = do
     threadDelay $ 20 * 1000 * 1000
     ascLog $ TerminatingOldProcess aid
-    mapM_ (killWebApp rlog) apps
+    mapM_ (killWebApp ascLog) apps
     mapM_ killBackgroundApp backs
     threadDelay $ 60 * 1000 * 1000
     case mdir of

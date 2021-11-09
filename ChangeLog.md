@@ -1,3 +1,5 @@
+## 1.7
+
 ## 1.6
 * Make keter more chatty on boot.
   This allows you to figure out in code where things go wrong.

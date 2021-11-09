@@ -330,14 +330,14 @@ printStatus :: MonitoredProcess -> IO Text
 printStatus (MonitoredProcess mstatus) = do
   mStatus <- tryReadMVar mstatus
   case mStatus of
-    Nothing -> pure "no status set"
-    Just NeedsRestart -> pure "needs restart"
-    Just NoRestart -> pure "no restart"
+    Nothing -> pure "no status set process"
+    Just NeedsRestart -> pure "needs-restart process"
+    Just NoRestart -> pure "no-restart process"
     Just (Running running) -> do
       x <- getPid running
       case x of
-        Just y -> pure ("running" <> pack (show y))
-        Nothing -> pure "just closed"
+        Just y -> pure ("running process '" <> pack (show y) <> "'")
+        Nothing -> pure "just closed process"
 
 -- | Terminate the process and prevent it from being restarted.
 terminateMonitoredProcess :: MonitoredProcess -> IO ()

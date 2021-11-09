@@ -155,7 +155,7 @@ instance Show LogMessage where
         , fp
         ]
     show LaunchInitial = "Launching initial"
-    show (KillingApp port txt) = "Killing " <> show port <> " - " <> unpack txt
+    show (KillingApp port txt) = "Killing " <> unpack txt <> " running on port: "  <> show port
     show LaunchCli     = "Launching cli"
     show StartWatching = "Started watching"
     show StartListening = "Started listening"

@@ -13,24 +13,31 @@ module Keter.AppManager
     , terminateApp
       -- * Initialize
     , initialize
+      -- * Show
+    , renderApps
     ) where
 
 import           Control.Applicative
-import           Control.Concurrent        (forkIO)
-import           Control.Concurrent.MVar   (MVar, newMVar, withMVar)
+import           Control.Concurrent         (forkIO)
+import           Control.Concurrent.MVar    (MVar, newMVar, withMVar)
 import           Control.Concurrent.STM
-import qualified Control.Exception         as E
-import           Control.Monad             (void)
-import qualified Data.Map                  as Map
-import           Data.Maybe                (mapMaybe)
-import           Data.Maybe                (catMaybes)
-import qualified Data.Set                  as Set
-import           Keter.App                 (App, AppStartConfig)
-import qualified Keter.App                 as App
+import qualified Control.Exception          as E
+import           Control.Monad              (void)
+import           Data.Foldable              (fold)
+import qualified Data.Map                   as Map
+import           Data.Maybe                 (catMaybes, mapMaybe)
+import qualified Data.Set                   as Set
+import           Data.Text                  (pack, unpack)
+import qualified Data.Text.Lazy             as LT
+import qualified Data.Text.Lazy.Builder     as Builder
+import           Data.Traversable.WithIndex (itraverse)
+import           Keter.App                  (App, AppStartConfig, showApp)
+import qualified Keter.App                  as App
 import           Keter.Types
-import           Prelude                   hiding (FilePath, log)
-import           System.Posix.Files        (getFileStatus, modificationTime)
-import           System.Posix.Types        (EpochTime)
+import           Prelude                    hiding (FilePath, log)
+import           System.Posix.Files         (getFileStatus, modificationTime)
+import           System.Posix.Types         (EpochTime)
+import           Text.Printf                (printf)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
@@ -46,7 +53,27 @@ data AppState = ASRunning App
                     !(TVar (Maybe Action)) -- ^ the next one to try
               | ASTerminated
 
+showAppState :: AppState -> STM Text
+showAppState (ASRunning x) = (\x -> "running(" <> x <> ")") <$> showApp x
+showAppState (ASStarting mapp tmtime tmaction) = do
+  mtime   <- readTVar tmtime
+  maction <- readTVar tmaction
+  mtext <- traverse showApp mapp
+  pure $ pack $ printf "starting app %s, time %s, action %s \n" (unpack $ fold mtext) (show mtime) (show maction)
+showAppState ASTerminated = pure "terminated"
+
+renderApps :: AppManager -> STM Text
+renderApps mngr = do
+  appMap <- readTVar $ apps mngr
+  x <- itraverse (\appId tappState -> do
+                state <- readTVar tappState
+                res <- showAppState state
+                pure $ Builder.fromText $ res <> " \n"
+               ) appMap
+  pure $ LT.toStrict $ Builder.toLazyText $ fold x
+
 data Action = Reload AppInput | Terminate
+ deriving Show
 
 initialize :: (LogMessage -> IO ())
            -> AppStartConfig
@@ -75,7 +102,7 @@ reloadAppList am@AppManager {..} newApps = withMVar mutex $ const $ do
         fmap catMaybes $ mapM (getAction m) allApps
     sequence_ actions
   where
-    toAppName AIBuiltin = Nothing
+    toAppName AIBuiltin   = Nothing
     toAppName (AINamed x) = Just x
 
     getAction currentApps appname = do
@@ -106,7 +133,7 @@ reloadAppList am@AppManager {..} newApps = withMVar mutex $ const $ do
       where
         freshLaunch =
             case Map.lookup appname newApps of
-                Nothing -> E.assert False Nothing
+                Nothing              -> E.assert False Nothing
                 Just (fp, timestamp) -> reload fp timestamp
         terminate = Just $ performNoLock am (AINamed appname) Terminate
         reload fp timestamp = Just $ performNoLock am (AINamed appname) (Reload $ AIBundle fp timestamp)
@@ -175,7 +202,7 @@ performNoLock am@AppManager {..} aid action = E.mask_ $ do
                 tmtimestamp <- newTVar $
                     case input of
                         AIBundle _fp timestamp -> Just timestamp
-                        AIData _ -> Nothing
+                        AIData _               -> Nothing
                 tstate <- newTVar $ ASStarting Nothing tmtimestamp tmnext
                 modifyTVar apps $ Map.insert aid tstate
                 return $ launchWorker am aid tstate tmnext Nothing action
@@ -205,12 +232,12 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
                     tmtimestamp <- newTVar $
                         case action of
                             Reload (AIBundle _fp timestamp) -> Just timestamp
-                            Reload (AIData _) -> Nothing
-                            Terminate -> Nothing
+                            Reload (AIData _)               -> Nothing
+                            Terminate                       -> Nothing
                     writeTVar tstate $ ASStarting mRunningApp tmtimestamp tmnext
             return mnext
         case mnext of
-            Nothing -> return ()
+            Nothing   -> return ()
             Just next -> loop mRunningApp next
 
     processAction Nothing Terminate = return Nothing
@@ -254,3 +281,4 @@ getInputForBundle bundle = do
 
 terminateApp :: AppManager -> Appname -> IO ()
 terminateApp appMan appname = perform appMan (AINamed appname) Terminate
+

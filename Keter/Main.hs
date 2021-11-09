@@ -4,6 +4,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+
 module Keter.Main
     ( keter
     ) where
@@ -54,14 +55,24 @@ import           System.Posix.User         (getUserEntryForID,
 import qualified Filesystem.Path as FP (FilePath)
 import           Filesystem.Path.CurrentOS (encodeString)
 #endif
-
+import Keter.Cli
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
       -> IO ()
 keter input mkPlugins = withManagers input mkPlugins $ \kc hostman appMan log -> do
+    log LaunchCli
+    forM (kconfigCliPort kc) $ \port ->
+      launchCli (MkCliStates
+                { csAppManager = appMan
+                , csLog        = log
+                , csPort       = port
+                })
+    log LaunchInitial
     launchInitial kc appMan
+    log StartWatching
     startWatching kc appMan log
+    log StartListening
     startListening kc hostman
 
 -- | Load up Keter config.

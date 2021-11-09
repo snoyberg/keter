@@ -1,6 +1,11 @@
 ## 1.6
-
-
+* Make keter more chatty on boot.
+  This allows you to figure out in code where things go wrong.
+* Add opt-in debug CLI, allowing you to inspect keters' internal state.
+  You can activate it by specifying a cli-port.
+* Emit which pid is being killed by keter.
+  This helps with process leakage issues,
+  for example if the user launches from a bash script without using `exec`.
 
 ## 1.5
 

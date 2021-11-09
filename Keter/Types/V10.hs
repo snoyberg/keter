@@ -103,6 +103,8 @@ data KeterConfig = KeterConfig
     -- ^ Environment variables to be passed to all apps.
     , kconfigConnectionTimeBound :: !Int
     -- ^ Maximum request time in milliseconds per connection.
+    , kconfigCliPort             :: !(Maybe Port)
+    -- ^ Port for the cli to listen on
     }
 
 instance ToCurrent KeterConfig where
@@ -118,6 +120,7 @@ instance ToCurrent KeterConfig where
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = connectionTimeBound
+        , kconfigCliPort             = Nothing
         }
       where
         getSSL Nothing = V.empty
@@ -141,6 +144,7 @@ instance Default KeterConfig where
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = V04.fiveMinutes
+        , kconfigCliPort             = Nothing
         }
 
 instance ParseYamlFile KeterConfig where
@@ -161,6 +165,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "external-https-port" .!= 443
             <*> o .:? "env" .!= Map.empty
             <*> o .:? "connection-time-bound" .!= V04.fiveMinutes
+            <*> o .:? "cli-port"
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool

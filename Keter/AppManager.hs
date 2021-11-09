@@ -18,26 +18,26 @@ module Keter.AppManager
     ) where
 
 import           Control.Applicative
-import           Control.Concurrent        (forkIO)
-import           Control.Concurrent.MVar   (MVar, newMVar, withMVar)
+import           Control.Concurrent         (forkIO)
+import           Control.Concurrent.MVar    (MVar, newMVar, withMVar)
 import           Control.Concurrent.STM
-import qualified Control.Exception         as E
-import           Control.Monad             (void)
-import qualified Data.Map                  as Map
-import           Data.Maybe                (catMaybes, mapMaybe)
-import qualified Data.Set                  as Set
-import           Keter.App                 (App, AppStartConfig, showApp)
-import qualified Keter.App                 as App
+import qualified Control.Exception          as E
+import           Control.Monad              (void)
+import           Data.Foldable              (fold)
+import qualified Data.Map                   as Map
+import           Data.Maybe                 (catMaybes, mapMaybe)
+import qualified Data.Set                   as Set
+import           Data.Text                  (pack, unpack)
+import qualified Data.Text.Lazy             as LT
+import qualified Data.Text.Lazy.Builder     as Builder
+import           Data.Traversable.WithIndex (itraverse)
+import           Keter.App                  (App, AppStartConfig, showApp)
+import qualified Keter.App                  as App
 import           Keter.Types
-import           Prelude                   hiding (FilePath, log)
-import           System.Posix.Files        (getFileStatus, modificationTime)
-import           System.Posix.Types        (EpochTime)
-import           Text.Printf(printf)
-import           Data.Text(pack, unpack)
-import Data.Traversable.WithIndex(itraverse)
-import qualified Data.Text.Lazy.Builder as Builder
-import qualified Data.Text.Lazy as LT
-import Data.Foldable(fold)
+import           Prelude                    hiding (FilePath, log)
+import           System.Posix.Files         (getFileStatus, modificationTime)
+import           System.Posix.Types         (EpochTime)
+import           Text.Printf                (printf)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
@@ -102,7 +102,7 @@ reloadAppList am@AppManager {..} newApps = withMVar mutex $ const $ do
         fmap catMaybes $ mapM (getAction m) allApps
     sequence_ actions
   where
-    toAppName AIBuiltin = Nothing
+    toAppName AIBuiltin   = Nothing
     toAppName (AINamed x) = Just x
 
     getAction currentApps appname = do
@@ -133,7 +133,7 @@ reloadAppList am@AppManager {..} newApps = withMVar mutex $ const $ do
       where
         freshLaunch =
             case Map.lookup appname newApps of
-                Nothing -> E.assert False Nothing
+                Nothing              -> E.assert False Nothing
                 Just (fp, timestamp) -> reload fp timestamp
         terminate = Just $ performNoLock am (AINamed appname) Terminate
         reload fp timestamp = Just $ performNoLock am (AINamed appname) (Reload $ AIBundle fp timestamp)
@@ -202,7 +202,7 @@ performNoLock am@AppManager {..} aid action = E.mask_ $ do
                 tmtimestamp <- newTVar $
                     case input of
                         AIBundle _fp timestamp -> Just timestamp
-                        AIData _ -> Nothing
+                        AIData _               -> Nothing
                 tstate <- newTVar $ ASStarting Nothing tmtimestamp tmnext
                 modifyTVar apps $ Map.insert aid tstate
                 return $ launchWorker am aid tstate tmnext Nothing action
@@ -232,12 +232,12 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
                     tmtimestamp <- newTVar $
                         case action of
                             Reload (AIBundle _fp timestamp) -> Just timestamp
-                            Reload (AIData _) -> Nothing
-                            Terminate -> Nothing
+                            Reload (AIData _)               -> Nothing
+                            Terminate                       -> Nothing
                     writeTVar tstate $ ASStarting mRunningApp tmtimestamp tmnext
             return mnext
         case mnext of
-            Nothing -> return ()
+            Nothing   -> return ()
             Just next -> loop mRunningApp next
 
     processAction Nothing Terminate = return Nothing

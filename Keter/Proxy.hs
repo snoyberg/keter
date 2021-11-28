@@ -56,6 +56,7 @@ import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import qualified Network.TLS.SessionManager        as TLSSession
 import           Network.Wai.Middleware.Gzip       (gzip, GzipSettings(..), GzipFiles(..))
+import           Network.Wai.Request               (appearsSecure)
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
 import qualified Network.TLS as TLS
@@ -159,7 +160,7 @@ withClient isSecure useHeader bound manager hostLookup =
         case mport of
             Nothing -> return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host)
             Just ((action, requiresSecure), _)
-                | requiresSecure && not isSecure -> performHttpsRedirect host req
+                | requiresSecure && not (isSecure || appearsSecure req) -> performHttpsRedirect host req
                 | otherwise -> performAction req action
 
     performHttpsRedirect host =

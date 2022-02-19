@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -17,9 +18,20 @@ import Data.Yaml (decodeFileEither, ParseException (AesonException), parseJSON)
 import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord, fail, FilePath)
 import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
 import Data.Text (Text, unpack)
+import qualified Data.Aeson.Key as K
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import System.FilePath (takeDirectory, (</>))
+
+#if MIN_VERSION_aeson (2,0,0)
+toKey :: Text -> K.Key
+toKey = K.fromText
+
+#else
+toKey :: Text -> Text
+toKey = id
+
+#endif
 
 -- | The directory from which we're reading the config file.
 newtype BaseDir = BaseDir FilePath
@@ -42,12 +54,12 @@ decodeFileRelative fp = do
 -- | A replacement for the @.:@ operator which will both parse a file path and
 -- apply the relative file logic.
 lookupBase :: ParseYamlFile a => BaseDir -> Object -> Text -> Parser a
-lookupBase basedir o t = (o .: t) >>= parseYamlFile basedir
+lookupBase basedir o t = (o .: (toKey t)) >>= parseYamlFile basedir
 
 -- | A replacement for the @.:?@ operator which will both parse a file path and
 -- apply the relative file logic.
 lookupBaseMaybe :: ParseYamlFile a => BaseDir -> Object -> Text -> Parser (Maybe a)
-lookupBaseMaybe basedir o t = (o .:? t) >>= maybe (return Nothing) ((Just <$>) . parseYamlFile basedir)
+lookupBaseMaybe basedir o t = (o .:? (toKey t)) >>= maybe (return Nothing) ((Just <$>) . parseYamlFile basedir)
 
 -- | A replacement for the standard @FromJSON@ typeclass which can handle relative filepaths.
 class ParseYamlFile a where

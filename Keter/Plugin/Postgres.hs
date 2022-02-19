@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 module Keter.Plugin.Postgres
@@ -18,7 +19,13 @@ import           Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
 import qualified Data.Char                 as C
 import           Data.Default
-import qualified Data.HashMap.Strict       as HMap
+#if MIN_VERSION_aeson(2,0,0)
+import qualified Data.Aeson.KeyMap         as KeyMap
+#else
+import qualified Data.HashMap.Strict       as KeyMap
+#endif
+
+
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
 import           Data.Monoid               ((<>))
@@ -135,7 +142,7 @@ load Settings{..} fp = do
         void $ forkIO $ flip S.evalStateT (db0, g0) $ forever $ loop chan
         return Plugin
             { pluginGetEnv = \appname o ->
-                case HMap.lookup "postgres" o of
+                case KeyMap.lookup "postgres" o of
                     Just (Array v) -> do
                         let dbServer = fromMaybe def . parseMaybe parseJSON $ V.head v
                         doenv chan appname dbServer

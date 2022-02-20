@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
 
 module Keter.Types.Middleware where
@@ -27,31 +26,7 @@ import Data.ByteString  as S (ByteString)
 import Data.Text.Lazy.Encoding as TL (encodeUtf8, decodeUtf8)
 import Data.Text.Encoding as T (encodeUtf8, decodeUtf8)
 import Data.String (fromString)
-
-#if MIN_VERSION_aeson (2,0,0)
-import qualified Data.Aeson.Key as K
-import qualified Data.Aeson.KeyMap as M
-import qualified Data.Text as Text
-import qualified Data.ByteString.Char8 as C8 (unpack)
-import qualified Data.ByteString.Lazy.Char8 as CL8 (unpack)
-
-
-toKey :: Text.Text -> K.Key
-toKey = K.fromText
-
-fromKey :: K.Key -> Text.Text
-fromKey = K.toText
-
-#else
-import qualified Data.HashMap.Strict as M
-
-toKey :: Text.Text -> Text.Text
-toKey = id
-
-fromKey :: Text.Text -> Text.Text
-fromKey = id
-
-#endif
+import qualified Data.Aeson.KeyHelper as AK (toKey, toText, toList, empty)
 
 data MiddlewareConfig = AcceptOverride
                       | Autohead
@@ -72,10 +47,10 @@ instance FromJSON MiddlewareConfig where
   parseJSON (String "method-override"     ) = pure MethodOverride
   parseJSON (String "method-override-post") = pure MethodOverridePost
   parseJSON (Object o) =
-     case M.toList o of
+     case AK.toList o of
       [("basic-auth", Object ( o'))] -> BasicAuth  <$> o' .:? "realm" .!= "keter"
-                                                <*> (map ((T.encodeUtf8 . fromKey) *** T.encodeUtf8) . M.toList <$> o' .:? "creds"   .!= M.empty)
-      [("headers"   , Object _ )]    -> AddHeaders . map ((T.encodeUtf8. fromKey) *** T.encodeUtf8) . M.toList <$> o  .:? "headers" .!= M.empty
+                                                <*> (map ((T.encodeUtf8 . AK.toText) *** T.encodeUtf8) . AK.toList <$> o' .:? "creds"   .!= AK.empty)
+      [("headers"   , Object _ )]    -> AddHeaders . map ((T.encodeUtf8 . AK.toText) *** T.encodeUtf8) . AK.toList <$> o  .:? "headers" .!= AK.empty
       [("local"     , Object o')] -> Local  <$> o' .:? "status" .!=  401
                                             <*> (TL.encodeUtf8 <$> o' .:? "message" .!= "Unauthorized Accessing from Localhost ONLY" )
       _                      -> mzero -- fail "Rule: unexpected format"
@@ -88,10 +63,10 @@ instance ToJSON MiddlewareConfig where
   toJSON MethodOverride     = "method-override"
   toJSON MethodOverridePost = "method-override-post"
   toJSON (BasicAuth realm cred) = object [ "basic-auth" .= object [ "realm" .= realm
-                                                                  , "creds" .= object ( map ( (toKey. T.decodeUtf8) *** (String . T.decodeUtf8)) cred )
+                                                                  , "creds" .= object ( map ( (AK.toKey . T.decodeUtf8) *** (String . T.decodeUtf8)) cred )
                                                                   ]
                                          ]
-  toJSON (AddHeaders headers)   = object [ "headers"    .= object ( map ((toKey . T.decodeUtf8) *** String . T.decodeUtf8) headers)  ]
+  toJSON (AddHeaders headers)   = object [ "headers"    .= object ( map ((AK.toKey . T.decodeUtf8) *** String . T.decodeUtf8) headers)  ]
   toJSON (Local sc msg)         = object [ "local"      .= object [ "status" .= sc
                                                                   , "message" .=  TL.decodeUtf8 msg 
                                                                   ]

@@ -16,6 +16,7 @@ module Data.Yaml.FilePath
 import Control.Applicative ((<$>))
 import Data.Yaml (decodeFileEither, ParseException (AesonException), parseJSON)
 import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord, fail, FilePath)
+import Data.Aeson.KeyHelper as AK
 import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
 import Data.Text (Text, unpack)
 import qualified Data.Aeson.Key as K
@@ -54,12 +55,16 @@ decodeFileRelative fp = do
 -- | A replacement for the @.:@ operator which will both parse a file path and
 -- apply the relative file logic.
 lookupBase :: ParseYamlFile a => BaseDir -> Object -> Text -> Parser a
-lookupBase basedir o t = (o .: (toKey t)) >>= parseYamlFile basedir
+lookupBase basedir o k = (o .: k') >>= parseYamlFile basedir
+  where
+    k' = AK.toKey k
 
 -- | A replacement for the @.:?@ operator which will both parse a file path and
 -- apply the relative file logic.
 lookupBaseMaybe :: ParseYamlFile a => BaseDir -> Object -> Text -> Parser (Maybe a)
-lookupBaseMaybe basedir o t = (o .:? (toKey t)) >>= maybe (return Nothing) ((Just <$>) . parseYamlFile basedir)
+lookupBaseMaybe basedir o k = (o .:? k') >>= maybe (return Nothing) ((Just <$>) . parseYamlFile basedir)
+  where
+    k' = AK.toKey k
 
 -- | A replacement for the standard @FromJSON@ typeclass which can handle relative filepaths.
 class ParseYamlFile a where

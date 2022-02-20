@@ -1,10 +1,8 @@
-## 1.7.1
+## 1.7
 
 * Add support Aeson 2.*
-  Add `Data.Aeson.KeyHelper.hs` in cabal file.
-  And use the module where Aeson has changed how to handle Key and KeyMap.
-
-## 1.7
+* Add `Data.Aeson.KeyHelper.hs` in cabal file.
+* And use the module where Aeson has changed how to handle Key and KeyMap.
 
 ## 1.6
 * Make keter more chatty on boot.

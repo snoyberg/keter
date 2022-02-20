@@ -10,10 +10,10 @@ import           Data.Aeson                        (FromJSON (..), ToJSON (..), 
                                                     Value (Object, String, Bool),
                                                     withObject, (.!=), (.:),
                                                     (.:?), object, (.=))
+import           Data.Aeson.KeyHelper              as AK (lookup, singleton, empty, insert)
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
 import           Data.Default
-import qualified Data.HashMap.Strict               as HashMap
 import qualified Data.Map                          as Map
 import           Data.Maybe                        (catMaybes, fromMaybe, isJust)
 import qualified Data.Set                          as Set
@@ -45,20 +45,20 @@ instance ToCurrent BundleConfig where
             , V.fromList $ map (flip Stanza False . StanzaRedirect . toCurrent) $ Set.toList redirs
             ]
         , bconfigPlugins =
-            case webapp >>= HashMap.lookup "postgres" . V04.configRaw of
-                Just (Bool True) -> HashMap.singleton "postgres" (Bool True)
-                _ -> HashMap.empty
+            case webapp >>= AK.lookup "postgres" . V04.configRaw of
+                Just (Bool True) -> AK.singleton "postgres" (Bool True)
+                _ -> AK.empty
         }
 
 instance ParseYamlFile BundleConfig where
     parseYamlFile basedir = withObject "BundleConfig" $ \o ->
-        case HashMap.lookup "stanzas" o of
+        case AK.lookup "stanzas" o of
             Nothing -> (toCurrent :: V04.BundleConfig -> BundleConfig) <$> parseYamlFile basedir (Object o)
             Just _ -> current o
       where
         current o = BundleConfig
             <$> lookupBase basedir o "stanzas"
-            <*> o .:? "plugins" .!= HashMap.empty
+            <*> o .:? "plugins" .!= AK.empty
 
 instance ToJSON BundleConfig where
     toJSON BundleConfig {..} = object
@@ -149,7 +149,7 @@ instance Default KeterConfig where
 
 instance ParseYamlFile KeterConfig where
     parseYamlFile basedir = withObject "KeterConfig" $ \o ->
-        case HashMap.lookup "listeners" o of
+        case AK.lookup "listeners" o of
             Just _ -> current o
             Nothing -> old o <|> current o
       where
@@ -219,7 +219,7 @@ instance ToJSON (Stanza ()) where
 addRequiresSecure :: ToJSON a => Bool -> a -> Value
 addRequiresSecure rs x =
     case toJSON x of
-        Object o -> Object $ HashMap.insert "requires-secure" (toJSON rs) o
+        Object o -> Object $ AK.insert "requires-secure" (toJSON rs) o
         v -> v
 
 instance ToJSON (StanzaRaw ()) where
@@ -232,7 +232,7 @@ instance ToJSON (StanzaRaw ()) where
 addStanzaType :: ToJSON a => Value -> a -> Value
 addStanzaType t x =
     case toJSON x of
-        Object o -> Object $ HashMap.insert "type" t o
+        Object o -> Object $ AK.insert "type" t o
         v -> v
 
 data StaticFilesConfig = StaticFilesConfig
@@ -323,7 +323,7 @@ instance ToJSON RedirectAction where
             Object o ->
                 case path of
                     SPAny -> Object o
-                    SPSpecific x -> Object $ HashMap.insert "path" (String x) o
+                    SPSpecific x -> Object $ AK.insert "path" (String x) o
             v -> v
 
 data SourcePath = SPAny

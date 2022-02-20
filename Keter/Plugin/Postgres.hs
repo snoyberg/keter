@@ -9,6 +9,7 @@ module Keter.Plugin.Postgres
     ) where
 
 import           Control.Applicative       ((<$>), (<*>), pure)
+import           Data.Aeson.KeyHelper      as AK (lookup)
 import           Control.Concurrent        (forkIO)
 import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar
@@ -18,7 +19,6 @@ import           Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
 import qualified Data.Char                 as C
 import           Data.Default
-import qualified Data.HashMap.Strict       as HMap
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
 import           Data.Monoid               ((<>))
@@ -135,7 +135,7 @@ load Settings{..} fp = do
         void $ forkIO $ flip S.evalStateT (db0, g0) $ forever $ loop chan
         return Plugin
             { pluginGetEnv = \appname o ->
-                case HMap.lookup "postgres" o of
+                case AK.lookup "postgres" o of
                     Just (Array v) -> do
                         let dbServer = fromMaybe def . parseMaybe parseJSON $ V.head v
                         doenv chan appname dbServer

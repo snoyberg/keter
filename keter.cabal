@@ -91,6 +91,7 @@ Library
                        Keter.HostManager
                        Network.HTTP.ReverseProxy.Rewrite
                        Data.Yaml.FilePath
+                       Data.Aeson.KeyHelper
                        Codec.Archive.TempTarball
                        Data.Conduit.LogFile
                        Data.Conduit.Process.Unix

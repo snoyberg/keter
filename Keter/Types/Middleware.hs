@@ -26,7 +26,7 @@ import Data.ByteString  as S (ByteString)
 import Data.Text.Lazy.Encoding as TL (encodeUtf8, decodeUtf8)
 import Data.Text.Encoding as T (encodeUtf8, decodeUtf8)
 import Data.String (fromString)
-import qualified Data.HashMap.Strict as H
+import qualified Data.Aeson.KeyHelper as AK (toKey, toText, toList, empty)
 
 data MiddlewareConfig = AcceptOverride
                       | Autohead
@@ -47,10 +47,10 @@ instance FromJSON MiddlewareConfig where
   parseJSON (String "method-override"     ) = pure MethodOverride
   parseJSON (String "method-override-post") = pure MethodOverridePost
   parseJSON (Object o) =
-     case H.toList o of
+     case AK.toList o of
       [("basic-auth", Object ( o'))] -> BasicAuth  <$> o' .:? "realm" .!= "keter"
-                                                <*> (map (T.encodeUtf8 *** T.encodeUtf8) . H.toList <$> o' .:? "creds"   .!= H.empty)
-      [("headers"   , Object _ )]    -> AddHeaders . map (T.encodeUtf8 *** T.encodeUtf8) . H.toList <$> o  .:? "headers" .!= H.empty
+                                                <*> (map ((T.encodeUtf8 . AK.toText) *** T.encodeUtf8) . AK.toList <$> o' .:? "creds"   .!= AK.empty)
+      [("headers"   , Object _ )]    -> AddHeaders . map ((T.encodeUtf8 . AK.toText) *** T.encodeUtf8) . AK.toList <$> o  .:? "headers" .!= AK.empty
       [("local"     , Object o')] -> Local  <$> o' .:? "status" .!=  401
                                             <*> (TL.encodeUtf8 <$> o' .:? "message" .!= "Unauthorized Accessing from Localhost ONLY" )
       _                      -> mzero -- fail "Rule: unexpected format"
@@ -63,10 +63,10 @@ instance ToJSON MiddlewareConfig where
   toJSON MethodOverride     = "method-override"
   toJSON MethodOverridePost = "method-override-post"
   toJSON (BasicAuth realm cred) = object [ "basic-auth" .= object [ "realm" .= realm
-                                                                  , "creds" .= object ( map ( T.decodeUtf8 *** (String . T.decodeUtf8)) cred )
+                                                                  , "creds" .= object ( map ( (AK.toKey . T.decodeUtf8) *** (String . T.decodeUtf8)) cred )
                                                                   ]
                                          ]
-  toJSON (AddHeaders headers)   = object [ "headers"    .= object ( map (T.decodeUtf8 *** String . T.decodeUtf8) headers)  ]
+  toJSON (AddHeaders headers)   = object [ "headers"    .= object ( map ((AK.toKey . T.decodeUtf8) *** String . T.decodeUtf8) headers)  ]
   toJSON (Local sc msg)         = object [ "local"      .= object [ "status" .= sc
                                                                   , "message" .=  TL.decodeUtf8 msg 
                                                                   ]

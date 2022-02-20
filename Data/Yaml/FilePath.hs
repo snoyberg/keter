@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeSynonymInstances #-}
 {-# LANGUAGE FlexibleInstances #-}
@@ -23,16 +22,6 @@ import qualified Data.Aeson.Key as K
 import qualified Data.Set as Set
 import qualified Data.Vector as V
 import System.FilePath (takeDirectory, (</>))
-
-#if MIN_VERSION_aeson (2,0,0)
-toKey :: Text -> K.Key
-toKey = K.fromText
-
-#else
-toKey :: Text -> Text
-toKey = id
-
-#endif
 
 -- | The directory from which we're reading the config file.
 newtype BaseDir = BaseDir FilePath

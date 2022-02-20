@@ -1,3 +1,9 @@
+## 1.7.1
+
+* Add support Aeson 2.*
+  Add `Data.Aeson.KeyHelper.hs` in cabal file.
+  And use the module where Aeson has changed how to handle Key and KeyMap.
+
 ## 1.7
 
 ## 1.6

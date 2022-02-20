@@ -31,11 +31,3 @@ toText :: Text.Text -> Text.Text
 toText = id
 
 #endif
-
-{-
-empty = KeyMap.empty
-toList = KeyMap.toList
-lookup = KeyMap.lookup
-singleton = KeyMap.singleton
-insert = KeyMap.insert
--}

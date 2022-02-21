@@ -173,6 +173,48 @@ Finally, start the job for the first time:
     sudo start keter
 
 
+### NixOS 
+Add a nix file `keter.nix` that fetches this repository and imports
+the module file:
+```nix
+let
+  owner = "snoyberg";
+  repo = "keter";
+  rev = "be4e3132e988519dacd0f9b40a47e23d33865b76";
+
+  src = builtins.fetchTarball {
+    url = "https://github.com/${owner}/${repo}/archive/${rev}.tar.gz";
+    };
+in
+import "${src}/nix/module.nix"
+```
+Make sure to update rev to the latest commit!
+Now you can import this as an ordinary module
+in your `configuration.nix`:
+```nix
+imports = [
+  ./keter.nix
+];
+```
+
+Now you can configure keter in the same `configuration.nix`:
+```nix
+services.keter = {
+  enable = true;
+  keterPackage = pkgs.keter;
+  bundle = {
+    domain = "example.com";
+    secretScript = env.secretScript;
+    publicScript = env.publicScript;
+    package = myWebAppDerivation;
+    executable = "exe";
+  };
+};
+```
+For the full option list available see `nix/module.nix`.
+This should load most webapps but PR's for improved support are welcome.
+Note that the default expects keter to be run behind nginx.
+    
 ## Bundles
 
 An application needs to be set up as a keter bundle. This is a GZIPed tarball
@@ -385,6 +427,24 @@ download this repository and build it using stack.
         or disable HTTPS, by commenting the key and certificate lines from
         `/opt/keter/etc/keter-config.yaml`.
 
+
+## Debugging
+There is a debug port option available in the global keter config:
+```yaml
+cli-port = 1234
+```
+
+This allows you to attach netcat to that port, and introspect
+which processes are running within keter:
+```bash
+nc localhost 1234
+```
+Then type `--help` for options, currently it can only list
+the apps, but this approach is easily extensible
+if you need additional debug information.
+
+This option is disabled by default, but can be useful to
+figure out what keter is doing.
 
 ## Contributing
 

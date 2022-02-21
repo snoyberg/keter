@@ -61,13 +61,26 @@ in
         publicScript = lib.mkOption {
             type = lib.types.str;
             default = "";
-            description = ''Allows loading of public environment variables'';
+            description = ''
+                Allows loading of public environment variables,
+                these are emitted to the log so it shouldn't contain secrets.
+                For example:
+                ```
+                ADMIN_EMAIL=hi@example.com
+                ```
+            '';
         };
 
         secretScript = lib.mkOption {
             type = lib.types.str;
             default = "";
-            description = ''Allows loading of private environment variables'';
+            description = ''
+                Allows loading of private environment variables,
+                for example:
+                ```
+                MY_AWS_KEY=$(cat /run/keys/AWS_ACCESS_KEY_ID)
+                ```
+                '';
         };
 
         # This indirection is required to ensure the nix path

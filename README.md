@@ -211,6 +211,14 @@ services.keter = {
   };
 };
 ```
+
+secretScript is used to load environment varialbes, for example:
+```
+MY_AWS_KEY=$(cat /run/keys/AWS_ACCESS_KEY_ID)
+```
+Public script does the same but emits the loading to the logs.
+which isn't good for secrets.
+
 For the full option list available see `nix/module.nix`.
 This should load most webapps but PR's for improved support are welcome.
 Note that the default expects keter to be run behind nginx.

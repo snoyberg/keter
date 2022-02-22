@@ -1,3 +1,10 @@
+## 1.8
+
++ Add NixOS support
++ Describe debug port in readme.
++ Improve ensure alive error message due to 
+  https://github.com/snoyberg/keter/issues/236
+
 ## 1.7
 
 * Add support Aeson 2.*

@@ -357,7 +357,9 @@ ensureAlive RunningWebApp {..} = do
     didAnswer <- testApp rwaPort
     if didAnswer
         then return ()
-        else error "ensureAlive failed"
+        else error $ "ensureAlive failed, this means keter couldn't " <>
+                      "detect your app at port " <> show rwaPort <>
+                      ", check your app logs" -- TODO domain name would be good to add as well
   where
     testApp :: Port -> IO Bool
     testApp port = do

@@ -88,10 +88,10 @@ makeSettings psConfig@KeterConfig {..} hostman = do
     psManager <- HTTP.newManager HTTP.tlsManagerSettings
     psMissingHost <- case kconfigMissingHostResponse of
       Nothing -> pure defaultMissingHostBody
-      Just x -> taggedReadFile "kconfigMissingHostResponse" x
+      Just x -> taggedReadFile "unknown-host-response-file" x
     psUnkownHost <- case kconfigUnknownHostResponse  of
                 Nothing -> pure defaultUnknownHostBody
-                Just x -> const <$> taggedReadFile "kconfigUnknownHostResponse" x
+                Just x -> const <$> taggedReadFile "missing-host-response-file" x
     pure $ MkProxySettings{..}
     where
         psHostLookup = HostMan.lookupAction hostman . CI.mk

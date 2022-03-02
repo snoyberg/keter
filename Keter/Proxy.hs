@@ -5,10 +5,14 @@
 -- | A light-weight, minimalistic reverse HTTP proxy.
 module Keter.Proxy
     ( reverseProxy
-    , HostLookup
+    , makeSettings
+    , ProxySettings(..)
     , TLSConfig (..)
     ) where
 
+import qualified Network.HTTP.Conduit      as HTTP
+import qualified Data.CaseInsensitive      as CI
+import qualified Keter.HostManager         as HostMan
 import           Blaze.ByteString.Builder          (copyByteString)
 import           Control.Applicative               ((<$>), (<|>))
 import           Control.Monad.IO.Class            (liftIO)
@@ -59,6 +63,7 @@ import           Network.Wai.Middleware.Gzip       (gzip, GzipSettings(..), Gzip
 import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
 import qualified Network.TLS as TLS
+import qualified System.Directory as Dir
 
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
 defaultWaiProxySettings = def
@@ -69,25 +74,51 @@ defaultLocalWaiProxySettings = def
 #endif
 
 
--- | Mapping from virtual hostname to port number.
-type HostLookup = ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
+data ProxySettings = MkProxySettings
+  -- | Mapping from virtual hostname to port number.
+  { psHostLookup  :: ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
+  , psManager     :: !Manager
+  , psConfig      :: !KeterConfig
+  , psUnkownHost  :: ByteString -> ByteString
+  , psMissingHost :: ByteString
+  }
 
-reverseProxy :: KeterConfig -> Manager -> HostLookup -> ListeningPort -> IO ()
-reverseProxy config manager hostLookup listener =
-    run $ gzip def{gzipFiles = GzipPreCompressed GzipIgnore} $ withClient isSecure config manager hostLookup
+makeSettings :: KeterConfig -> HostMan.HostManager -> IO ProxySettings
+makeSettings psConfig@KeterConfig {..} hostman = do
+    psManager <- HTTP.newManager HTTP.tlsManagerSettings
+    psMissingHost <- case kconfigMissingHostResponse of
+      Nothing -> pure defaultMissingHostBody
+      Just x -> taggedReadFile "kconfigMissingHostResponse" x
+    psUnkownHost <- case kconfigUnknownHostResponse  of
+                Nothing -> pure defaultUnknownHostBody
+                Just x -> const <$> taggedReadFile "kconfigUnknownHostResponse" x
+    pure $ MkProxySettings{..}
+    where
+        psHostLookup = HostMan.lookupAction hostman . CI.mk
+
+taggedReadFile :: String -> FilePath -> IO ByteString
+taggedReadFile tag file = do
+        isExist <- Dir.doesFileExist file
+        if isExist then S.readFile file else do
+          wd <- Dir.getCurrentDirectory
+          error $ "could not find " <> tag <> " on path '" <> file <> "' with working dir '" <> wd <> "'"
+
+reverseProxy :: ProxySettings -> ListeningPort -> IO ()
+reverseProxy settings listener =
+    run $ gzip def{gzipFiles = GzipPreCompressed GzipIgnore} $ withClient isSecure settings
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     (run, isSecure) =
         case listener of
             LPInsecure host port -> (Warp.runSettings (warp host port), False)
             LPSecure host port cert chainCerts key session -> (WarpTLS.runTLS
-                (connectClientCertificates hostLookup session $ WarpTLS.tlsSettingsChain
+                (connectClientCertificates (psHostLookup settings) session $ WarpTLS.tlsSettingsChain
                     cert
                     (V.toList chainCerts)
                     key)
                 (warp host port), True)
 
-connectClientCertificates :: HostLookup -> Bool -> WarpTLS.TLSSettings -> WarpTLS.TLSSettings
+connectClientCertificates :: (ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))) -> Bool -> WarpTLS.TLSSettings -> WarpTLS.TLSSettings
 connectClientCertificates hl session s =
     let
         newHooks@TLS.ServerHooks{..} = WarpTLS.tlsServerHooks s
@@ -101,11 +132,9 @@ connectClientCertificates hl session s =
           , WarpTLS.tlsSessionManagerConfig = if session then (Just TLSSession.defaultConfig) else Nothing }
 
 withClient :: Bool -- ^ is secure?
-           -> KeterConfig
-           -> Manager
-           -> HostLookup
+           -> ProxySettings
            -> Wai.Application
-withClient isSecure KeterConfig {..} manager hostLookup =
+withClient isSecure MkProxySettings {..} =
     waiProxyToSettings
        (error "First argument to waiProxyToSettings forced, even thought wpsGetDest provided")
        defaultWaiProxySettings
@@ -114,15 +143,15 @@ withClient isSecure KeterConfig {..} manager hostLookup =
                 then SIHFromHeader
                 else SIHFromSocket
         ,  wpsGetDest = Just getDest
-        } manager
+        } psManager
   where
     useHeader :: Bool
-    useHeader = kconfigIpFromHeader
+    useHeader = kconfigIpFromHeader psConfig
 
     -- calculate the number of microseconds since the
     -- configuration option is in milliseconds
     bound :: Int
-    bound = (kconfigConnectionTimeBound * 1000)
+    bound = kconfigConnectionTimeBound psConfig * 1000
     protocol
         | isSecure = "https"
         | otherwise = "http"
@@ -146,10 +175,7 @@ withClient isSecure KeterConfig {..} manager hostLookup =
     getDest req =
         case Wai.requestHeaderHost req of
             Nothing -> do
-              missingBody <- case kconfigMissingHostResponse of
-                Nothing -> pure defaultMissingHostBody
-                Just x -> S.readFile x
-              return (defaultLocalWaiProxySettings, WPRResponse $ missingHostResponse missingBody )
+              return (defaultLocalWaiProxySettings, WPRResponse $ missingHostResponse psMissingHost)
             Just host -> processHost req host
 
     processHost :: Wai.Request -> S.ByteString -> IO (LocalWaiProxySettings, WaiProxyResponse)
@@ -157,20 +183,17 @@ withClient isSecure KeterConfig {..} manager hostLookup =
         -- Perform two levels of lookup. First: look up the entire host. If
         -- that fails, try stripping off any port number and try again.
         mport <- liftIO $ do
-            mport1 <- hostLookup host
+            mport1 <- psHostLookup host
             case mport1 of
                 Just _ -> return mport1
                 Nothing -> do
                     let host' = S.takeWhile (/= 58) host
                     if host' == host
                         then return Nothing
-                        else hostLookup host'
+                        else psHostLookup host'
         case mport of
             Nothing -> do
-              unkownBody <- case kconfigUnknownHostResponse  of
-                Nothing -> pure $ defaultUnknownHostBody host
-                Just x -> S.readFile x
-              return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host unkownBody)
+              return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host (psUnkownHost host))
             Just ((action, requiresSecure), _)
                 | requiresSecure && not isSecure -> performHttpsRedirect host req
                 | otherwise -> performAction req action
@@ -203,7 +226,10 @@ withClient isSecure KeterConfig {..} manager hostLookup =
             })
     performAction req (PARedirect config) = return (addjustGlobalBound Nothing, WPRResponse $ redirectApp config req)
     performAction _ (PAReverseProxy config rpconfigMiddleware tbound) =
-       return (addjustGlobalBound tbound, WPRApplication $ processMiddleware rpconfigMiddleware $ Rewrite.simpleReverseProxy manager config)
+       return (addjustGlobalBound tbound, WPRApplication
+                $ processMiddleware rpconfigMiddleware
+                $ Rewrite.simpleReverseProxy psManager config
+              )
 
 redirectApp :: RedirectConfig -> Wai.Request -> Wai.Response
 redirectApp RedirectConfig {..} req =

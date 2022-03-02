@@ -221,13 +221,10 @@ listDirectoryTree fp = do
            ) (filter (\x -> x /= "." && x /= "..") dir)
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
-startListening KeterConfig {..} hostman = do
+startListening config hostman = do
     manager <- HTTP.newManager HTTP.tlsManagerSettings
-    runAndBlock kconfigListeners $ Proxy.reverseProxy
-        kconfigIpFromHeader
-        -- calculate the number of microseconds since the
-        -- configuration option is in milliseconds
-        (kconfigConnectionTimeBound * 1000)
+    runAndBlock (kconfigListeners config) $ Proxy.reverseProxy
+        config
         manager
         (HostMan.lookupAction hostman . CI.mk)
 

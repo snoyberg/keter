@@ -72,10 +72,9 @@ defaultLocalWaiProxySettings = def
 -- | Mapping from virtual hostname to port number.
 type HostLookup = ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
 
-reverseProxy :: Bool
-             -> Int -> Manager -> HostLookup -> ListeningPort -> IO ()
-reverseProxy useHeader timeBound manager hostLookup listener =
-    run $ gzip def{gzipFiles = GzipPreCompressed GzipIgnore} $ withClient isSecure useHeader timeBound manager hostLookup
+reverseProxy :: KeterConfig -> Manager -> HostLookup -> ListeningPort -> IO ()
+reverseProxy config manager hostLookup listener =
+    run $ gzip def{gzipFiles = GzipPreCompressed GzipIgnore} $ withClient isSecure config manager hostLookup
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
     (run, isSecure) =
@@ -102,12 +101,11 @@ connectClientCertificates hl session s =
           , WarpTLS.tlsSessionManagerConfig = if session then (Just TLSSession.defaultConfig) else Nothing }
 
 withClient :: Bool -- ^ is secure?
-           -> Bool -- ^ use incoming request header for IP address
-           -> Int  -- ^ time bound for connections
+           -> KeterConfig
            -> Manager
            -> HostLookup
            -> Wai.Application
-withClient isSecure useHeader bound manager hostLookup =
+withClient isSecure KeterConfig {..} manager hostLookup =
     waiProxyToSettings
        (error "First argument to waiProxyToSettings forced, even thought wpsGetDest provided")
        defaultWaiProxySettings
@@ -118,6 +116,13 @@ withClient isSecure useHeader bound manager hostLookup =
         ,  wpsGetDest = Just getDest
         } manager
   where
+    useHeader :: Bool
+    useHeader = kconfigIpFromHeader
+
+    -- calculate the number of microseconds since the
+    -- configuration option is in milliseconds
+    bound :: Int
+    bound = (kconfigConnectionTimeBound * 1000)
     protocol
         | isSecure = "https"
         | otherwise = "http"
@@ -140,7 +145,11 @@ withClient isSecure useHeader bound manager hostLookup =
     getDest :: Wai.Request -> IO (LocalWaiProxySettings, WaiProxyResponse)
     getDest req =
         case Wai.requestHeaderHost req of
-            Nothing -> return (defaultLocalWaiProxySettings, WPRResponse missingHostResponse)
+            Nothing -> do
+              missingBody <- case kconfigMissingHostResponse of
+                Nothing -> pure defaultMissingHostBody
+                Just x -> S.readFile x
+              return (defaultLocalWaiProxySettings, WPRResponse $ missingHostResponse missingBody )
             Just host -> processHost req host
 
     processHost :: Wai.Request -> S.ByteString -> IO (LocalWaiProxySettings, WaiProxyResponse)
@@ -157,7 +166,11 @@ withClient isSecure useHeader bound manager hostLookup =
                         then return Nothing
                         else hostLookup host'
         case mport of
-            Nothing -> return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host)
+            Nothing -> do
+              unkownBody <- case kconfigUnkownHostResponse  of
+                Nothing -> pure $ defaultUnkownHostBody host
+                Just x -> S.readFile x
+              return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host unkownBody)
             Just ((action, requiresSecure), _)
                 | requiresSecure && not isSecure -> performHttpsRedirect host req
                 | otherwise -> performAction req action
@@ -233,16 +246,22 @@ redirectApp RedirectConfig {..} req =
         , Wai.rawQueryString req
         ]
 
-missingHostResponse :: Wai.Response
-missingHostResponse = Wai.responseBuilder
-    status200
-    [("Content-Type", "text/html; charset=utf-8")]
-    $ copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
+defaultMissingHostBody :: ByteString
+defaultMissingHostBody = "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
 
-unknownHostResponse :: ByteString -> Wai.Response
-unknownHostResponse host = Wai.responseBuilder
+missingHostResponse :: ByteString -> Wai.Response
+missingHostResponse missingHost = Wai.responseBuilder
     status200
     [("Content-Type", "text/html; charset=utf-8")]
-    (copyByteString "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
-     `mappend` copyByteString host
-     `mappend` copyByteString "</code>, is not recognized.</p></body></html>")
+    $ copyByteString missingHost
+
+defaultUnkownHostBody :: ByteString -> ByteString
+defaultUnkownHostBody host =
+  "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
+  <> host <> "</code>, is not recognized.</p></body></html>"
+
+unknownHostResponse :: ByteString -> ByteString -> Wai.Response
+unknownHostResponse host body = Wai.responseBuilder
+    status200
+    [("Content-Type", "text/html; charset=utf-8"), ("X-Forwarded-Host", host)]
+    (copyByteString body)

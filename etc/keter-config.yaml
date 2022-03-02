@@ -37,3 +37,13 @@ listeners:
 # Connection time bound in milliseconds, set to 0 to have no time bound,
 # i.e. keep connections alive indefinitely. Default value is 5 minutes.
 # connection-time-bound: 300000
+
+# replace the default keter responses with your company branding
+# If a host is requested that doesn't exist next to other apps
+# this response is used
+# missing-host-response-file: ./missing-host.html
+# If no hosts at all are available this file is used
+# unknown-host-response-file: ./unkown-host.html
+
+# set a debug port
+# cli-port: 1234

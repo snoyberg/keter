@@ -1,9 +1,19 @@
+## 1.9
+
 ## 1.8
 
 + Add NixOS support
 + Describe debug port in readme.
 + Improve ensure alive error message due to 
   https://github.com/snoyberg/keter/issues/236
++ Add `missing-host-response-file` and `unknown-host-response-file`
+  to the global keter config, which replace the default responses.
++ All missing-host responses will now fill the requested host in the
+  `X-Forwarded-Host: HOSTNAME` header, where HOSTNAME is the requested host.
+  This is done because the default response fills in the hostname.
+  Now javascript could potentially fix that by making another request
+  to itself.
++ Document missing configuration options in `etc/keter-config.yaml`
 
 ## 1.7
 

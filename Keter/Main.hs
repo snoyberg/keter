@@ -12,7 +12,6 @@ module Keter.Main
 import qualified Codec.Archive.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
 import           Control.Monad             (unless)
-import qualified Data.CaseInsensitive      as CI
 import qualified Data.Conduit.LogFile      as LogFile
 import           Data.Monoid               (mempty)
 import           Data.String               (fromString)
@@ -39,8 +38,6 @@ import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
 import           Data.Yaml.FilePath
-import qualified Network.HTTP.Conduit      as HTTP (tlsManagerSettings,
-                                                    newManager)
 import           Prelude                   hiding (FilePath, log)
 import           System.Directory          (createDirectoryIfMissing,
                                             createDirectoryIfMissing,
@@ -62,7 +59,7 @@ keter :: FilePath -- ^ root directory or config file
       -> IO ()
 keter input mkPlugins = withManagers input mkPlugins $ \kc hostman appMan log -> do
     log LaunchCli
-    forM (kconfigCliPort kc) $ \port ->
+    void $ forM (kconfigCliPort kc) $ \port ->
       launchCli (MkCliStates
                 { csAppManager = appMan
                 , csLog        = log
@@ -164,7 +161,7 @@ isKeter :: FilePath -> Bool
 isKeter fp = takeExtension fp == ".keter"
 
 startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO ()
-startWatching kc@KeterConfig {..} appMan log = do
+startWatching kc appMan log = do
     -- File system watching
     wm <- FSN.startManager
     _ <- FSN.watchTree wm (fromString incoming) (const True) $ \e -> do
@@ -221,15 +218,9 @@ listDirectoryTree fp = do
            ) (filter (\x -> x /= "." && x /= "..") dir)
 
 startListening :: KeterConfig -> HostMan.HostManager -> IO ()
-startListening KeterConfig {..} hostman = do
-    manager <- HTTP.newManager HTTP.tlsManagerSettings
-    runAndBlock kconfigListeners $ Proxy.reverseProxy
-        kconfigIpFromHeader
-        -- calculate the number of microseconds since the
-        -- configuration option is in milliseconds
-        (kconfigConnectionTimeBound * 1000)
-        manager
-        (HostMan.lookupAction hostman . CI.mk)
+startListening config hostman = do
+    settings <- Proxy.makeSettings config hostman
+    runAndBlock (kconfigListeners config) $ Proxy.reverseProxy settings
 
 runAndBlock :: NonEmptyVector a
             -> (a -> IO ())

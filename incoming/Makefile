@@ -12,7 +12,7 @@ CABAL_ARGS = --sandbox-config-file=$(PKGCONF)
 
 
 all: foo.keter foo1_0.keter websockets
-.PHONY: all
+.PHONY: all nc.keter
 
 # Simple targets
 foo: foo.keter

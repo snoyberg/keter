@@ -1,0 +1,25 @@
+name: "Nix"
+on:
+  pull_request:
+  push:
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2.3.1
+    - name: Local cache
+      uses: actions/cache@v2
+      with:
+        path: /nix/store
+        key: "${{ runner.os }}-nix-cache"
+    - uses: cachix/install-nix-action@v12
+      with:
+        nix_path: nixpkgs=channel:nixos-unstable
+    # - uses: cachix/cachix-action@v6
+    #   with:
+    #     name: jappie
+    #     signingKey: '${{ secrets.CACHIX_SIGNING_KEY }}'
+    #     # Only needed for private caches
+    #     #authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
+    # - run: nix-build nix/ci.nix
+    - run: nix-shell --run "echo OK"

@@ -106,7 +106,7 @@ data KeterConfig = KeterConfig
     , kconfigCliPort             :: !(Maybe Port)
     -- ^ Port for the cli to listen on
 
-    , kconfigUnkownHostResponse  :: !(Maybe F.FilePath)
+    , kconfigUnknownHostResponse  :: !(Maybe F.FilePath)
     , kconfigMissingHostResponse :: !(Maybe F.FilePath)
     }
 
@@ -124,7 +124,7 @@ instance ToCurrent KeterConfig where
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = connectionTimeBound
         , kconfigCliPort             = Nothing
-        , kconfigUnkownHostResponse  = Nothing
+        , kconfigUnknownHostResponse  = Nothing
         , kconfigMissingHostResponse = Nothing
         }
       where
@@ -150,7 +150,7 @@ instance Default KeterConfig where
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = V04.fiveMinutes
         , kconfigCliPort             = Nothing
-        , kconfigUnkownHostResponse  = Nothing
+        , kconfigUnknownHostResponse  = Nothing
         , kconfigMissingHostResponse = Nothing
         }
 
@@ -174,7 +174,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "connection-time-bound" .!= V04.fiveMinutes
             <*> o .:? "cli-port"
             <*> o .:? "missing-host-response-file"
-            <*> o .:? "unkown-host-response-file"
+            <*> o .:? "unknown-host-response-file"
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool

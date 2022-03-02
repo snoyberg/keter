@@ -167,8 +167,8 @@ withClient isSecure KeterConfig {..} manager hostLookup =
                         else hostLookup host'
         case mport of
             Nothing -> do
-              unkownBody <- case kconfigUnkownHostResponse  of
-                Nothing -> pure $ defaultUnkownHostBody host
+              unkownBody <- case kconfigUnknownHostResponse  of
+                Nothing -> pure $ defaultUnknownHostBody host
                 Just x -> S.readFile x
               return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host unkownBody)
             Just ((action, requiresSecure), _)
@@ -255,8 +255,8 @@ missingHostResponse missingHost = Wai.responseBuilder
     [("Content-Type", "text/html; charset=utf-8")]
     $ copyByteString missingHost
 
-defaultUnkownHostBody :: ByteString -> ByteString
-defaultUnkownHostBody host =
+defaultUnknownHostBody :: ByteString -> ByteString
+defaultUnknownHostBody host =
   "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
   <> host <> "</code>, is not recognized.</p></body></html>"
 

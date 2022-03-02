@@ -75,8 +75,8 @@ defaultLocalWaiProxySettings = def
 
 
 data ProxySettings = MkProxySettings
-  -- | Mapping from virtual hostname to port number.
-  { psHostLookup  :: ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
+  { -- | Mapping from virtual hostname to port number.
+    psHostLookup  :: ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
   , psManager     :: !Manager
   , psConfig      :: !KeterConfig
   , psUnkownHost  :: ByteString -> ByteString

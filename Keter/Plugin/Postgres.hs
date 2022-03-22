@@ -13,7 +13,7 @@ import           Data.Aeson.KeyHelper      as AK (lookup)
 import           Control.Concurrent        (forkIO)
 import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar
-import           Control.Exception         (throwIO, try)
+import           Control.Exception         (fromException, throwIO, try)
 import           Control.Monad             (forever, mzero, replicateM, void)
 import           Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
@@ -32,6 +32,9 @@ import           Prelude                   hiding (FilePath)
 import           System.Directory          (createDirectoryIfMissing,
                                             doesFileExist, renameFile)
 import           System.FilePath           (takeDirectory, (<.>))
+import           System.IO.Error           (annotateIOError,
+                                            ioeGetFileName,
+                                            isDoesNotExistError)
 import           System.Process            (readProcess)
 import qualified System.Random             as R
 
@@ -187,7 +190,13 @@ load Settings{..} fp = do
 
 edbiToEnv :: Either SomeException DBInfo
           -> IO [(Text, Text)]
-edbiToEnv (Left e) = throwIO e
+edbiToEnv (Left e) = case fromException e of
+                       Just e' -> if isDoesNotExistError e'
+                         && ioeGetFileName e' == Just "sudo"
+                         then throwIO $
+                         annotateIOError e' "\nWe are unable to find sudo in your local path, this could be because you don't have sudo installed. Sudo is necessary for keter to connect to postgres running on the local server.\nsudo" Nothing Nothing
+                         else throwIO e
+                       Nothing -> throwIO e
 edbiToEnv (Right dbi) = return
     [ ("PGHOST", dbServer $ dbiServer dbi)
     , ("PGPORT", T.pack . show . dbPort $ dbiServer dbi)

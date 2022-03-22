@@ -1,3 +1,7 @@
+## 1.9.1
+
++ Improve missing sudo error messages in postgres plugin.
+
 ## 1.9
 
 + Update status code of missing host responses.

@@ -290,7 +290,12 @@ defaultUnknownHostBody host =
 unknownHostResponse :: ByteString -> ByteString -> Wai.Response
 unknownHostResponse host body = Wai.responseBuilder
     status200
-    [("Content-Type", "text/html; charset=utf-8"), ("X-Forwarded-Host", host)]
+    [("Content-Type", "text/html; charset=utf-8"),
+     ("X-Forwarded-Host",
+      -- if an attacker manages to insert line breaks somehow,
+      -- this is also vulnerable.
+      escapeHtml host
+     )]
     (copyByteString body)
 
 escapeHtml :: ByteString -> ByteString

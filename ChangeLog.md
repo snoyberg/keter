@@ -1,3 +1,7 @@
+## 1.8.3
+
++ HTML escape X-forwarded-host response as well.
+
 ## 1.8.2 
 
 + Fix XSS issue in the default response for host not found.

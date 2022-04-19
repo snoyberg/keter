@@ -13,7 +13,8 @@ module Keter.Proxy
 import qualified Network.HTTP.Conduit      as HTTP
 import qualified Data.CaseInsensitive      as CI
 import qualified Keter.HostManager         as HostMan
-import           Blaze.ByteString.Builder          (copyByteString)
+import           Blaze.ByteString.Builder          (copyByteString, toByteString)
+import           Blaze.ByteString.Builder.Html.Word(fromHtmlEscapedByteString)
 import           Control.Applicative               ((<$>), (<|>))
 import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
@@ -284,10 +285,13 @@ missingHostResponse missingHost = Wai.responseBuilder
 defaultUnknownHostBody :: ByteString -> ByteString
 defaultUnknownHostBody host =
   "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
-  <> host <> "</code>, is not recognized.</p></body></html>"
+  <> escapeHtml host <> "</code>, is not recognized.</p></body></html>"
 
 unknownHostResponse :: ByteString -> ByteString -> Wai.Response
 unknownHostResponse host body = Wai.responseBuilder
     status200
     [("Content-Type", "text/html; charset=utf-8"), ("X-Forwarded-Host", host)]
     (copyByteString body)
+
+escapeHtml :: ByteString -> ByteString
+escapeHtml = toByteString . fromHtmlEscapedByteString

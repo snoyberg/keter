@@ -1,6 +1,6 @@
 ## 1.8.2 
 
-+ Fix XSS issue in the default response.
++ Fix XSS issue in the default response for host not found.
   (special thanks to Max @ulidtko for spotting and fixing this)
 
 ## 1.8.1

@@ -1,3 +1,8 @@
+## 1.8.2 
+
++ Fix XSS issue in the default response.
+  (special thanks to Max @ulidtko for spotting and fixing this)
+
 ## 1.8.1
 
 + Fix haddock build

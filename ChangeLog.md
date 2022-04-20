@@ -1,3 +1,8 @@
+## 1.9
+
++ Update status code of missing host responses.
+  They now emit a 502 on missing host, and 404 on host not found
+
 ## 1.8.4
 
 + Get rid of ominious warning at the top.

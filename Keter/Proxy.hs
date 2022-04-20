@@ -53,7 +53,7 @@ import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import           Network.HTTP.Types                (mkStatus, status200,
                                                     status301, status302,
                                                     status303, status307,
-                                                    status404)
+                                                    status404, status502)
 import qualified Network.Wai                       as Wai
 import           Network.Wai.Application.Static    (defaultFileServerSettings,
                                                     ssListing, staticApp)
@@ -278,7 +278,7 @@ defaultMissingHostBody = "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</
 
 missingHostResponse :: ByteString -> Wai.Response
 missingHostResponse missingHost = Wai.responseBuilder
-    status200
+    status502
     [("Content-Type", "text/html; charset=utf-8")]
     $ copyByteString missingHost
 
@@ -289,7 +289,7 @@ defaultUnknownHostBody host =
 
 unknownHostResponse :: ByteString -> ByteString -> Wai.Response
 unknownHostResponse host body = Wai.responseBuilder
-    status200
+    status404
     [("Content-Type", "text/html; charset=utf-8"),
      ("X-Forwarded-Host",
       -- if an attacker manages to insert line breaks somehow,

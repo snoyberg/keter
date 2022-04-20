@@ -1,3 +1,9 @@
+## 1.8.4
+
++ Get rid of ominious warning at the top.
+  Thanks to /u/Opposite-Platypus-99
+  for pointing this out.
+
 ## 1.8.3
 
 + HTML escape X-forwarded-host response as well.

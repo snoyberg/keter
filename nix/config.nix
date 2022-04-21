@@ -40,7 +40,10 @@ in {
     '';
     wantedBy = [ "multi-user.target" "nginx.service" ];
 
-    serviceConfig = { Restart = "on-failure"; };
+    serviceConfig = {
+      Restart="always";
+      RestartSec="10s";
+    };
 
     after = [
       "network.target"

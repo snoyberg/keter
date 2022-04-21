@@ -48,6 +48,7 @@ import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     setLpsTimeBound,
                                                     waiProxyToSettings,
                                                     wpsSetIpHeader,
+                                                    wpsOnExc,
                                                     wpsGetDest)
 import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
 import           Network.HTTP.Types                (mkStatus, status200,
@@ -77,15 +78,17 @@ defaultLocalWaiProxySettings = def
 
 data ProxySettings = MkProxySettings
   { -- | Mapping from virtual hostname to port number.
-    psHostLookup  :: ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
-  , psManager     :: !Manager
-  , psConfig      :: !KeterConfig
-  , psUnkownHost  :: ByteString -> ByteString
-  , psMissingHost :: ByteString
+    psHostLookup     :: ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
+  , psManager        :: !Manager
+  , psConfig         :: !KeterConfig
+  , psUnkownHost     :: ByteString -> ByteString
+  , psMissingHost    :: ByteString
+  , psProxyException :: ByteString
+  , psLogException   :: Wai.Request -> SomeException -> IO ()
   }
 
-makeSettings :: KeterConfig -> HostMan.HostManager -> IO ProxySettings
-makeSettings psConfig@KeterConfig {..} hostman = do
+makeSettings :: (LogMessage -> IO ()) -> KeterConfig -> HostMan.HostManager -> IO ProxySettings
+makeSettings log psConfig@KeterConfig {..} hostman = do
     psManager <- HTTP.newManager HTTP.tlsManagerSettings
     psMissingHost <- case kconfigMissingHostResponse of
       Nothing -> pure defaultMissingHostBody
@@ -93,8 +96,12 @@ makeSettings psConfig@KeterConfig {..} hostman = do
     psUnkownHost <- case kconfigUnknownHostResponse  of
                 Nothing -> pure defaultUnknownHostBody
                 Just x -> const <$> taggedReadFile "missing-host-response-file" x
+    psProxyException <- case kconfigProxyException of
+                Nothing -> pure defaultProxyException
+                Just x -> taggedReadFile "proxy-exception-response-file" x
     pure $ MkProxySettings{..}
     where
+        psLogException a b = log $ ProxyException a b
         psHostLookup = HostMan.lookupAction hostman . CI.mk
 
 taggedReadFile :: String -> FilePath -> IO ByteString
@@ -132,6 +139,8 @@ connectClientCertificates hl session s =
         s { WarpTLS.tlsServerHooks = newHooks{TLS.onServerNameIndication = newOnServerNameIndication}
           , WarpTLS.tlsSessionManagerConfig = if session then (Just TLSSession.defaultConfig) else Nothing }
 
+
+
 withClient :: Bool -- ^ is secure?
            -> ProxySettings
            -> Wai.Application
@@ -144,6 +153,7 @@ withClient isSecure MkProxySettings {..} =
                 then SIHFromHeader
                 else SIHFromSocket
         ,  wpsGetDest = Just getDest
+        ,  wpsOnExc = handleProxyException psLogException psProxyException
         } psManager
   where
     useHeader :: Bool
@@ -272,6 +282,14 @@ redirectApp RedirectConfig {..} req =
         , Wai.rawPathInfo req
         , Wai.rawQueryString req
         ]
+
+handleProxyException :: (Wai.Request -> SomeException -> IO ()) -> ByteString -> SomeException -> Wai.Application
+handleProxyException handleException onexceptBody except req respond = do
+  handleException req except
+  respond $ missingHostResponse onexceptBody
+
+defaultProxyException :: ByteString
+defaultProxyException = "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>There was a proxy error, check the keter logs for details.</p></body></html>"
 
 defaultMissingHostBody :: ByteString
 defaultMissingHostBody = "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"

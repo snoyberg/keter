@@ -70,7 +70,7 @@ keter input mkPlugins = withManagers input mkPlugins $ \kc hostman appMan log ->
     log StartWatching
     startWatching kc appMan log
     log StartListening
-    startListening kc hostman
+    startListening log kc hostman
 
 -- | Load up Keter config.
 withConfig :: FilePath
@@ -217,9 +217,9 @@ listDirectoryTree fp = do
              return [fp1]
            ) (filter (\x -> x /= "." && x /= "..") dir)
 
-startListening :: KeterConfig -> HostMan.HostManager -> IO ()
-startListening config hostman = do
-    settings <- Proxy.makeSettings config hostman
+startListening :: (LogMessage -> IO ()) -> KeterConfig -> HostMan.HostManager -> IO ()
+startListening log config hostman = do
+    settings <- Proxy.makeSettings log config hostman
     runAndBlock (kconfigListeners config) $ Proxy.reverseProxy settings
 
 runAndBlock :: NonEmptyVector a

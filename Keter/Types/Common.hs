@@ -14,6 +14,7 @@ module Keter.Types.Common
     , SomeException
     ) where
 
+import qualified Network.Wai                       as Wai
 import           Control.Exception          (Exception, SomeException)
 import           Data.Aeson                 (FromJSON, Object, ToJSON,
                                              Value (Bool), object, withBool,
@@ -94,6 +95,7 @@ data LogMessage
     | BindCli AddrInfo
     | ReceivedCliConnection SockAddr
     | KillingApp Port Text
+    | ProxyException Wai.Request SomeException
 
 instance Show LogMessage where
     show (ProcessCreated f) = "Created process: " ++ f
@@ -161,6 +163,7 @@ instance Show LogMessage where
     show StartListening = "Started listening"
     show (BindCli addr) = "Bound cli to " <> show addr
     show (ReceivedCliConnection peer) = "CLI Connection from " <> show peer
+    show (ProxyException req except) = "Got a proxy exception on request " <> show req <> " with exception "  <> show except
 
 data KeterException = CannotParsePostgres FilePath
                     | ExitCodeFailure FilePath ExitCode

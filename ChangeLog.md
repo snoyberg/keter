@@ -2,6 +2,9 @@
 
 + Update status code of missing host responses.
   They now emit a 502 on missing host, and 404 on host not found
++ Squash proxy exceptions if they occur and serve a default or custom error
+  response.
+  Emits the exception to the log.
 
 ## 1.8.4
 

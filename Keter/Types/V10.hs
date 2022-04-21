@@ -107,7 +107,8 @@ data KeterConfig = KeterConfig
     -- ^ Port for the cli to listen on
 
     , kconfigUnknownHostResponse  :: !(Maybe F.FilePath)
-    , kconfigMissingHostResponse :: !(Maybe F.FilePath)
+    , kconfigMissingHostResponse  :: !(Maybe F.FilePath)
+    , kconfigProxyException       :: !(Maybe F.FilePath)
     }
 
 instance ToCurrent KeterConfig where
@@ -126,6 +127,7 @@ instance ToCurrent KeterConfig where
         , kconfigCliPort             = Nothing
         , kconfigUnknownHostResponse  = Nothing
         , kconfigMissingHostResponse = Nothing
+        , kconfigProxyException      = Nothing
         }
       where
         getSSL Nothing = V.empty
@@ -152,6 +154,7 @@ instance Default KeterConfig where
         , kconfigCliPort             = Nothing
         , kconfigUnknownHostResponse  = Nothing
         , kconfigMissingHostResponse = Nothing
+        , kconfigProxyException      = Nothing
         }
 
 instance ParseYamlFile KeterConfig where
@@ -175,6 +178,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "cli-port"
             <*> o .:? "missing-host-response-file"
             <*> o .:? "unknown-host-response-file"
+            <*> o .:? "proxy-exception-response-file"
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool

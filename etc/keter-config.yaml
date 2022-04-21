@@ -47,6 +47,10 @@ listeners:
 #
 # If no hosts at all are available this file is used
 # unknown-host-response-file: ./unkown-host.html
+#
+# if a proxy exception occurs, serve this file.
+# the exception gets printed to the log anyway
+# proxy-exception-response-file: ./proxy-exception.html
 
 # set a debug port
 # cli-port: 1234

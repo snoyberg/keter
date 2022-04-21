@@ -22,4 +22,4 @@ jobs:
     #     # Only needed for private caches
     #     #authToken: '${{ secrets.CACHIX_AUTH_TOKEN }}'
     # - run: nix-build nix/ci.nix
-    - run: nix-shell --run "echo OK"
+    - run: nix-shell --run "cd incoming; make all"

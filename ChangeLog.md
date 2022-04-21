@@ -2,6 +2,9 @@
 
 + Update status code of missing host responses.
   They now emit a 502 on missing host, and 404 on host not found
++ Always restart keter in the nix config for systemd.
+  It turns out that keter may exit with exit code 0 under load testing.
+  Changing from on-failure to always in systemd should bring it back up.
 + Squash proxy exceptions if they occur and serve a default or custom error
   response.
   Emits the exception to the log.

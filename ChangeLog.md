@@ -5,6 +5,7 @@
 + Squash proxy exceptions if they occur and serve a default or custom error
   response.
   Emits the exception to the log.
++ Add incoming folder to the CI build.
 
 ## 1.8.4
 

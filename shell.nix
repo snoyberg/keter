@@ -13,7 +13,7 @@ let
       , tar, template-haskell, text, time, tls, tls-session-manager
       , transformers, unix, unix-compat, unordered-containers, vector
       , wai, wai-app-static, wai-extra, warp, warp-tls, yaml, zlib
-      , cabal-install
+      , cabal-install, yesod, stm-lifted, yesod-websockets
       }:
       mkDerivation {
         pname = "keter";
@@ -30,7 +30,7 @@ let
           network optparse-applicative process random regex-tdfa stm tar
           template-haskell text time tls tls-session-manager transformers
           unix unix-compat unordered-containers vector wai wai-app-static
-          wai-extra warp warp-tls yaml zlib
+          wai-extra warp warp-tls yaml zlib yesod stm-lifted yesod-websockets
         ];
         executableHaskellDepends = [ base data-default filepath ];
         testHaskellDepends = [

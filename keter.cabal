@@ -112,7 +112,7 @@ Executable keter
   default-language:    Haskell98
   Main-is:             keter.hs
   hs-source-dirs:      src/main
-  Build-depends:       base, keter, data-default, filepath
+  Build-depends:       base, keter, filepath
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
 

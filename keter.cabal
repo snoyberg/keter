@@ -41,7 +41,6 @@ Library
                      , transformers
                      , process                   >= 1.4.3         && < 1.7
                      , random
-                     , data-default
                      , filepath
                      , zlib
                      , network
@@ -61,7 +60,7 @@ Library
                      , http-types
                      , regex-tdfa                >= 1.1
                      , attoparsec                >= 0.10
-                     , http-client
+                     , http-client               >= 0.5.0
                      , http-conduit              >= 2.1
                      , case-insensitive
                      , array

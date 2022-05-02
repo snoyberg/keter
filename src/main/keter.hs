@@ -6,7 +6,6 @@ import Keter.Main (keter)
 import Paths_keter (version)
 import Data.Version (showVersion)
 import qualified Keter.Plugin.Postgres as Postgres
-import Data.Default (def)
 import System.FilePath ((</>))
 
 main :: IO ()
@@ -17,7 +16,7 @@ main = do
         ["--help"] -> printUsage
         [dir] -> keter
             dir
-            [\configDir -> Postgres.load def $ configDir </> "etc" </> "postgres.yaml"]
+            [\configDir -> Postgres.load Postgres.defaultSettings $ configDir </> "etc" </> "postgres.yaml"]
         _ -> printUsage
 
 printUsage :: IO ()

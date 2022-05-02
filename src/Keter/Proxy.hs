@@ -22,8 +22,6 @@ import qualified Data.ByteString.Char8             as S8
 import qualified Data.CaseInsensitive              as CI
 #if MIN_VERSION_http_reverse_proxy(0,6,0)
 import           Network.Wai.Middleware.Gzip       (def)
-#else
-import           Data.Default                      (Default (..))
 #endif
 import           Data.Monoid                       (mappend, mempty)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)

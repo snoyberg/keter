@@ -7,7 +7,6 @@ import           Control.Applicative
 import           Data.Aeson
 import           Data.Bool
 import           Data.Conduit.Network              (HostPreference)
-import           Data.Default
 import qualified Data.Set                          as Set
 import           Data.String                       (fromString)
 import           Data.Yaml.FilePath
@@ -85,10 +84,10 @@ data KeterConfig = KeterConfig
     -- ^ Maximum request time in milliseconds per connection.
     }
 
-instance Default KeterConfig where
-    def = KeterConfig
+defaultKeterConfig :: KeterConfig
+defaultKeterConfig = KeterConfig
         { kconfigDir = "."
-        , kconfigPortMan = def
+        , kconfigPortMan = defaultPortSettings
         , kconfigHost = "*"
         , kconfigPort = 80
         , kconfigSsl = Nothing
@@ -106,9 +105,9 @@ fiveMinutes = 5 * 60 * 1000
 instance ParseYamlFile KeterConfig where
     parseYamlFile basedir = withObject "KeterConfig" $ \o -> KeterConfig
         <$> lookupBase basedir o "root"
-        <*> o .:? "port-manager" .!= def
-        <*> (fmap fromString <$> o .:? "host") .!= kconfigHost def
-        <*> o .:? "port" .!= kconfigPort def
+        <*> o .:? "port-manager" .!= defaultPortSettings
+        <*> (fmap fromString <$> o .:? "host") .!= kconfigHost defaultKeterConfig
+        <*> o .:? "port" .!= kconfigPort defaultKeterConfig
         <*> (o .:? "ssl" >>= maybe (return Nothing) (fmap Just . parseYamlFile basedir))
         <*> o .:? "setuid"
         <*> o .:? "reverse-proxy" .!= Set.empty
@@ -137,8 +136,8 @@ data PortSettings = PortSettings
       -- ^ Which ports to assign to apps. Defaults to unassigned ranges from IANA
     }
 
-instance Default PortSettings where
-    def = PortSettings
+defaultPortSettings :: PortSettings
+defaultPortSettings = PortSettings
         -- Top 10 Largest IANA unassigned port ranges with no unauthorized uses known
         { portRange = [43124..44320]
                       ++ [28120..29166]
@@ -154,4 +153,4 @@ instance Default PortSettings where
 
 instance FromJSON PortSettings where
     parseJSON = withObject "PortSettings" $ \_ -> PortSettings
-        <$> return (portRange def)
+        <$> return (portRange defaultPortSettings)

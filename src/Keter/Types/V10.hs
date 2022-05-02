@@ -13,7 +13,6 @@ import           Data.Aeson                        (FromJSON (..), ToJSON (..), 
 import           Data.Aeson.KeyHelper              as AK (lookup, singleton, empty, insert)
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
-import           Data.Default
 import qualified Data.Map                          as Map
 import           Data.Maybe                        (catMaybes, fromMaybe, isJust)
 import qualified Data.Set                          as Set
@@ -139,10 +138,10 @@ instance ToCurrent KeterConfig where
             key
             (isJust session)
 
-instance Default KeterConfig where
-    def = KeterConfig
+defaultKeterConfig :: KeterConfig
+defaultKeterConfig = KeterConfig
         { kconfigDir = "."
-        , kconfigPortPool = def
+        , kconfigPortPool = V04.defaultPortSettings
         , kconfigListeners = NonEmptyVector (LPInsecure "*" 80) V.empty
         , kconfigSetuid = Nothing
         , kconfigBuiltinStanzas = V.empty
@@ -166,8 +165,8 @@ instance ParseYamlFile KeterConfig where
         old o = (toCurrent :: V04.KeterConfig -> KeterConfig) <$> parseYamlFile basedir (Object o)
         current o = KeterConfig
             <$> lookupBase basedir o "root"
-            <*> o .:? "port-manager" .!= def
-            <*> fmap (fromMaybe (kconfigListeners def)) (lookupBaseMaybe basedir o "listeners")
+            <*> o .:? "port-manager" .!= V04.defaultPortSettings
+            <*> fmap (fromMaybe (kconfigListeners defaultKeterConfig)) (lookupBaseMaybe basedir o "listeners")
             <*> o .:? "setuid"
             <*> return V.empty
             <*> o .:? "ip-from-header" .!= False

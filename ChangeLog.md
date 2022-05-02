@@ -1,7 +1,9 @@
-## 1.9.1
+## 2.0
 
 + Improve missing sudo error messages in postgres plugin.
 + Reorganized most Haskell source files into /src.
++ Dropped support for http-client < 0.5.0.
++ Removed 'default' package.
 
 ## 1.9
 

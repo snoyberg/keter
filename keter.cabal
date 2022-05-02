@@ -1,6 +1,6 @@
 Cabal-version:       >=1.10
 Name:                keter
-Version:             1.9.1
+Version:             2.0
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Deployment system for web applications, originally intended for hosting Yesod
@@ -41,7 +41,6 @@ Library
                      , transformers
                      , process                   >= 1.4.3         && < 1.7
                      , random
-                     , data-default
                      , filepath
                      , zlib
                      , network
@@ -61,7 +60,7 @@ Library
                      , http-types
                      , regex-tdfa                >= 1.1
                      , attoparsec                >= 0.10
-                     , http-client
+                     , http-client               >= 0.5.0
                      , http-conduit              >= 2.1
                      , case-insensitive
                      , array
@@ -113,7 +112,7 @@ Executable keter
   default-language:    Haskell98
   Main-is:             keter.hs
   hs-source-dirs:      src/main
-  Build-depends:       base, keter, data-default, filepath
+  Build-depends:       base, keter, filepath
   ghc-options:         -threaded -Wall
   other-modules:       Paths_keter
 

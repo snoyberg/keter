@@ -22,6 +22,7 @@ import qualified Keter.HostManager         as HostMan
 import qualified Keter.PortPool            as PortPool
 import qualified Keter.Proxy               as Proxy
 import           Keter.Types
+import           Keter.Types.V10
 import           System.Posix.Files        (getFileStatus, modificationTime)
 import           System.Posix.Signals      (Handler (Catch), installHandler,
                                             sigHUP)
@@ -31,7 +32,6 @@ import           Control.Exception         (throwIO, try)
 import           Control.Monad             (forM)
 import           Control.Monad             (void, when)
 import           Data.Conduit.Process.Unix (initProcessTracker)
-import           Data.Default              (def)
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as T
 import           Data.Text.Encoding        (encodeUtf8)
@@ -85,7 +85,7 @@ withConfig input f = do
                 case eres of
                     Left e -> throwIO $ InvalidKeterConfigFile input e
                     Right x -> return x
-            else return def { kconfigDir = input }
+            else return defaultKeterConfig { kconfigDir = input }
     f config
 
 withLogger :: FilePath

@@ -4,6 +4,7 @@ module Keter.Plugin.Postgres
     ( -- * Settings
       Settings
     , setupDBInfo
+    , defaultSettings
       -- * Functions
     , load
     ) where
@@ -18,7 +19,6 @@ import           Control.Monad             (forever, mzero, replicateM, void)
 import           Control.Monad.Trans.Class (lift)
 import qualified Control.Monad.Trans.State as S
 import qualified Data.Char                 as C
-import           Data.Default
 import qualified Data.Map                  as Map
 import           Data.Maybe                (fromMaybe)
 import           Data.Monoid               ((<>))
@@ -43,9 +43,8 @@ data Settings = Settings
       -- ^ How to create the given user/database. Default: uses the @psql@
       -- command line tool and @sudo -u postgres@.
     }
-
-instance Default Settings where
-    def = Settings
+defaultSettings :: Settings
+defaultSettings = Settings
         { setupDBInfo = \DBInfo{..} -> do
             let sql = toLazyText $
                     "CREATE USER "         <> fromText dbiUser <>
@@ -111,9 +110,9 @@ instance FromJSON DBServerInfo where
         <$> o .: "server"
         <*> o .: "port"
     parseJSON _ = mzero
-    
-instance Default DBServerInfo where
-    def = DBServerInfo "localhost" 5432
+
+defaultDBServerInfo :: DBServerInfo
+defaultDBServerInfo = DBServerInfo "localhost" 5432
 
 data Command = GetConfig Appname DBServerInfo (Either SomeException DBInfo -> IO ())
 
@@ -140,10 +139,10 @@ load Settings{..} fp = do
             { pluginGetEnv = \appname o ->
                 case AK.lookup "postgres" o of
                     Just (Array v) -> do
-                        let dbServer = fromMaybe def . parseMaybe parseJSON $ V.head v
+                        let dbServer = fromMaybe defaultDBServerInfo . parseMaybe parseJSON $ V.head v
                         doenv chan appname dbServer
                     Just (Bool True) -> do
-                        doenv chan appname def
+                        doenv chan appname defaultDBServerInfo
                     _ -> return []
             }
       where doenv chan appname dbs = do

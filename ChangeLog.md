@@ -1,4 +1,4 @@
-## 1.9.1
+## 2.0
 
 + Improve missing sudo error messages in postgres plugin.
 + Reorganized most Haskell source files into /src.

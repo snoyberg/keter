@@ -24,9 +24,9 @@ import           Control.Exception         (IOException, bracketOnError,
                                             throwIO, try, catch)
 import           Control.Monad             (void, when, liftM)
 import qualified Data.CaseInsensitive      as CI
-import           Data.Conduit.LogFile      (RotatingLog)
-import qualified Data.Conduit.LogFile      as LogFile
-import           Data.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
+import           Keter.Conduit.LogFile      (RotatingLog)
+import qualified Keter.Conduit.LogFile      as LogFile
+import           Keter.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
                                             terminateMonitoredProcess, printStatus)
 import           Data.Foldable             (for_, traverse_)
@@ -40,7 +40,7 @@ import           Data.Text.Encoding        (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error  (lenientDecode)
 import qualified Data.Vector               as V
 import           Data.Yaml
-import           Data.Yaml.FilePath
+import           Keter.Yaml.FilePath
 import System.FilePath ((</>))
 import           System.Directory          (canonicalizePath, doesFileExist,
                                             removeDirectoryRecursive)

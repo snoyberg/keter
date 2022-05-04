@@ -29,7 +29,7 @@ import           Data.Typeable              (Typeable)
 import           Data.Vector                (Vector)
 import qualified Data.Vector                as V
 import qualified Data.Yaml
-import           Data.Yaml.FilePath
+import           Keter.Yaml.FilePath
 import qualified Language.Haskell.TH.Syntax as TH
 import           Network.Socket             (AddrInfo, SockAddr)
 import           System.Exit                (ExitCode)

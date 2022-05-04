@@ -100,11 +100,11 @@ Library
                        Keter.Proxy
                        Keter.HostManager
                        Network.HTTP.ReverseProxy.Rewrite
-                       Data.Yaml.FilePath
-                       Data.Aeson.KeyHelper
+                       Keter.Yaml.FilePath
+                       Keter.Aeson.KeyHelper
                        Codec.Archive.TempTarball
-                       Data.Conduit.LogFile
-                       Data.Conduit.Process.Unix
+                       Keter.Conduit.LogFile
+                       Keter.Conduit.Process.Unix
   ghc-options:         -Wall
   c-sources:           cbits/process-tracker.c
   hs-source-dirs: src

@@ -4,7 +4,7 @@
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
 
-module Data.Conduit.Process.Unix
+module Keter.Conduit.Process.Unix
     ( -- * Process tracking
       -- $processTracker
 

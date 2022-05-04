@@ -12,7 +12,7 @@ module Keter.Main
 import qualified Codec.Archive.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
 import           Control.Monad             (unless)
-import qualified Data.Conduit.LogFile      as LogFile
+import qualified Keter.Conduit.LogFile      as LogFile
 import           Data.Monoid               (mempty)
 import           Data.String               (fromString)
 import qualified Data.Vector               as V
@@ -31,13 +31,13 @@ import           Control.Applicative       ((<$>))
 import           Control.Exception         (throwIO, try)
 import           Control.Monad             (forM)
 import           Control.Monad             (void, when)
-import           Data.Conduit.Process.Unix (initProcessTracker)
+import           Keter.Conduit.Process.Unix (initProcessTracker)
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as T
 import           Data.Text.Encoding        (encodeUtf8)
 import qualified Data.Text.Read
 import           Data.Time                 (getCurrentTime)
-import           Data.Yaml.FilePath
+import           Keter.Yaml.FilePath
 import           Prelude                   hiding (FilePath, log)
 import           System.Directory          (createDirectoryIfMissing,
                                             createDirectoryIfMissing,

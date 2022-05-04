@@ -1,5 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
-module Data.Conduit.LogFile
+module Keter.Conduit.LogFile
     ( RotatingLog
     , openRotatingLog
     , addChunk

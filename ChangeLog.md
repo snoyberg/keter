@@ -4,6 +4,7 @@
 + Reorganized most Haskell source files into /src.
 + Dropped support for http-client < 0.5.0.
 + Removed 'default' package.
++ All "Data" modules are now "Keter" modules.
 
 ## 1.9
 

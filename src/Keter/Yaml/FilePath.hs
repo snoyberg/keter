@@ -3,7 +3,7 @@
 {-# LANGUAGE FlexibleInstances #-}
 -- | Utilities for dealing with YAML config files which contain relative file
 -- paths.
-module Data.Yaml.FilePath
+module Keter.Yaml.FilePath
     ( decodeFileRelative
     , lookupBase
     , lookupBaseMaybe
@@ -15,7 +15,7 @@ module Data.Yaml.FilePath
 import Control.Applicative ((<$>))
 import Data.Yaml (decodeFileEither, ParseException (AesonException), parseJSON)
 import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord, fail, FilePath)
-import Data.Aeson.KeyHelper as AK
+import Keter.Aeson.KeyHelper as AK
 import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
 import Data.Text (Text, unpack)
 import qualified Data.Set as Set

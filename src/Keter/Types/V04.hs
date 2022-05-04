@@ -9,7 +9,7 @@ import           Data.Bool
 import           Data.Conduit.Network              (HostPreference)
 import qualified Data.Set                          as Set
 import           Data.String                       (fromString)
-import           Data.Yaml.FilePath
+import           Keter.Yaml.FilePath
 import qualified System.FilePath                   as F
 import           Keter.Types.Common
 import           Network.HTTP.ReverseProxy.Rewrite

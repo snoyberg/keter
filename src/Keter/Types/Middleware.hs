@@ -26,7 +26,7 @@ import Data.ByteString  as S (ByteString)
 import Data.Text.Lazy.Encoding as TL (encodeUtf8, decodeUtf8)
 import Data.Text.Encoding as T (encodeUtf8, decodeUtf8)
 import Data.String (fromString)
-import qualified Data.Aeson.KeyHelper as AK (toKey, toText, toList, empty)
+import qualified Keter.Aeson.KeyHelper as AK (toKey, toText, toList, empty)
 
 data MiddlewareConfig = AcceptOverride
                       | Autohead

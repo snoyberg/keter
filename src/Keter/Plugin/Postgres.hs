@@ -10,7 +10,7 @@ module Keter.Plugin.Postgres
     ) where
 
 import           Control.Applicative       ((<$>), (<*>), pure)
-import           Data.Aeson.KeyHelper      as AK (lookup)
+import           Keter.Aeson.KeyHelper      as AK (lookup)
 import           Control.Concurrent        (forkIO)
 import           Control.Concurrent.Chan
 import           Control.Concurrent.MVar

@@ -2,7 +2,7 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 -- | Utilities for dealing with Aeson version update
 
-module Data.Aeson.KeyHelper
+module Keter.Aeson.KeyHelper
   ( module KeyMap
   , toKey
   , toText

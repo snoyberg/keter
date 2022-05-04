@@ -10,7 +10,7 @@ import           Data.Aeson                        (FromJSON (..), ToJSON (..), 
                                                     Value (Object, String, Bool),
                                                     withObject, (.!=), (.:),
                                                     (.:?), object, (.=))
-import           Data.Aeson.KeyHelper              as AK (lookup, singleton, empty, insert)
+import           Keter.Aeson.KeyHelper              as AK (lookup, singleton, empty, insert)
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
 import qualified Data.Map                          as Map
@@ -20,7 +20,7 @@ import           Data.String                       (fromString)
 import           Data.Vector                       (Vector)
 import qualified Data.Vector                       as V
 import           Data.Word                         (Word)
-import           Data.Yaml.FilePath
+import           Keter.Yaml.FilePath
 import qualified System.FilePath                   as F
 import           Keter.Types.Common
 import           Keter.Types.Middleware

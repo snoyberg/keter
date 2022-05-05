@@ -5,6 +5,7 @@
 + Dropped support for http-client < 0.5.0.
 + Removed 'default' package.
 + All "Data" modules are now "Keter" modules.
++ Testing library switched from "hspec" to "tasty".
 
 ## 1.9
 

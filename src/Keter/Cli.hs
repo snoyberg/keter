@@ -4,7 +4,7 @@ module Keter.Cli
     , CliStates(..)
     ) where
 
-import Keter.Types.Common
+import Keter.Common
 import Keter.AppManager
 import Control.Concurrent (forkFinally)
 import qualified Control.Exception as E

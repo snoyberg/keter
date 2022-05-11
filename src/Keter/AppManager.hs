@@ -17,7 +17,7 @@ module Keter.AppManager
     , renderApps
     ) where
 
-import Keter.Types.Common
+import Keter.Common
 import           Data.Set                   (Set)
 import           Data.Text                  (Text)
 import           System.FilePath            (FilePath)
@@ -39,7 +39,7 @@ import qualified Data.Text.Lazy.Builder     as Builder
 import           Data.Traversable.WithIndex (itraverse)
 import           Keter.App                  (App, AppStartConfig, showApp)
 import qualified Keter.App                  as App
-import           Keter.Types
+import           Keter.Config
 import           Prelude                    hiding (FilePath, log)
 import           System.Posix.Files         (getFileStatus, modificationTime)
 import           System.Posix.Types         (EpochTime)

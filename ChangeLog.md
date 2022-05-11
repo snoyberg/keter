@@ -11,6 +11,8 @@
 * Hide Keter.Aeson.KeyHelper
 * Stop re-exporting common and rewrite from types
 * Common no longer re-exports half of Haskell
+* Rename Types to Config
+* Move Common out of Config into root
 
 ## 1.9
 

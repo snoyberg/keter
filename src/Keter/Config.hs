@@ -1,9 +1,9 @@
-module Keter.Types
+module Keter.Config
     ( module X
     ) where
 
-import Keter.Types.V04 as X (PortSettings (..), TLSConfig (..))
-import Keter.Types.V10 as X
+import Keter.Config.V04 as X (PortSettings (..), TLSConfig (..))
+import Keter.Config.V10 as X
     ( BundleConfig (..)
     , WebAppConfig (..)
     , RedirectConfig (..)

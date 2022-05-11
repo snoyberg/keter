@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
 
-module Keter.Types.Middleware where
+module Keter.Config.Middleware where
 
 import Data.Aeson
 import GHC.Generics

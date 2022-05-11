@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Legacy types from Keter version 0.4. Retained to keep backwards
 -- compatibility in config file format.
-module Keter.Types.V04 where
+module Keter.Config.V04 where
 
 import           Control.Applicative
 import           Data.Aeson
@@ -10,7 +10,7 @@ import           Data.Conduit.Network              (HostPreference)
 import           Data.String                       (fromString)
 import           Keter.Yaml.FilePath
 import qualified System.FilePath                   as F
-import           Keter.Types.Common
+import           Keter.Common
 import           Keter.Rewrite(ReverseProxyConfig)
 import           Data.Text                  (Text)
 import           System.FilePath            (FilePath)

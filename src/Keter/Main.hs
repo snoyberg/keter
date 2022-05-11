@@ -9,7 +9,7 @@ module Keter.Main
     ( keter
     ) where
 
-import Keter.Types.Common
+import Keter.Common
 import           System.FilePath            (FilePath)
 import qualified Keter.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
@@ -23,14 +23,14 @@ import qualified Keter.AppManager          as AppMan
 import qualified Keter.HostManager         as HostMan
 import qualified Keter.PortPool            as PortPool
 import qualified Keter.Proxy               as Proxy
-import           Keter.Types
-import           Keter.Types.V10
+import           Keter.Config
+import           Keter.Config.V10
 import           System.Posix.Files        (getFileStatus, modificationTime)
 import           System.Posix.Signals      (Handler (Catch), installHandler,
                                             sigHUP)
 
 import           Control.Applicative       ((<$>))
-import           Control.Exception         (throwIO, try)
+import           Control.Exception         (throwIO, try, SomeException)
 import           Control.Monad             (forM)
 import           Control.Monad             (void, when)
 import           Keter.Conduit.Process.Unix (initProcessTracker)

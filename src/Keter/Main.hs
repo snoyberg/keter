@@ -9,7 +9,7 @@ module Keter.Main
     ( keter
     ) where
 
-import qualified Codec.Archive.TempTarball as TempFolder
+import qualified Keter.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
 import           Control.Monad             (unless)
 import qualified Keter.Conduit.LogFile      as LogFile

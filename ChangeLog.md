@@ -6,6 +6,9 @@
 + Removed 'default' package.
 + All "Data" modules are now "Keter" modules.
 + Testing library switched from "hspec" to "tasty".
+* Move Network.Http.ReverseProxy.Rewrite into Keter.Rewrite
+* Move Codec.Archive.TempTarball into Keter.TempTarball
+* Hide Keter.Aeson.KeyHelper
 
 ## 1.9
 

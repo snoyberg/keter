@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE CPP               #-}
-module Network.HTTP.ReverseProxy.Rewrite
+module Keter.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
   , RPEntry (..)

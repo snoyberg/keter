@@ -15,7 +15,7 @@ module Keter.App
     , showApp
     ) where
 
-import           Codec.Archive.TempTarball
+import           Keter.TempTarball
 import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))
 import           Control.Concurrent        (forkIO, threadDelay)

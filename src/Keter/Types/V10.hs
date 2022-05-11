@@ -25,10 +25,10 @@ import qualified System.FilePath                   as F
 import           Keter.Types.Common
 import           Keter.Types.Middleware
 import qualified Keter.Types.V04                   as V04
-import           Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import           System.Posix.Types                (EpochTime)
+import           Keter.Rewrite(ReverseProxyConfig)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))

@@ -12,7 +12,7 @@ import           Data.String                       (fromString)
 import           Keter.Yaml.FilePath
 import qualified System.FilePath                   as F
 import           Keter.Types.Common
-import           Network.HTTP.ReverseProxy.Rewrite
+import           Keter.Rewrite(ReverseProxyConfig)
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import qualified Network.TLS.SessionManager        as TLSSession

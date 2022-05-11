@@ -23,4 +23,4 @@ import Keter.Types.V10 as X
     , RestartCount (..)
     , RequiresSecure
     )
-import Network.HTTP.ReverseProxy.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))
+import Keter.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))

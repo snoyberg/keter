@@ -48,7 +48,7 @@ import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     wpsSetIpHeader,
                                                     wpsOnExc,
                                                     wpsGetDest)
-import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
+import qualified Keter.Rewrite as Rewrite
 import           Network.HTTP.Types                (mkStatus, status200,
                                                     status301, status302,
                                                     status303, status307,

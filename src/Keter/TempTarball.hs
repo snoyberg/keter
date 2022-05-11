@@ -4,7 +4,7 @@
 -- | Handles allocation of temporary directories and unpacking of bundles into
 -- them. Sets owner and group of all created files and directories as
 -- necessary.
-module Codec.Archive.TempTarball
+module Keter.TempTarball
     ( TempFolder
     , setup
     , unpackTempTar

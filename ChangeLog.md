@@ -6,6 +6,13 @@
 + Removed 'default' package.
 + All "Data" modules are now "Keter" modules.
 + Testing library switched from "hspec" to "tasty".
+* Move Network.Http.ReverseProxy.Rewrite into Keter.Rewrite
+* Move Codec.Archive.TempTarball into Keter.TempTarball
+* Hide Keter.Aeson.KeyHelper
+* Stop re-exporting common and rewrite from types
+* Common no longer re-exports half of Haskell
+* Rename Types to Config
+* Move Common out of Config into root
 
 ## 1.9
 

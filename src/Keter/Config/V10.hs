@@ -3,7 +3,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TypeFamilies      #-}
-module Keter.Types.V10 where
+module Keter.Config.V10 where
 
 import           Control.Applicative               ((<$>), (<*>), (<|>))
 import           Data.Aeson                        (FromJSON (..), ToJSON (..), Object,
@@ -22,13 +22,17 @@ import qualified Data.Vector                       as V
 import           Data.Word                         (Word)
 import           Keter.Yaml.FilePath
 import qualified System.FilePath                   as F
-import           Keter.Types.Common
-import           Keter.Types.Middleware
-import qualified Keter.Types.V04                   as V04
-import           Network.HTTP.ReverseProxy.Rewrite (ReverseProxyConfig)
+import           Keter.Common
+import           Keter.Config.Middleware
+import qualified Keter.Config.V04                   as V04
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import           System.Posix.Types                (EpochTime)
+import           Keter.Rewrite(ReverseProxyConfig)
+import           Data.Text                  (Text)
+import           System.FilePath            (FilePath)
+import           Data.Set                   (Set)
+import           Data.Map                   (Map)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))

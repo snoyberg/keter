@@ -86,11 +86,11 @@ Library
     cpp-options:       -DSYSTEM_FILEPATH
 
   Exposed-Modules:     Keter.Plugin.Postgres
-                       Keter.Types
-                       Keter.Types.V04
-                       Keter.Types.V10
-                       Keter.Types.Common
-                       Keter.Types.Middleware
+                       Keter.Config
+                       Keter.Config.V04
+                       Keter.Config.V10
+                       Keter.Common
+                       Keter.Config.Middleware
                        Keter.App
                        Keter.AppManager
                        Keter.LabelMap
@@ -99,12 +99,13 @@ Library
                        Keter.PortPool
                        Keter.Proxy
                        Keter.HostManager
-                       Network.HTTP.ReverseProxy.Rewrite
+                       Keter.Rewrite
                        Keter.Yaml.FilePath
-                       Keter.Aeson.KeyHelper
-                       Codec.Archive.TempTarball
+                       Keter.TempTarball
                        Keter.Conduit.LogFile
                        Keter.Conduit.Process.Unix
+  Other-Modules:
+                       Keter.Aeson.KeyHelper
   ghc-options:         -Wall
   c-sources:           cbits/process-tracker.c
   hs-source-dirs: src

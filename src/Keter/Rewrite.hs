@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE CPP               #-}
-module Network.HTTP.ReverseProxy.Rewrite
+module Keter.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
   , RPEntry (..)
@@ -30,7 +30,7 @@ import qualified Data.CaseInsensitive as CI
 
 import Blaze.ByteString.Builder (fromByteString)
 
-import Keter.Types.Common
+import Keter.Common
 
 -- Regular expression parsing, replacement, matching
 import Data.Attoparsec.Text (string, takeWhile1, endOfInput, parseOnly, Parser)

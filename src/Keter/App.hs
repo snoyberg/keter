@@ -15,7 +15,13 @@ module Keter.App
     , showApp
     ) where
 
-import           Codec.Archive.TempTarball
+import Keter.Common
+import           Data.Set                   (Set)
+import           Data.Text                  (Text)
+import           System.FilePath            (FilePath)
+import           Data.Map                   (Map)
+import           Keter.Rewrite (ReverseProxyConfig (..))
+import           Keter.TempTarball
 import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))
 import           Control.Concurrent        (forkIO, threadDelay)
@@ -46,7 +52,7 @@ import           System.Directory          (canonicalizePath, doesFileExist,
                                             removeDirectoryRecursive)
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
-import           Keter.Types
+import           Keter.Config
 import           Network.Socket
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
@@ -55,7 +61,6 @@ import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
 import qualified Network.TLS as TLS
-import qualified Data.Text.Encoding as Text
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))

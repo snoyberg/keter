@@ -1,18 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 -- | Legacy types from Keter version 0.4. Retained to keep backwards
 -- compatibility in config file format.
-module Keter.Types.V04 where
+module Keter.Config.V04 where
 
 import           Control.Applicative
 import           Data.Aeson
 import           Data.Bool
 import           Data.Conduit.Network              (HostPreference)
-import qualified Data.Set                          as Set
 import           Data.String                       (fromString)
 import           Keter.Yaml.FilePath
 import qualified System.FilePath                   as F
-import           Keter.Types.Common
-import           Network.HTTP.ReverseProxy.Rewrite
+import           Keter.Common
+import           Keter.Rewrite(ReverseProxyConfig)
+import           Data.Text                  (Text)
+import           System.FilePath            (FilePath)
+import           Data.Set                   (Set)
+import qualified Data.Set                   as Set
 import qualified Network.Wai.Handler.Warp          as Warp
 import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
 import qualified Network.TLS.SessionManager        as TLSSession

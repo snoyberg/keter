@@ -19,7 +19,6 @@ import           Control.Applicative               ((<$>), (<|>))
 import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
-import qualified Data.CaseInsensitive              as CI
 #if MIN_VERSION_http_reverse_proxy(0,6,0)
 import           Network.Wai.Middleware.Gzip       (def)
 #endif
@@ -27,8 +26,8 @@ import           Data.Monoid                       (mappend, mempty)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
-import           Keter.Types
-import           Keter.Types.Middleware
+import           Keter.Config
+import           Keter.Config.Middleware
 import           Network.HTTP.Conduit              (Manager)
 
 #if MIN_VERSION_http_reverse_proxy(0,4,2)
@@ -48,8 +47,12 @@ import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     wpsSetIpHeader,
                                                     wpsOnExc,
                                                     wpsGetDest)
-import qualified Network.HTTP.ReverseProxy.Rewrite as Rewrite
-import           Network.HTTP.Types                (mkStatus, status200,
+import qualified Keter.Rewrite as Rewrite
+import           Data.ByteString            (ByteString)
+import Keter.Common
+import           System.FilePath            (FilePath)
+import           Control.Exception          (SomeException)
+import           Network.HTTP.Types                (mkStatus,
                                                     status301, status302,
                                                     status303, status307,
                                                     status404, status502)

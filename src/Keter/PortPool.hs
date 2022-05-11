@@ -12,10 +12,11 @@ module Keter.PortPool
     , start
     ) where
 
+import           Keter.Common
 import           Control.Applicative     ((<$>))
 import           Control.Concurrent.MVar
 import           Control.Exception
-import           Keter.Types
+import           Keter.Config
 import           Network.Socket
 import           Prelude                 hiding (log)
 

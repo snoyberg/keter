@@ -1,10 +1,11 @@
-module Keter.Types
+-- | This does a merger of V04 and V10
+--   Effectivelly this provides the 'latest' config.
+module Keter.Config
     ( module X
     ) where
 
-import Keter.Types.Common as X
-import Keter.Types.V04 as X (PortSettings (..), TLSConfig (..))
-import Keter.Types.V10 as X
+import Keter.Config.V04 as X (PortSettings (..), TLSConfig (..))
+import Keter.Config.V10 as X
     ( BundleConfig (..)
     , WebAppConfig (..)
     , RedirectConfig (..)
@@ -23,4 +24,3 @@ import Keter.Types.V10 as X
     , RestartCount (..)
     , RequiresSecure
     )
-import Network.HTTP.ReverseProxy.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))

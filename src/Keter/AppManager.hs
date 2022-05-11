@@ -17,6 +17,12 @@ module Keter.AppManager
     , renderApps
     ) where
 
+import Keter.Common
+import           Data.Set                   (Set)
+import           Data.Text                  (Text)
+import           System.FilePath            (FilePath)
+import           Data.Map                   (Map)
+import           Control.Exception          (SomeException)
 import           Control.Applicative
 import           Control.Concurrent         (forkIO)
 import           Control.Concurrent.MVar    (MVar, newMVar, withMVar)
@@ -33,7 +39,7 @@ import qualified Data.Text.Lazy.Builder     as Builder
 import           Data.Traversable.WithIndex (itraverse)
 import           Keter.App                  (App, AppStartConfig, showApp)
 import qualified Keter.App                  as App
-import           Keter.Types
+import           Keter.Config
 import           Prelude                    hiding (FilePath, log)
 import           System.Posix.Files         (getFileStatus, modificationTime)
 import           System.Posix.Types         (EpochTime)

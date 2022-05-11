@@ -3,16 +3,7 @@
 {-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE TypeFamilies       #-}
 
-module Keter.Types.Common
-    ( module Keter.Types.Common
-    , FilePath
-    , Text
-    , ByteString
-    , Set
-    , Map
-    , Exception
-    , SomeException
-    ) where
+module Keter.Types.Common where
 
 import qualified Network.Wai                       as Wai
 import           Control.Exception          (Exception, SomeException)

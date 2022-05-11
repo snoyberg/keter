@@ -2,7 +2,6 @@ module Keter.Types
     ( module X
     ) where
 
-import Keter.Types.Common as X
 import Keter.Types.V04 as X (PortSettings (..), TLSConfig (..))
 import Keter.Types.V10 as X
     ( BundleConfig (..)
@@ -23,4 +22,3 @@ import Keter.Types.V10 as X
     , RestartCount (..)
     , RequiresSecure
     )
-import Keter.Rewrite as X (ReverseProxyConfig (..), RewriteRule (..))

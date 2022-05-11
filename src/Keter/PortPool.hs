@@ -12,6 +12,7 @@ module Keter.PortPool
     , start
     ) where
 
+import           Keter.Types.Common
 import           Control.Applicative     ((<$>))
 import           Control.Concurrent.MVar
 import           Control.Exception

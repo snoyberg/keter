@@ -29,6 +29,10 @@ import           Keter.LabelMap      (LabelMap)
 import qualified Keter.LabelMap      as LabelMap
 import           Prelude             hiding (log)
 import qualified Network.TLS as TLS
+import           Keter.Types.Common
+import           System.FilePath            (FilePath)
+import           Data.Set                   (Set)
+import           Data.Map                   (Map)
 
 type HMState = LabelMap HostValue
 

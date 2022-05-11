@@ -49,6 +49,11 @@ import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
                                                     wpsOnExc,
                                                     wpsGetDest)
 import qualified Keter.Rewrite as Rewrite
+import           Data.ByteString            (ByteString)
+import           Data.Text                  (Text)
+import Keter.Types.Common
+import           System.FilePath            (FilePath)
+import           Control.Exception          (SomeException)
 import           Network.HTTP.Types                (mkStatus, status200,
                                                     status301, status302,
                                                     status303, status307,

@@ -9,6 +9,8 @@ module Keter.Main
     ( keter
     ) where
 
+import Keter.Types.Common
+import           System.FilePath            (FilePath)
 import qualified Keter.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
 import           Control.Monad             (unless)

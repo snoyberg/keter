@@ -9,6 +9,8 @@
 * Move Network.Http.ReverseProxy.Rewrite into Keter.Rewrite
 * Move Codec.Archive.TempTarball into Keter.TempTarball
 * Hide Keter.Aeson.KeyHelper
+* Stop re-exporting common and rewrite from types
+* Common no longer re-exports half of Haskell
 
 ## 1.9
 

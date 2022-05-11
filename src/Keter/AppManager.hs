@@ -17,6 +17,12 @@ module Keter.AppManager
     , renderApps
     ) where
 
+import Keter.Types.Common
+import           Data.Set                   (Set)
+import           Data.Text                  (Text)
+import           System.FilePath            (FilePath)
+import           Data.Map                   (Map)
+import           Control.Exception          (SomeException)
 import           Control.Applicative
 import           Control.Concurrent         (forkIO)
 import           Control.Concurrent.MVar    (MVar, newMVar, withMVar)

@@ -15,6 +15,13 @@ module Keter.App
     , showApp
     ) where
 
+import Keter.Types.Common
+import           Data.Set                   (Set)
+import           Data.Text                  (Text)
+import           System.FilePath            (FilePath)
+import           Data.Map                   (Map)
+import           Control.Exception          (SomeException)
+import           Keter.Rewrite (ReverseProxyConfig (..), RewriteRule (..))
 import           Keter.TempTarball
 import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))

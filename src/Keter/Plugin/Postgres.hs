@@ -9,6 +9,7 @@ module Keter.Plugin.Postgres
     , load
     ) where
 
+import           Keter.Types.Common
 import           Control.Applicative       ((<$>), (<*>), pure)
 import           Keter.Aeson.KeyHelper      as AK (lookup)
 import           Control.Concurrent        (forkIO)
@@ -27,7 +28,6 @@ import qualified Data.Text.Lazy            as TL
 import           Data.Text.Lazy.Builder    (fromText, toLazyText)
 import qualified Data.Vector               as V
 import           Data.Yaml
-import           Keter.Types
 import           Prelude                   hiding (FilePath)
 import           System.Directory          (createDirectoryIfMissing,
                                             doesFileExist, renameFile)
@@ -37,6 +37,9 @@ import           System.IO.Error           (annotateIOError,
                                             isDoesNotExistError)
 import           System.Process            (readProcess)
 import qualified System.Random             as R
+import           Data.Text                  (Text)
+import           System.FilePath            (FilePath)
+import           Control.Exception          (SomeException)
 
 data Settings = Settings
     { setupDBInfo :: DBInfo -> IO ()

@@ -1,3 +1,5 @@
+-- | This does a merger of V04 and V10
+--   Effectivelly this provides the 'latest' config.
 module Keter.Config
     ( module X
     ) where

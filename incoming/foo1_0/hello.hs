@@ -2,7 +2,6 @@
 
 import           Control.Monad.IO.Class
 import qualified Data.ByteString.Lazy.Char8           as L8
-import           Data.Default
 import           Network.HTTP.Types
 import           Network.Wai
 import           Network.Wai.Handler.Warp
@@ -19,7 +18,7 @@ main = do
     portS <- getEnv "PORT"
     env <- getEnvironment
     let port = read portS
-    logger <- mkRequestLogger def
+    logger <- mkRequestLogger defaultRequestLoggerSettings
         { outputFormat = Apache FromHeader
         }
     run port $ logger $ \req send -> do

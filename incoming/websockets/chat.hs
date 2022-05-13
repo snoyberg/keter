@@ -18,11 +18,12 @@ import           Yesod.WebSockets
 
 data App = App (TChan Text)
 
-instance Yesod App
 
 mkYesod "App" [parseRoutes|
 / HomeR GET
 |]
+
+instance Yesod App
 
 chatApp :: WebSocketsT Handler ()
 chatApp = do
@@ -35,7 +36,7 @@ chatApp = do
         dupTChan writeChan
     race_
         (forever $ atomically (readTChan readChan) >>= sendTextData)
-        (sourceWS $$ CL.mapM_ (\msg ->
+        (runConduit $ sourceWS .| CL.mapM_ (\msg ->
             atomically $ writeTChan writeChan $ name <> ": " <> msg))
 
 getHomeR :: Handler Html

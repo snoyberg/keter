@@ -34,12 +34,10 @@ import           System.FilePath            (FilePath)
 import           Data.Set                   (Set)
 import           Data.Map                   (Map)
 
-type HMState = LabelMap HostValue
-
 data HostValue = HVActive   !AppId !ProxyAction !TLS.Credentials
                | HVReserved !AppId
 
-newtype HostManager = HostManager (IORef HMState)
+newtype HostManager = HostManager (IORef (LabelMap HostValue))
 
 type Reservations = Set.Set Host
 
@@ -125,7 +123,7 @@ activateApp log (HostManager mstate) app actions = do
     atomicModifyIORef mstate $ \state0 ->
         (activateHelper app state0 actions, ())
 
-activateHelper :: AppId -> HMState -> Map Host (ProxyAction, TLS.Credentials) -> HMState
+activateHelper :: AppId -> LabelMap HostValue -> Map Host (ProxyAction, TLS.Credentials) -> LabelMap HostValue
 activateHelper app =
     Map.foldrWithKey activate
   where
@@ -149,7 +147,7 @@ deactivateApp log (HostManager mstate) app hosts = do
     atomicModifyIORef mstate $ \state0 ->
         (deactivateHelper app state0 hosts, ())
 
-deactivateHelper :: AppId -> HMState -> Set Host -> HMState
+deactivateHelper :: AppId -> LabelMap HostValue -> Set Host -> LabelMap HostValue
 deactivateHelper app =
     Set.foldr deactivate
   where

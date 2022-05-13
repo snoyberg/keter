@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
 {-# LANGUAGE TupleSections   #-}
+{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE CPP #-}
 -- | A light-weight, minimalistic reverse HTTP proxy.
 module Keter.Proxy
@@ -81,7 +82,8 @@ data ProxySettings = MkProxySettings
   { -- | Mapping from virtual hostname to port number.
     psHostLookup     :: ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))
   , psManager        :: !Manager
-  , psConfig         :: !KeterConfig
+  , psIpFromHeader   :: Bool
+  , psConnectionTimeBound :: Int
   , psUnkownHost     :: ByteString -> ByteString
   , psMissingHost    :: ByteString
   , psProxyException :: ByteString
@@ -89,7 +91,7 @@ data ProxySettings = MkProxySettings
   }
 
 makeSettings :: (LogMessage -> IO ()) -> KeterConfig -> HostMan.HostManager -> IO ProxySettings
-makeSettings log psConfig@KeterConfig {..} hostman = do
+makeSettings log KeterConfig {..} hostman = do
     psManager <- HTTP.newManager HTTP.tlsManagerSettings
     psMissingHost <- case kconfigMissingHostResponse of
       Nothing -> pure defaultMissingHostBody
@@ -104,6 +106,11 @@ makeSettings log psConfig@KeterConfig {..} hostman = do
     where
         psLogException a b = log $ ProxyException a b
         psHostLookup = HostMan.lookupAction hostman . CI.mk
+
+        -- | calculate the number of microseconds since the
+        --   configuration option is in milliseconds
+        psConnectionTimeBound = kconfigConnectionTimeBound * 1000
+        psIpFromHeader   = kconfigIpFromHeader
 
 taggedReadFile :: String -> FilePath -> IO ByteString
 taggedReadFile tag file = do
@@ -158,30 +165,10 @@ withClient isSecure MkProxySettings {..} =
         } psManager
   where
     useHeader :: Bool
-    useHeader = kconfigIpFromHeader psConfig
+    useHeader = psIpFromHeader
 
-    -- calculate the number of microseconds since the
-    -- configuration option is in milliseconds
     bound :: Int
-    bound = kconfigConnectionTimeBound psConfig * 1000
-    protocol
-        | isSecure = "https"
-        | otherwise = "http"
-
-    -- FIXME This is a workaround for
-    -- https://github.com/snoyberg/keter/issues/29. After some research, it
-    -- seems like Warp is behaving properly here. I'm still not certain why the
-    -- http call (from http-conduit) inside waiProxyToSettings could ever block
-    -- infinitely without the server it's connecting to going down, so that
-    -- requires more research. Meanwhile, this prevents the file descriptor
-    -- leak from occurring.
-
-    addjustGlobalBound :: Maybe Int -> LocalWaiProxySettings
-    addjustGlobalBound to = go `setLpsTimeBound` defaultLocalWaiProxySettings
-      where
-        go = case to <|> Just bound of
-               Just x | x > 0 -> Just x
-               _              -> Nothing
+    bound = psConnectionTimeBound
 
     getDest :: Wai.Request -> IO (LocalWaiProxySettings, WaiProxyResponse)
     getDest req =
@@ -204,14 +191,14 @@ withClient isSecure MkProxySettings {..} =
                         then return Nothing
                         else psHostLookup host'
         case mport of
-            Nothing -> do
+            Nothing -> do -- we don't know the host that was asked for
               return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host (psUnkownHost host))
             Just ((action, requiresSecure), _)
                 | requiresSecure && not isSecure -> performHttpsRedirect host req
-                | otherwise -> performAction req action
+                | otherwise -> performAction psManager isSecure bound req action
 
     performHttpsRedirect host =
-        return . (addjustGlobalBound Nothing,) . WPRResponse . redirectApp config
+        return . (addjustGlobalBound bound Nothing,) . WPRResponse . redirectApp config
       where
         host' = CI.mk $ decodeUtf8With lenientDecode host
         config = RedirectConfig
@@ -222,23 +209,43 @@ withClient isSecure MkProxySettings {..} =
             , redirconfigSsl = SSLTrue
             }
 
-    performAction req (PAPort port tbound) =
-        return (addjustGlobalBound tbound, WPRModifiedRequest req' $ ProxyDest "127.0.0.1" port)
+-- FIXME This is a workaround for
+-- https://github.com/snoyberg/keter/issues/29. After some research, it
+-- seems like Warp is behaving properly here. I'm still not certain why the
+-- http call (from http-conduit) inside waiProxyToSettings could ever block
+-- infinitely without the server it's connecting to going down, so that
+-- requires more research. Meanwhile, this prevents the file descriptor
+-- leak from occurring.
+addjustGlobalBound :: Int -> Maybe Int -> LocalWaiProxySettings
+addjustGlobalBound bound to = go `setLpsTimeBound` defaultLocalWaiProxySettings
+  where
+    go = case to <|> Just bound of
+           Just x | x > 0 -> Just x
+           _              -> Nothing
+
+
+performAction :: Manager -> Bool -> Int -> Wai.Request -> ProxyActionRaw -> IO (LocalWaiProxySettings, WaiProxyResponse)
+performAction psManager isSecure globalBound req = \case
+  (PAPort port tbound) ->
+    return (addjustGlobalBound globalBound tbound, WPRModifiedRequest req' $ ProxyDest "127.0.0.1" port)
       where
         req' = req
             { Wai.requestHeaders = ("X-Forwarded-Proto", protocol)
-                                 : Wai.requestHeaders req
+                                : Wai.requestHeaders req
             }
-    performAction _ (PAStatic StaticFilesConfig {..}) =
-        return (addjustGlobalBound sfconfigTimeout, WPRApplication $ processMiddleware sfconfigMiddleware $ staticApp (defaultFileServerSettings sfconfigRoot)
-            { ssListing =
-                if sfconfigListings
-                    then Just defaultListing
-                    else Nothing
-            })
-    performAction req (PARedirect config) = return (addjustGlobalBound Nothing, WPRResponse $ redirectApp config req)
-    performAction _ (PAReverseProxy config rpconfigMiddleware tbound) =
-       return (addjustGlobalBound tbound, WPRApplication
+        protocol
+            | isSecure = "https"
+            | otherwise = "http"
+  (PAStatic StaticFilesConfig {..}) ->
+    return (addjustGlobalBound globalBound sfconfigTimeout, WPRApplication $ processMiddleware sfconfigMiddleware $ staticApp (defaultFileServerSettings sfconfigRoot)
+        { ssListing =
+            if sfconfigListings
+                then Just defaultListing
+                else Nothing
+        })
+  (PARedirect config) -> return (addjustGlobalBound globalBound Nothing, WPRResponse $ redirectApp config req)
+  (PAReverseProxy config rpconfigMiddleware tbound) ->
+       return (addjustGlobalBound globalBound tbound, WPRApplication
                 $ processMiddleware rpconfigMiddleware
                 $ Rewrite.simpleReverseProxy psManager config
               )
@@ -295,6 +302,7 @@ defaultProxyException = "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</t
 defaultMissingHostBody :: ByteString
 defaultMissingHostBody = "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>You did not provide a virtual hostname for this request.</p></body></html>"
 
+-- | Error, no host found in the header
 missingHostResponse :: ByteString -> Wai.Response
 missingHostResponse missingHost = Wai.responseBuilder
     status502
@@ -306,6 +314,7 @@ defaultUnknownHostBody host =
   "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>The hostname you have provided, <code>"
   <> escapeHtml host <> "</code>, is not recognized.</p></body></html>"
 
+-- | We found a host in the header, but we don't know about the host asked for.
 unknownHostResponse :: ByteString -> ByteString -> Wai.Response
 unknownHostResponse host body = Wai.responseBuilder
     status404

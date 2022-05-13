@@ -11,5 +11,6 @@ pkgs.haskellPackages.shellFor {
  };
   buildInputs = [
         pkgs.cabal-install
+        pkgs.haskellPackages.hasktags
         ];
 }

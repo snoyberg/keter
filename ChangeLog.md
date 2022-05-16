@@ -1,3 +1,8 @@
+## 2.0.1
+
++ Force usage of http-reverse-proxy versions above 0.6.0.1.
+  This prevents a DoS attack on a head request followed by a post.
+
 ## 2.0
 
 + Improve missing sudo error messages in postgres plugin.

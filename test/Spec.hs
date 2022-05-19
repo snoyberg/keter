@@ -1,12 +1,12 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NumericUnderscores #-}
 
 module Main where
 
-import Network.HTTP.Client (defaultManagerSettings, managerResponseTimeout)
 import Network.HTTP.Types.Status(ok200)
 import qualified Network.Wai.Handler.Warp as Warp
 import Keter.Config.V10
-import           Control.Concurrent        (forkIO)
+import           Control.Concurrent        (forkIO, threadDelay)
 import Data.Maybe (isJust)
 import Keter.LabelMap as LM
 import Test.Tasty
@@ -14,8 +14,6 @@ import Test.Tasty.HUnit
 import Control.Monad
 import           Control.Exception          (SomeException)
 import           Network.HTTP.Conduit              (Manager)
-import Control.Lens
-import Network.Wreq(Options)
 import Data.ByteString(ByteString)
 import qualified Network.Wreq as Wreq
 import Control.Monad.STM
@@ -32,8 +30,8 @@ keterTests =
   testGroup
     "Tests"
     [ testCase "Subdomain Integrity" caseSubdomainIntegrity
-    , testCase "Head then post doesn't crash" headThenPostNoCrash
     , testCase "Wildcard Domains" caseWildcards
+    , testCase "Head then post doesn't crash" headThenPostNoCrash
     ]
 
 caseSubdomainIntegrity :: IO ()
@@ -66,6 +64,8 @@ headThenPostNoCrash = do
 
   forkIO $ do
     reverseProxy (settings exceptions manager) $ LPInsecure "*" 6780
+
+  threadDelay 0_100_000
 
   res <- Wreq.head_ "http://localhost:6780"
 

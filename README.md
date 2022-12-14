@@ -174,54 +174,10 @@ Finally, start the job for the first time:
 
 
 ### NixOS 
-Add a nix file `keter.nix` that fetches this repository and imports
-the module file:
-```nix
-let
-  owner = "snoyberg";
-  repo = "keter";
-  rev = "be4e3132e988519dacd0f9b40a47e23d33865b76";
 
-  src = builtins.fetchTarball {
-    url = "https://github.com/${owner}/${repo}/archive/${rev}.tar.gz";
-    };
-in
-import "${src}/nix/module.nix"
-```
-Make sure to update rev to the latest commit!
-Now you can import this as an ordinary module
-in your `configuration.nix`:
-```nix
-imports = [
-  ./keter.nix
-];
-```
+Keter is integrated within nixos:
 
-Now you can configure keter in the same `configuration.nix`:
-```nix
-services.keter = {
-  enable = true;
-  keterPackage = pkgs.keter;
-  bundle = {
-    domain = "example.com";
-    secretScript = env.secretScript;
-    publicScript = env.publicScript;
-    package = myWebAppDerivation;
-    executable = "exe";
-  };
-};
-```
-
-secretScript is used to load environment varialbes, for example:
-```
-MY_AWS_KEY=$(cat /run/keys/AWS_ACCESS_KEY_ID)
-```
-Public script does the same but emits the loading to the logs.
-which isn't good for secrets.
-
-For the full option list available see `nix/module.nix`.
-This should load most webapps but PR's for improved support are welcome.
-Note that the default expects keter to be run behind nginx.
+https://search.nixos.org/options?channel=22.11&show=services.keter.keterPackage&from=0&size=50&sort=relevance&type=packages&query=keter
     
 ## Bundles
 

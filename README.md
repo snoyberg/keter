@@ -178,6 +178,9 @@ Finally, start the job for the first time:
 Keter is integrated within nixos:
 
 https://search.nixos.org/options?channel=22.11&show=services.keter.keterPackage&from=0&size=50&sort=relevance&type=packages&query=keter
+
+There is an example that integrates yesod into keter with NixOS here:
+https://github.com/jappeace/yesod-keter-nix
     
 ## Bundles
 

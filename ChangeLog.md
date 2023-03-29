@@ -8,6 +8,8 @@
   Rotated logs will now simply have `.1` `.2` ascending appended to the name of the base logs 
   rather than be named after the date and time they were rotated at:  
   `logs/keter/20230413_231415.log` -> `logs/keter.log.1`  
+  `logs/__builtin__/20230413_231415.log` -> `logs/__builtin__.log.1`  
+  `logs/app-foo/20230413_231415.log` -> `logs/app-foo.log.1`  
   Please update anything that depended on the old log naming and directory conventions accordingly.
 + Added the `rotate-logs` option (default: true) in the keter config file.  
   When true, the main keter (non-app!) logs will rotate like they have in previous versions.  

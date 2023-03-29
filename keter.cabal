@@ -62,6 +62,8 @@ Library
                      , attoparsec                >= 0.10
                      , http-client               >= 0.5.0
                      , http-conduit              >= 2.1
+                     , fast-logger
+                     , monad-logger
                      , case-insensitive
                      , array
                      , mtl

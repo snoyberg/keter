@@ -645,7 +645,7 @@ terminate App {..} = do
 
     deactivateApp ascLog ascHostManager appId hosts
     void $ forkIO $ terminateHelper appAsc appId apps backs mdir rlog
-    maybe (return ()) LogFile.close rlog
+    maybe (return ()) LogFile.rlClose rlog
   where
     AppStartConfig {..} = appAsc
 

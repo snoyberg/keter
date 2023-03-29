@@ -2,34 +2,12 @@
 {-# LANGUAGE RankNTypes #-}
 module Keter.Conduit.LogFile
     ( RotatingLog(..)
-    , rotationSpec
-    , openRotatingLog
-    , addChunk
-    , close
+    , defaultRotationSpec
     , defaultMaxTotal
     , defaultBufferSize
     ) where
 
-import           Control.Concurrent             (forkIO)
-import           Control.Concurrent.STM         (atomically)
-import           Control.Concurrent.STM.TBQueue
-import           Control.Concurrent.STM.TVar
-import           Control.Exception              (bracket, bracketOnError,
-                                                 finally)
-import           Control.Monad                  (void, when)
-import qualified Data.ByteString                as S
-import           Data.Time                      (UTCTime, getCurrentTime)
-import           Data.Word                      (Word)
-import           System.Directory               (createDirectoryIfMissing,
-                                                 doesFileExist, renameFile)
-import           System.FilePath                ((<.>), (</>))
-import qualified System.IO                      as SIO
-import           System.IO.Unsafe               (unsafePerformIO)
-import           System.Mem.Weak                (addFinalizer)
-import qualified System.Log.FastLogger          as FL
-
-data Command = AddChunk !S.ByteString
-             | Close
+import qualified System.Log.FastLogger as FL
 
 -- | Represents a folder used for totating log files.
 --

@@ -39,8 +39,8 @@ data RotatingLog = RotatingLog
   , rlClose :: IO () 
   }
 
-rotationSpec :: FilePath -> FL.FileLogSpec
-rotationSpec dir =
+defaultRotationSpec :: FilePath -> FL.FileLogSpec
+defaultRotationSpec dir =
     FL.FileLogSpec dir defaultMaxTotal maxBound -- TODO: do we want to overwrite logs after a certain point? leaving this INT_MAX for now
 
 defaultMaxTotal :: Integer

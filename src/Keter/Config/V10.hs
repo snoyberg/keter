@@ -185,6 +185,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "missing-host-response-file"
             <*> o .:? "unknown-host-response-file"
             <*> o .:? "proxy-exception-response-file"
+            <*> o .:? "rotate-logs" .!= True
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool

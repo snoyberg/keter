@@ -47,6 +47,7 @@ import           System.Directory          (createDirectoryIfMissing,
                                             getDirectoryContents)
 import           System.FilePath           (takeExtension, (</>))
 import qualified System.FSNotify           as FSN
+import qualified System.Log.FastLogger     as FL
 import           System.Posix.User         (getUserEntryForID,
                                             getUserEntryForName, userGroupID,
                                             userID, userName)
@@ -93,20 +94,22 @@ withConfig input f = do
 withLogger :: FilePath
            -> (KeterConfig -> (LogMessage -> IO ()) -> IO a)
            -> IO a
-withLogger fp f = withConfig fp $ \config -> do
-    mainlog <- LogFile.openRotatingLog
-        (kconfigDir config </> "log" </> "keter")
-        LogFile.defaultMaxTotal
-
-    f config $ \ml -> do
-        now <- getCurrentTime
-        let bs = encodeUtf8 $ T.pack $ concat
-                [ take 22 $ show now
-                , ": "
-                , show ml
-                , "\n"
-                ]
-        LogFile.addChunk mainlog bs
+withLogger fp f = withConfig fp $ \config@KeterConfig{..} -> do
+    let logName = kconfigDir </> "log" </> "keter.log"
+    let logType = 
+          if kconfigRotateLogs
+            then FL.LogFile (LogFile.defaultRotationSpec logName) LogFile.defaultBufferSize
+            else FL.LogStderr LogFile.defaultBufferSize
+    FL.withFastLogger logType $ \log ->
+        f config $ \lm -> do
+            now <- getCurrentTime
+            let bs = FL.toLogStr $ encodeUtf8 $ T.pack $ concat
+                    [ take 22 $ show now
+                    , ": "
+                    , show lm
+                    , "\n"
+                    ]
+            log bs
 
 withManagers :: FilePath
              -> [FilePath -> IO Plugin]

@@ -57,6 +57,7 @@ import           Network.Socket
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
 import           System.IO                 (hClose, IOMode(..))
+import qualified System.Log.FastLogger     as FL
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)
@@ -220,16 +221,17 @@ withRotatingLog AppStartConfig {..} aid (Just var) f = do
     mrlog <- readTVarIO var
     case mrlog of
         Nothing -> bracketOnError
-            (LogFile.openRotatingLog dir LogFile.defaultMaxTotal)
-            LogFile.close
-            (f var)
+          (mkRotatingLog <$> FL.newFastLogger (FL.LogFile (LogFile.defaultRotationSpec logName) LogFile.defaultBufferSize))
+          LogFile.rlClose 
+          (f var)
         Just rlog ->  f var rlog
   where
-    dir = kconfigDir ascKeterConfig </> "log" </> name
-    name =
+    logName = kconfigDir ascKeterConfig </> "log" </> (pfx <> ".log")
+    pfx =
         case aid of
             AIBuiltin -> "__builtin__"
             AINamed x -> unpack $ "app-" <> x
+    mkRotatingLog (logFn, closeFn) = LogFile.RotatingLog (logFn . FL.toLogStr) closeFn
 
 withSanityChecks :: AppStartConfig -> BundleConfig -> IO a -> IO a
 withSanityChecks AppStartConfig {..} BundleConfig {..} f = do

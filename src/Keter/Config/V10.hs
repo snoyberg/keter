@@ -112,6 +112,7 @@ data KeterConfig = KeterConfig
     , kconfigUnknownHostResponse  :: !(Maybe F.FilePath)
     , kconfigMissingHostResponse  :: !(Maybe F.FilePath)
     , kconfigProxyException       :: !(Maybe F.FilePath)
+    , kconfigRotateLogs           :: !Bool
     }
 
 instance ToCurrent KeterConfig where
@@ -131,6 +132,7 @@ instance ToCurrent KeterConfig where
         , kconfigUnknownHostResponse  = Nothing
         , kconfigMissingHostResponse = Nothing
         , kconfigProxyException      = Nothing
+        , kconfigRotateLogs = True
         }
       where
         getSSL Nothing = V.empty
@@ -154,10 +156,11 @@ defaultKeterConfig = KeterConfig
         , kconfigExternalHttpsPort = 443
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = V04.fiveMinutes
-        , kconfigCliPort             = Nothing
-        , kconfigUnknownHostResponse  = Nothing
+        , kconfigCliPort = Nothing
+        , kconfigUnknownHostResponse = Nothing
         , kconfigMissingHostResponse = Nothing
-        , kconfigProxyException      = Nothing
+        , kconfigProxyException = Nothing
+        , kconfigRotateLogs = True
         }
 
 instance ParseYamlFile KeterConfig where

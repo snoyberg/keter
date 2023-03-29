@@ -339,7 +339,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger WebAppConfig
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.addChunk rlog)
+            (LogFile.rlLog rlogger)
             (const $ return True))
         terminateMonitoredProcess
         $ \mp -> f RunningWebApp
@@ -466,7 +466,7 @@ launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger Backg
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList bgconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.addChunk rlog)
+            (LogFile.rlLog rlogger)
             (const shouldRestart))
         terminateMonitoredProcess
         (f . RunningBackgroundApp)

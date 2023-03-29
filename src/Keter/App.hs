@@ -310,7 +310,7 @@ launchWebApp :: AppStartConfig
              -> WebAppConfig Port
              -> (RunningWebApp -> IO a)
              -> IO a
-launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlog WebAppConfig {..} f = do
+launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger WebAppConfig {..} f = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
     forwardedEnv <- getForwardedEnv waconfigForwardEnv
     let httpPort  = kconfigExternalHttpPort  ascKeterConfig
@@ -431,7 +431,7 @@ launchBackgroundApp :: AppStartConfig
                     -> BackgroundConfig
                     -> (RunningBackgroundApp -> IO a)
                     -> IO a
-launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlog BackgroundConfig {..} f = do
+launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger BackgroundConfig {..} f = do
     otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
     forwardedEnv <- getForwardedEnv bgconfigForwardEnv
     let env = Map.toList $ Map.unions

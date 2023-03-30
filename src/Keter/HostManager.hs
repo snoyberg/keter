@@ -1,6 +1,7 @@
 {-# LANGUAGE OverloadedStrings   #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE ViewPatterns        #-}
+{-# LANGUAGE TemplateHaskell     #-}
 module Keter.HostManager
     ( -- * Types
       HostManager
@@ -16,11 +17,16 @@ module Keter.HostManager
     , start
     ) where
 
+import Keter.Context
 import           Control.Applicative
 import           Control.Exception   (assert, throwIO)
+import           Control.Monad.Logger
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.Reader    (ask)
 import qualified Data.CaseInsensitive as CI
 import           Data.Either         (partitionEithers)
 import           Data.IORef
+import           Data.Text           (pack, unpack)
 import qualified Data.Map            as Map
 import qualified Data.Set            as Set
 import           Data.Text.Encoding  (encodeUtf8)
@@ -59,18 +65,22 @@ start = HostManager <$> newIORef LabelMap.empty
 --
 -- 4. Otherwise, the hosts which were reserved are returned as @Right@. This
 --    does /not/ include previously active hosts.
-reserveHosts :: (LogMessage -> IO ())
-             -> HostManager
-             -> AppId
+reserveHosts :: AppId
              -> Set.Set Host
-             -> IO Reservations
-reserveHosts log (HostManager mstate) aid hosts = do
-  log $ ReservingHosts aid hosts
-  either (throwIO . CannotReserveHosts aid) return =<< atomicModifyIORef mstate (\entries0 ->
-    case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
-        ([], Set.unions -> toReserve) ->
-            (Set.foldr reserve entries0 toReserve, Right toReserve)
-        (conflicts, _) -> (entries0, Left $ Map.fromList conflicts))
+             -> KeterM HostManager Reservations
+reserveHosts aid hosts = do
+  (HostManager mstate) <- ask
+  $logInfo $ pack $ 
+      "Reserving hosts for app " 
+      ++ show aid
+      ++ ": " 
+      ++ unwords (map (unpack . CI.original) $ Set.toList hosts)
+  liftIO $ either (throwIO . CannotReserveHosts aid) return 
+    =<< atomicModifyIORef mstate (\entries0 ->
+      case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
+          ([], Set.unions -> toReserve) ->
+              (Set.foldr reserve entries0 toReserve, Right toReserve)
+          (conflicts, _) -> (entries0, Left $ Map.fromList conflicts))
   where
     checkHost entries0 host =
         case LabelMap.labelAssigned hostBS entries0 of
@@ -92,14 +102,17 @@ reserveHosts log (HostManager mstate) aid hosts = do
         hostBS = encodeUtf8 $ CI.original host
 
 -- | Forget previously made reservations.
-forgetReservations :: (LogMessage -> IO ())
-                   -> HostManager
-                   -> AppId
+forgetReservations :: AppId
                    -> Reservations
-                   -> IO ()
-forgetReservations log (HostManager mstate) app hosts = do
-    log $ ForgetingReservations app hosts
-    atomicModifyIORef mstate $ \state0 ->
+                   -> KeterM HostManager ()
+forgetReservations app hosts = do
+    (HostManager mstate) <- ask
+    $logInfo $ pack $ 
+        "Forgetting host reservations for app " 
+        ++ show app 
+        ++ ": " 
+        ++ unwords (map (unpack . CI.original) $ Set.toList hosts)
+    liftIO $ atomicModifyIORef mstate $ \state0 ->
         (Set.foldr forget state0 hosts, ())
   where
     forget host state =
@@ -113,14 +126,18 @@ forgetReservations log (HostManager mstate) app hosts = do
                 Just HVActive{} -> False
 
 -- | Activate a new app. Note that you /must/ first reserve the hostnames you'll be using.
-activateApp :: (LogMessage -> IO ())
-            -> HostManager
-            -> AppId
+activateApp :: AppId
             -> Map.Map Host (ProxyAction, TLS.Credentials)
-            -> IO ()
-activateApp log (HostManager mstate) app actions = do
-    log $ ActivatingApp app $ Map.keysSet actions
-    atomicModifyIORef mstate $ \state0 ->
+            -> KeterM HostManager ()
+activateApp app actions = do
+    (HostManager mstate) <- ask
+    $logInfo $ pack $ concat
+        [ "Activating app "
+        , show app
+        , " with hosts: "
+        , unwords (map (unpack . CI.original) $ Set.toList (Map.keysSet actions))
+        ]
+    liftIO $ atomicModifyIORef mstate $ \state0 ->
         (activateHelper app state0 actions, ())
 
 activateHelper :: AppId -> LabelMap HostValue -> Map Host (ProxyAction, TLS.Credentials) -> LabelMap HostValue
@@ -137,14 +154,13 @@ activateHelper app =
                 Just (HVReserved app') -> app == app'
                 Just (HVActive app' _ _) -> app == app'
 
-deactivateApp :: (LogMessage -> IO ())
-              -> HostManager
-              -> AppId
+deactivateApp :: AppId
               -> Set Host
-              -> IO ()
-deactivateApp log (HostManager mstate) app hosts = do
-    log $ DeactivatingApp app hosts
-    atomicModifyIORef mstate $ \state0 ->
+              -> KeterM HostManager ()
+deactivateApp app hosts = do
+    $logInfo $ pack $ "Deactivating app " ++ show app ++ " with hosts: " ++ unwords (map (unpack . CI.original) $ Set.toList hosts)
+    (HostManager mstate) <- ask
+    liftIO $ atomicModifyIORef mstate $ \state0 ->
         (deactivateHelper app state0 hosts, ())
 
 deactivateHelper :: AppId -> LabelMap HostValue -> Set Host -> LabelMap HostValue
@@ -161,15 +177,22 @@ deactivateHelper app =
                 Just (HVActive app' _ _) -> app == app'
                 Just HVReserved {} -> False
 
-reactivateApp :: (LogMessage -> IO ())
-              -> HostManager
-              -> AppId
+reactivateApp :: AppId
               -> Map Host (ProxyAction, TLS.Credentials)
               -> Set Host
-              -> IO ()
-reactivateApp log (HostManager mstate) app actions hosts = do
-    log $ ReactivatingApp app hosts (Map.keysSet actions)
-    atomicModifyIORef mstate $ \state0 ->
+              -> KeterM HostManager ()
+reactivateApp app actions hosts = do
+    (HostManager mstate) <- ask
+    $logInfo $ pack $ concat
+        [ "Reactivating app "
+        , show app
+        , ".  Old hosts: "
+        , unwords (map (unpack . CI.original) $ Set.toList hosts)
+        , ". New hosts: "
+        , unwords (map (unpack . CI.original) $ Set.toList (Map.keysSet actions))
+        , "."
+        ]
+    liftIO $ atomicModifyIORef mstate $ \state0 ->
         (activateHelper app (deactivateHelper app state0 hosts) actions, ())
 
 lookupAction :: HostManager

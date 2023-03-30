@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell     #-}
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE NamedFieldPuns      #-}
+{-# LANGUAGE TypeApplications    #-}
 
 module Keter.App
     ( App
@@ -16,6 +17,7 @@ module Keter.App
     ) where
 
 import Keter.Common
+import Keter.Context
 import           Data.Set                   (Set)
 import           Data.Text                  (Text)
 import           System.FilePath            (FilePath)
@@ -26,9 +28,14 @@ import           Control.Applicative       ((<$>), (<*>))
 import           Control.Arrow             ((***))
 import           Control.Concurrent        (forkIO, threadDelay)
 import           Control.Concurrent.STM
-import           Control.Exception         (IOException, bracketOnError,
+import           Control.Exception         (IOException, SomeException,
+                                            bracketOnError,
                                             throwIO, try, catch)
 import           Control.Monad             (void, when, liftM)
+import           Control.Monad.IO.Class    (liftIO)
+import           Control.Monad.IO.Unlift   (withRunInIO)
+import           Control.Monad.Logger      
+import           Control.Monad.Reader      (ask)
 import qualified Data.CaseInsensitive      as CI
 import           Keter.Conduit.LogFile      (RotatingLog)
 import qualified Keter.Conduit.LogFile      as LogFile
@@ -100,13 +107,13 @@ newtype RunningBackgroundApp = RunningBackgroundApp
     { rbaProcess :: MonitoredProcess
     }
 
-unpackBundle :: AppStartConfig
-             -> FilePath
+unpackBundle :: FilePath
              -> AppId
-             -> IO (FilePath, BundleConfig)
-unpackBundle AppStartConfig {..} bundle aid = do
-    ascLog $ UnpackingBundle bundle
-    unpackTempTar (fmap snd ascSetuid) ascTempFolder bundle folderName $ \dir -> do
+             -> KeterM AppStartConfig (FilePath, BundleConfig)
+unpackBundle bundle aid = do
+    AppStartConfig{..} <- ask
+    $logInfo $ pack $ "Unpacking bundle '" <> show bundle <> "'"
+    liftIO $ unpackTempTar (fmap snd ascSetuid) ascTempFolder bundle folderName $ \dir -> do
         -- Get the FilePath for the keter yaml configuration. Tests for
         -- keter.yml and defaults to keter.yaml.
         configFP <- do
@@ -134,36 +141,39 @@ data AppStartConfig = AppStartConfig
     , ascHostManager    :: !HostManager
     , ascPortPool       :: !PortPool
     , ascPlugins        :: !Plugins
-    , ascLog            :: !(LogMessage -> IO ())
+    , ascLog            :: !Logger
     , ascKeterConfig    :: !KeterConfig
     }
 
-withConfig :: AppStartConfig
-           -> AppId
+withConfig :: AppId
            -> AppInput
-           -> (Maybe FilePath -> BundleConfig -> Maybe EpochTime -> IO a)
-           -> IO a
-withConfig _asc _aid (AIData bconfig) f = f Nothing bconfig Nothing
-withConfig asc aid (AIBundle fp modtime) f = bracketOnError
-    (unpackBundle asc fp aid)
-    (\(newdir, _) -> removeDirectoryRecursive newdir)
-    $ \(newdir, bconfig) -> f (Just newdir) bconfig (Just modtime)
+           -> (Maybe FilePath -> BundleConfig -> Maybe EpochTime -> KeterM AppStartConfig a)
+           -> KeterM AppStartConfig a
+withConfig _aid (AIData bconfig) f = f Nothing bconfig Nothing
+withConfig aid (AIBundle fp modtime) f = do
+    withRunInIO $ \rio ->
+        bracketOnError
+            (rio $ unpackBundle fp aid)
+            (\(newdir, _) -> removeDirectoryRecursive newdir)
+            $ \(newdir, bconfig) -> rio $ f (Just newdir) bconfig (Just modtime)
 
-withReservations :: AppStartConfig
-                 -> AppId
+withReservations :: AppId
                  -> BundleConfig
-                 -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
-                 -> IO a
-withReservations asc aid bconfig f = withActions asc bconfig $ \wacs backs actions -> bracketOnError
-    (reserveHosts (ascLog asc) (ascHostManager asc) aid $ Map.keysSet actions)
-    (forgetReservations (ascLog asc) (ascHostManager asc) aid)
-    (const $ f wacs backs actions)
+                 -> ([WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> KeterM AppStartConfig a)
+                 -> KeterM AppStartConfig a
+withReservations aid bconfig f = do
+    AppStartConfig{..} <- ask
+    withActions bconfig $ \wacs backs actions ->
+        withRunInIO $ \rio ->
+            bracketOnError
+              (rio $ withMappedConfig (const ascHostManager) $ reserveHosts aid $ Map.keysSet actions)
+              (\rsvs -> rio $ withMappedConfig (const ascHostManager)  $ forgetReservations aid rsvs)
+              (\_ -> rio $ f wacs backs actions)
 
-withActions :: AppStartConfig
-            -> BundleConfig
-            -> ([ WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> IO a)
-            -> IO a
-withActions asc bconfig f =
+withActions :: BundleConfig
+            -> ([ WebAppConfig Port] -> [BackgroundConfig] -> Map Host (ProxyAction, TLS.Credentials) -> KeterM AppStartConfig a)
+            -> KeterM AppStartConfig a
+withActions bconfig f =
     loop (V.toList $ bconfigStanzas bconfig) [] [] Map.empty
   where
     -- todo: add loading from relative location
@@ -173,20 +183,23 @@ withActions asc bconfig f =
     loadCert _ = return mempty
 
     loop [] wacs backs actions = f wacs backs actions
-    loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = bracketOnError
-        (getPort (ascLog asc) (ascPortPool asc) >>= either throwIO
-             (\p -> fmap (p,) <$> loadCert $ waconfigSsl wac)
-        )
-        (\(port, _)    -> releasePort (ascPortPool asc) port)
-        (\(port, cert) -> loop
-            stanzas
-            (wac { waconfigPort = port } : wacs)
-            backs
-            (Map.unions $ actions : map (\host -> Map.singleton host ((PAPort port (waconfigTimeout wac), rs), cert)) hosts))
+    loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = do
+      AppStartConfig{..} <- ask
+      withRunInIO $ \rio -> 
+        liftIO $ bracketOnError
+          (rio (getPort ascPortPool) >>= either throwIO
+               (\p -> fmap (p,) <$> loadCert $ waconfigSsl wac)
+          )
+          (\(port, _)    -> releasePort ascPortPool port)
+          (\(port, cert) -> rio $ loop
+              stanzas
+              (wac { waconfigPort = port } : wacs)
+              backs
+              (Map.unions $ actions : map (\host -> Map.singleton host ((PAPort port (waconfigTimeout wac), rs), cert)) hosts))
       where
         hosts = Set.toList $ Set.insert (waconfigApprootHost wac) (waconfigHosts wac)
     loop (Stanza (StanzaStaticFiles sfc) rs:stanzas) wacs backs actions0 = do
-        cert <- loadCert $ sfconfigSsl sfc
+        cert <- liftIO $ loadCert $ sfconfigSsl sfc
         loop stanzas wacs backs (actions cert)
       where
         actions cert = Map.unions
@@ -194,7 +207,7 @@ withActions asc bconfig f =
                 : map (\host -> Map.singleton host ((PAStatic sfc, rs), cert))
                   (Set.toList (sfconfigHosts sfc))
     loop (Stanza (StanzaRedirect red) rs:stanzas) wacs backs actions0 = do
-        cert <- loadCert $ redirconfigSsl red
+        cert <- liftIO $ loadCert $ redirconfigSsl red
         loop stanzas wacs backs (actions cert)
       where
         actions cert = Map.unions
@@ -202,41 +215,43 @@ withActions asc bconfig f =
                 : map (\host -> Map.singleton host ((PARedirect red, rs), cert))
                   (Set.toList (redirconfigHosts red))
     loop (Stanza (StanzaReverseProxy rev mid to) rs:stanzas) wacs backs actions0 = do
-        cert <- loadCert $ reversingUseSSL rev
+        cert <- liftIO $ loadCert $ reversingUseSSL rev
         loop stanzas wacs backs (actions cert)
       where
         actions cert = Map.insert (CI.mk $ reversingHost rev) ((PAReverseProxy rev mid to, rs), cert) actions0
     loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
-withRotatingLog :: AppStartConfig
-                -> AppId
+withRotatingLog :: AppId
                 -> Maybe (TVar (Maybe RotatingLog))
-                -> ((TVar (Maybe RotatingLog)) -> RotatingLog -> IO a)
-                -> IO a
-withRotatingLog asc aid Nothing f = do
-    var <- newTVarIO Nothing
-    withRotatingLog asc aid (Just var) f
-withRotatingLog AppStartConfig {..} aid (Just var) f = do
-    mrlog <- readTVarIO var
+                -> ((TVar (Maybe RotatingLog)) -> RotatingLog -> KeterM AppStartConfig a)
+                -> KeterM AppStartConfig a
+withRotatingLog aid Nothing f = do
+    var <- liftIO $ newTVarIO Nothing
+    withRotatingLog aid (Just var) f
+withRotatingLog aid (Just var) f = do
+    AppStartConfig{..} <- ask
+    let logName = kconfigDir ascKeterConfig </> "log" </> (pfx <> ".log")
+    mrlog <- liftIO $ readTVarIO var
     case mrlog of
-        Nothing -> bracketOnError
-          (mkRotatingLog <$> FL.newFastLogger (FL.LogFile (LogFile.defaultRotationSpec logName) LogFile.defaultBufferSize))
-          LogFile.rlClose 
-          (f var)
+        Nothing -> withRunInIO $ \rio -> 
+          bracketOnError
+            (mkRotatingLog <$> FL.newFastLogger (FL.LogFile (LogFile.defaultRotationSpec logName) LogFile.defaultBufferSize))
+            LogFile.rlClose 
+            (rio . f var)
         Just rlog ->  f var rlog
   where
-    logName = kconfigDir ascKeterConfig </> "log" </> (pfx <> ".log")
     pfx =
         case aid of
             AIBuiltin -> "__builtin__"
             AINamed x -> unpack $ "app-" <> x
     mkRotatingLog (logFn, closeFn) = LogFile.RotatingLog (logFn . FL.toLogStr) closeFn
 
-withSanityChecks :: AppStartConfig -> BundleConfig -> IO a -> IO a
-withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
-    V.mapM_ go bconfigStanzas
-    ascLog SanityChecksPassed
+withSanityChecks :: BundleConfig -> KeterM AppStartConfig a -> KeterM AppStartConfig a
+withSanityChecks BundleConfig{..} f = do
+    cfg@AppStartConfig{..} <- ask
+    liftIO $ V.mapM_ go bconfigStanzas
+    $logInfo "Sanity checks passed"
     f
   where
     go (Stanza (StanzaWebApp WebAppConfig {..}) _) = do
@@ -256,20 +271,21 @@ withSanityChecks AppStartConfig {..} BundleConfig {..} f = do
                     else throwIO $ FileNotExecutable fp
             else throwIO $ ExecutableNotFound fp
 
-start :: AppStartConfig
-      -> AppId
+start :: AppId
       -> AppInput
-      -> IO App
-start asc aid input =
-    withRotatingLog asc aid Nothing $ \trlog rlog ->
-    withConfig asc aid input $ \newdir bconfig mmodtime ->
-    withSanityChecks asc bconfig $
-    withReservations asc aid bconfig $ \webapps backs actions ->
-    withBackgroundApps asc aid bconfig newdir rlog backs $ \runningBacks ->
-    withWebApps asc aid bconfig newdir rlog webapps $ \runningWebapps -> do
-        mapM_ ensureAlive runningWebapps
-        activateApp (ascLog asc) (ascHostManager asc) aid actions
-        App
+      -> KeterM AppStartConfig App
+start aid input =
+    withRotatingLog aid Nothing $ \trlog rlog ->
+    withConfig aid input $ \newdir bconfig mmodtime ->
+    withSanityChecks bconfig $
+    withReservations aid bconfig $ \webapps backs actions ->
+    withBackgroundApps aid bconfig newdir rlog backs $ \runningBacks ->
+    withWebApps aid bconfig newdir rlog webapps $ \runningWebapps -> do
+        asc@AppStartConfig{..} <- ask
+        liftIO $ mapM_ ensureAlive runningWebapps
+        withMappedConfig (const ascHostManager) $ activateApp aid actions
+        liftIO $ 
+          App
             <$> newTVarIO mmodtime
             <*> newTVarIO runningWebapps
             <*> newTVarIO runningBacks
@@ -289,30 +305,30 @@ bracketedMap with inside =
     loop front [] = inside $ front []
     loop front (c:cs) = with c $ \x -> loop (front . (x:)) cs
 
-withWebApps :: AppStartConfig
-            -> AppId
+withWebApps :: AppId
             -> BundleConfig
             -> Maybe FilePath
             -> RotatingLog
             -> [WebAppConfig Port]
-            -> ([RunningWebApp] -> IO a)
-            -> IO a
-withWebApps asc aid bconfig mdir rlog configs0 f =
-    bracketedMap alloc f configs0
+            -> ([RunningWebApp] -> KeterM AppStartConfig a)
+            -> KeterM AppStartConfig a
+withWebApps aid bconfig mdir rlog configs0 f =
+    withRunInIO $ \rio -> 
+      bracketedMap (\wac f -> rio $ alloc wac (liftIO <$> f)) (rio . f) configs0
   where
-    alloc = launchWebApp asc aid bconfig mdir rlog
+    alloc = launchWebApp aid bconfig mdir rlog
 
-launchWebApp :: AppStartConfig
-             -> AppId
+launchWebApp :: AppId
              -> BundleConfig
              -> Maybe FilePath
              -> RotatingLog
              -> WebAppConfig Port
-             -> (RunningWebApp -> IO a)
-             -> IO a
-launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger WebAppConfig {..} f = do
-    otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
-    forwardedEnv <- getForwardedEnv waconfigForwardEnv
+             -> (RunningWebApp -> KeterM AppStartConfig a)
+             -> KeterM AppStartConfig a
+launchWebApp aid BundleConfig {..} mdir rlogger WebAppConfig {..} f = do
+    AppStartConfig{..} <- ask
+    otherEnv <- liftIO $ pluginsGetEnv ascPlugins name bconfigPlugins
+    forwardedEnv <- liftIO $ getForwardedEnv waconfigForwardEnv
     let httpPort  = kconfigExternalHttpPort  ascKeterConfig
         httpsPort = kconfigExternalHttpsPort ascKeterConfig
         (scheme, extport) =
@@ -329,10 +345,11 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger WebAppConfig
             , Map.singleton "PORT" $ pack $ show waconfigPort
             , Map.singleton "APPROOT" $ scheme <> CI.original waconfigApprootHost <> pack extport
             ]
-    exec <- canonicalizePath waconfigExec
-    bracketOnError
+    exec <- liftIO $ canonicalizePath waconfigExec
+    logger <- askLoggerIO
+    withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (ascLog . OtherMessage . decodeUtf8With lenientDecode)
+            (\lvl msg -> logger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
@@ -342,7 +359,7 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger WebAppConfig
             (LogFile.rlLog rlogger)
             (const $ return True))
         terminateMonitoredProcess
-        $ \mp -> f RunningWebApp
+        $ \mp -> rio $ f RunningWebApp
             { rwaProcess = mp
             , rwaPort = waconfigPort
             , rwaEnsureAliveTimeOut = fromMaybe (90 * 1000 * 1000) waconfigEnsureAliveTimeout
@@ -353,11 +370,11 @@ launchWebApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger WebAppConfig
             AIBuiltin -> "__builtin__"
             AINamed x -> x
 
-killWebApp :: (LogMessage -> IO ()) -> RunningWebApp -> IO ()
-killWebApp asclog RunningWebApp {..} = do
-    status <- printStatus rwaProcess
-    asclog $ KillingApp rwaPort status
-    terminateMonitoredProcess rwaProcess
+killWebApp :: RunningWebApp -> KeterM cfg ()
+killWebApp RunningWebApp {..} = do
+    status <- liftIO $ printStatus rwaProcess
+    $logInfo $ pack $ "Killing " <> unpack status <> " running on port: "  <> show rwaPort
+    liftIO $ terminateMonitoredProcess rwaProcess
 
 ensureAlive :: RunningWebApp -> IO ()
 ensureAlive RunningWebApp {..} = do
@@ -410,30 +427,29 @@ ensureAlive RunningWebApp {..} = do
                   tryIO m = catch (liftM Right m) (return . Left)
 
 
-withBackgroundApps :: AppStartConfig
-                   -> AppId
+withBackgroundApps :: AppId
                    -> BundleConfig
                    -> Maybe FilePath
                    -> RotatingLog
                    -> [BackgroundConfig]
-                   -> ([RunningBackgroundApp] -> IO a)
-                   -> IO a
-withBackgroundApps asc aid bconfig mdir rlog configs f =
-    bracketedMap alloc f configs
+                   -> ([RunningBackgroundApp] -> KeterM AppStartConfig a)
+                   -> KeterM AppStartConfig a
+withBackgroundApps aid bconfig mdir rlog configs f =
+    withRunInIO $ \rio -> bracketedMap (\cfg f -> rio $ alloc cfg (liftIO <$> f)) (rio . f) configs
   where
-    alloc = launchBackgroundApp asc aid bconfig mdir rlog
+    alloc = launchBackgroundApp aid bconfig mdir rlog
 
-launchBackgroundApp :: AppStartConfig
-                    -> AppId
+launchBackgroundApp :: AppId
                     -> BundleConfig
                     -> Maybe FilePath
                     -> RotatingLog
                     -> BackgroundConfig
                     -> (RunningBackgroundApp -> IO a)
-                    -> IO a
-launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger BackgroundConfig {..} f = do
-    otherEnv <- pluginsGetEnv ascPlugins name bconfigPlugins
-    forwardedEnv <- getForwardedEnv bgconfigForwardEnv
+                    -> KeterM AppStartConfig a
+launchBackgroundApp aid BundleConfig {..} mdir rlogger BackgroundConfig {..} f = do
+    AppStartConfig{..} <- ask
+    otherEnv <- liftIO $ pluginsGetEnv ascPlugins name bconfigPlugins
+    forwardedEnv <- liftIO $ getForwardedEnv bgconfigForwardEnv
     let env = Map.toList $ Map.unions
             -- Order matters as in launchWebApp
             [ bgconfigEnvironment
@@ -441,7 +457,7 @@ launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger Backg
             , Map.fromList otherEnv
             , kconfigEnvironment ascKeterConfig
             ]
-    exec <- canonicalizePath bgconfigExec
+    exec <- liftIO $ canonicalizePath bgconfigExec
 
     let delay = threadDelay $ fromIntegral $ bgconfigRestartDelaySeconds * 1000 * 1000
     shouldRestart <-
@@ -450,16 +466,16 @@ launchBackgroundApp AppStartConfig {..} aid BundleConfig {..} mdir rlogger Backg
                 delay
                 return True
             LimitedRestarts maxCount -> do
-                icount <- newIORef 0
+                icount <- liftIO $ newIORef 0
                 return $ do
                     res <- atomicModifyIORef icount $ \count ->
                         (count + 1, count < maxCount)
                     when res delay
                     return res
-
-    bracketOnError
+    logger <- askLoggerIO
+    withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (ascLog . OtherMessage . decodeUtf8With lenientDecode)
+            (\lvl msg -> logger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
@@ -601,33 +617,40 @@ start tf muid processTracker portman plugins rlog appname bundle removeFromList 
         terminateOld = forkKIO $ do
     -}
 
-reload :: App -> AppInput -> IO ()
-reload App {..} input =
-    withRotatingLog appAsc appId (Just appRlog) $ \_ rlog ->
-    withConfig appAsc appId input $ \newdir bconfig mmodtime ->
-    withSanityChecks appAsc bconfig $
-    withReservations appAsc appId bconfig $ \webapps backs actions ->
-    withBackgroundApps appAsc appId bconfig newdir rlog backs $ \runningBacks ->
-    withWebApps appAsc appId bconfig newdir rlog webapps $ \runningWebapps -> do
-        mapM_ ensureAlive runningWebapps
-        readTVarIO appHosts >>= reactivateApp (ascLog appAsc) (ascHostManager appAsc) appId actions
-        (oldApps, oldBacks, oldDir, oldRlog) <- atomically $ do
-            oldApps <- readTVar appRunningWebApps
-            oldBacks <- readTVar appBackgroundApps
-            oldDir <- readTVar appDir
-            oldRlog <- readTVar appRlog
+reload :: AppInput -> KeterM App ()
+reload input = do
+    App{..} <- ask
+    withMappedConfig (const appAsc) $ 
+      withRotatingLog appId (Just appRlog) $ \_ rlog ->
+      withConfig appId input $ \newdir bconfig mmodtime ->
+      withSanityChecks bconfig $
+      withReservations appId bconfig $ \webapps backs actions ->
+      withBackgroundApps appId bconfig newdir rlog backs $ \runningBacks ->
+      withWebApps appId bconfig newdir rlog webapps $ \runningWebapps -> do
+          liftIO $ mapM_ ensureAlive runningWebapps
+          liftIO (readTVarIO appHosts) >>= \hosts ->
+            withMappedConfig (const $ ascHostManager appAsc) $ 
+              reactivateApp appId actions hosts
+          (oldApps, oldBacks, oldDir, oldRlog) <- liftIO $ atomically $ do
+              oldApps <- readTVar appRunningWebApps
+              oldBacks <- readTVar appBackgroundApps
+              oldDir <- readTVar appDir
+              oldRlog <- readTVar appRlog
 
-            writeTVar appModTime mmodtime
-            writeTVar appRunningWebApps runningWebapps
-            writeTVar appBackgroundApps runningBacks
-            writeTVar appHosts $ Map.keysSet actions
-            writeTVar appDir newdir
-            return (oldApps, oldBacks, oldDir, oldRlog)
-        void $ forkIO $ terminateHelper appAsc appId oldApps oldBacks oldDir oldRlog
+              writeTVar appModTime mmodtime
+              writeTVar appRunningWebApps runningWebapps
+              writeTVar appBackgroundApps runningBacks
+              writeTVar appHosts $ Map.keysSet actions
+              writeTVar appDir newdir
+              return (oldApps, oldBacks, oldDir, oldRlog)
+          void $ withRunInIO $ \rio -> 
+            forkIO $ rio $ terminateHelper appId oldApps oldBacks oldDir oldRlog
 
-terminate :: App -> IO ()
-terminate App {..} = do
-    (hosts, apps, backs, mdir, rlog) <- atomically $ do
+terminate :: KeterM App ()
+terminate = do
+    App{..} <- ask
+    let AppStartConfig {..} = appAsc
+    (hosts, apps, backs, mdir, rlog) <- liftIO $ atomically $ do
         hosts <- readTVar appHosts
         apps <- readTVar appRunningWebApps
         backs <- readTVar appBackgroundApps
@@ -643,32 +666,37 @@ terminate App {..} = do
 
         return (hosts, apps, backs, mdir, rlog)
 
-    deactivateApp ascLog ascHostManager appId hosts
-    void $ forkIO $ terminateHelper appAsc appId apps backs mdir rlog
-    maybe (return ()) LogFile.rlClose rlog
-  where
-    AppStartConfig {..} = appAsc
+    withMappedConfig (const ascHostManager) $
+        deactivateApp appId hosts
 
-terminateHelper :: AppStartConfig
-                -> AppId
+    void $ withRunInIO $ \rio ->
+      forkIO $ rio $ withMappedConfig (const appAsc) $ 
+        terminateHelper appId apps backs mdir rlog
+    liftIO $ maybe (return ()) LogFile.rlClose rlog
+
+terminateHelper :: AppId
                 -> [RunningWebApp]
                 -> [RunningBackgroundApp]
                 -> Maybe FilePath
                 -> Maybe RotatingLog
-                -> IO ()
-terminateHelper AppStartConfig {..} aid apps backs mdir rlog = do
-    threadDelay $ 20 * 1000 * 1000
-    ascLog $ TerminatingOldProcess aid
-    mapM_ (killWebApp ascLog) apps
-    mapM_ killBackgroundApp backs
-    threadDelay $ 60 * 1000 * 1000
+                -> KeterM AppStartConfig ()
+terminateHelper aid apps backs mdir rlog = do
+    AppStartConfig{..} <- ask
+    liftIO $ threadDelay $ 20 * 1000 * 1000
+    $logInfo $ pack $ 
+        "Sending old process TERM signal: " 
+          ++ case aid of { AINamed t -> unpack t; AIBuiltin -> "builtin" }
+    mapM_ killWebApp apps
+    liftIO $ do 
+        mapM_ killBackgroundApp backs
+        threadDelay $ 60 * 1000 * 1000
     case mdir of
         Nothing -> return ()
         Just dir -> do
-            ascLog $ RemovingOldFolder dir
-            res <- try $ removeDirectoryRecursive dir
+            $logInfo $ pack $ "Removing unneeded folder: " ++ dir
+            res <- liftIO $ try @SomeException $ removeDirectoryRecursive dir
             case res of
-                Left e -> $logEx ascLog e
+                Left e -> $logError $ pack $ show e
                 Right () -> return ()
 
 -- | Get the modification time of the bundle file this app was launched from,

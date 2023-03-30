@@ -98,6 +98,7 @@ Library
                        Keter.AppManager
                        Keter.LabelMap
                        Keter.Cli
+                       Keter.Context
                        Keter.Main
                        Keter.PortPool
                        Keter.Proxy

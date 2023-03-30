@@ -68,17 +68,19 @@ data KeterException = CannotParsePostgres FilePath
     deriving (Show, Typeable)
 instance Exception KeterException
 
-logEx :: TH.Q TH.Exp
-logEx = do
-    let showLoc TH.Loc { TH.loc_module = m, TH.loc_start = (l, c) } = concat
-            [ m
-            , ":"
-            , show l
-            , ":"
-            , show c
-            ]
-    loc <- fmap showLoc TH.qLocation
-    [|(. ExceptionThrown (pack $(TH.lift loc)))|]
+-- | Deprecated in favor of moonadlogger
+-- TODO: Get rid of this permanently unless there's reason to keep this around
+-- logEx :: TH.Q TH.Exp
+-- logEx = do
+--     let showLoc TH.Loc { TH.loc_module = m, TH.loc_start = (l, c) } = concat
+--             [ m
+--             , ":"
+--             , show l
+--             , ":"
+--             , show c
+--             ]
+--     loc <- fmap showLoc TH.qLocation
+--     [|(. ExceptionThrown (pack $(TH.lift loc)))|]
 
 data AppId = AIBuiltin | AINamed !Appname
     deriving (Eq, Ord)

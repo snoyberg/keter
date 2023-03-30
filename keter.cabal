@@ -64,6 +64,7 @@ Library
                      , http-conduit              >= 2.1
                      , fast-logger
                      , monad-logger
+                     , unliftio-core
                      , case-insensitive
                      , array
                      , mtl

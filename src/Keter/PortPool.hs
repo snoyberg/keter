@@ -1,6 +1,7 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TypeApplications    #-}
 -- | Manages a pool of available ports and allocates them.
 module Keter.PortPool
     ( -- * Types
@@ -13,9 +14,14 @@ module Keter.PortPool
     ) where
 
 import           Keter.Common
+import           Keter.Context
+import           Data.Text           (pack)
 import           Control.Applicative     ((<$>))
 import           Control.Concurrent.MVar
 import           Control.Exception
+import           Control.Monad.IO.Class (liftIO)
+import           Control.Monad.IO.Unlift (withRunInIO)
+import           Control.Monad.Logger
 import           Keter.Config
 import           Network.Socket
 import           Prelude                 hiding (log)
@@ -28,28 +34,31 @@ data PPState = PPState
 newtype PortPool = PortPool (MVar PPState)
 
 -- | Gets an unassigned port number.
-getPort :: (LogMessage -> IO ())
-        -> PortPool
-        -> IO (Either SomeException Port)
-getPort log (PortPool mstate) =
-    modifyMVar mstate loop
+getPort :: PortPool
+        -> KeterM cfg (Either SomeException Port)
+getPort (PortPool mstate) =
+    withRunInIO $ \rio -> modifyMVar mstate (rio . loop)
   where
-    loop :: PPState -> IO (PPState, Either SomeException Port)
+    removePortMsg p = pack $
+        "Port in use, removing from port pool: "
+        ++ show p
+
+    loop :: PPState -> KeterM cfg (PPState, Either SomeException Port)
     loop PPState {..} =
         case ppAvail of
             p:ps -> do
                 let next = PPState ps ppRecycled
-                res <- try $ listenOn $ show p
+                res <- liftIO $ try $ listenOn $ show p
                 case res of
                     Left (_ :: SomeException) -> do
-                        log $ RemovingPort p
+                        $logInfo $ removePortMsg p
                         loop next
                     Right socket' -> do
-                        res' <- try $ close socket'
+                        res' <- liftIO $ try @SomeException $ close socket'
                         case res' of
                             Left e -> do
-                                $logEx log e
-                                log $ RemovingPort p
+                                $logError $ pack $ show e
+                                $logInfo $ removePortMsg p
                                 loop next
                             Right () -> return (next, Right p)
             [] ->

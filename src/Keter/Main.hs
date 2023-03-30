@@ -1,9 +1,11 @@
-{-# LANGUAGE CPP                 #-}
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RankNTypes          #-}
-{-# LANGUAGE RecordWildCards     #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE CPP                        #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
+{-# LANGUAGE FlexibleContexts           #-}
 
 module Keter.Main
     ( keter
@@ -31,8 +33,14 @@ import           System.Posix.Signals      (Handler (Catch), installHandler,
 
 import           Control.Applicative       ((<$>))
 import           Control.Exception         (throwIO, try, SomeException)
-import           Control.Monad             (forM)
-import           Control.Monad             (void, when)
+import           Control.Monad             (forM, void, when)
+import           Control.Monad.IO.Class    (MonadIO, liftIO)
+import           Control.Monad.Trans.Class (MonadTrans, lift)
+import qualified Control.Monad.Logger      as L
+import           Control.Monad.Logger      (MonadLogger, MonadLoggerIO, LoggingT, 
+                                            runLoggingT, askLoggerIO, logInfo, logDebug)
+import           Control.Monad.Reader      (MonadReader, ReaderT, runReaderT, ask)
+import           Control.Monad.IO.Unlift   (MonadUnliftIO, withRunInIO)
 import           Keter.Conduit.Process.Unix (initProcessTracker)
 import qualified Data.Map                  as Map
 import qualified Data.Text                 as T
@@ -56,32 +64,38 @@ import qualified Filesystem.Path as FP (FilePath)
 import           Filesystem.Path.CurrentOS (encodeString)
 #endif
 import Keter.Cli
+import Keter.Context
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
       -> IO ()
-keter input mkPlugins = withManagers input mkPlugins $ \kc hostman appMan log -> do
-    log LaunchCli
-    void $ forM (kconfigCliPort kc) $ \port ->
-      launchCli (MkCliStates
-                { csAppManager = appMan
-                , csLog        = log
-                , csPort       = port
-                })
-    log LaunchInitial
-    launchInitial kc appMan
-    log StartWatching
-    startWatching kc appMan log
-    log StartListening
-    startListening log kc hostman
+keter input mkPlugins = 
+    runKeterConfigReader input . runKeterLogger . runKeterM $
+        withManagers mkPlugins $ \hostman appMan -> do
+            cfg@KeterConfig{..} <- ask
+            $logInfo "Launching cli"
+            void $ forM kconfigCliPort $ \port ->
+              withMappedConfig
+                  (const $ MkCliStates
+                      { csAppManager = appMan
+                      , csPort       = port
+                      })
+                  $ launchCli
+            $logInfo "Launching initial"
+            launchInitial appMan
+            $logInfo "Started watching"
+            startWatching appMan
+            $logInfo "Started listening"
+            startListening hostman
 
--- | Load up Keter config.
-withConfig :: FilePath
-           -> (KeterConfig -> IO a)
-           -> IO a
-withConfig input f = do
-    exists <- doesFileExist input
-    config <-
+-- | Load up Keter config and evaluate a ReaderT context with it
+runKeterConfigReader :: MonadIO m
+                     => FilePath
+                     -> ReaderT KeterConfig m a
+                     -> m a
+runKeterConfigReader input ctx = do
+    exists <- liftIO $ doesFileExist input
+    config <- liftIO $
         if exists
             then do
                 eres <- decodeFileRelative input
@@ -89,43 +103,55 @@ withConfig input f = do
                     Left e -> throwIO $ InvalidKeterConfigFile input e
                     Right x -> return x
             else return defaultKeterConfig { kconfigDir = input }
-    f config
+    runReaderT ctx config
 
-withLogger :: FilePath
-           -> (KeterConfig -> (LogMessage -> IO ()) -> IO a)
-           -> IO a
-withLogger fp f = withConfig fp $ \config@KeterConfig{..} -> do
+-- | Running the Keter logger requires a context with access to a KeterConfig, hence the
+-- MonadReader constraint. This is versatile: 'runKeterConfigReader', or use the free 
+-- ((->) KeterConfig) instance.
+runKeterLogger :: (MonadReader KeterConfig m, MonadIO m, MonadUnliftIO m)
+               => LoggingT m a
+               -> m a
+runKeterLogger ctx = do
+    KeterConfig{..} <- ask
     let logName = kconfigDir </> "log" </> "keter.log"
     let logType = 
           if kconfigRotateLogs
             then FL.LogFile (LogFile.defaultRotationSpec logName) LogFile.defaultBufferSize
             else FL.LogStderr LogFile.defaultBufferSize
-    FL.withFastLogger logType $ \log ->
-        f config $ \lm -> do
-            now <- getCurrentTime
+    withRunInIO $ \rio -> FL.withFastLogger logType $ \logger ->
+        rio $ runLoggingT ctx (formatLog logger)
+    where
+        formatLog log loc _ lvl msg = do
+            now <- liftIO getCurrentTime
+            -- Format: "$time|$module$:$line_num|$log_level> $msg"
             let bs = FL.toLogStr $ encodeUtf8 $ T.pack $ concat
                     [ take 22 $ show now
-                    , ": "
-                    , show lm
+                    , "|"
+                    , show (L.loc_module loc) <> ":" <> show (fst $ L.loc_start loc)
+                    , "|"
+                    , drop 3 $ show lvl
+                    , "> "
+                    , show msg
                     , "\n"
                     ]
             log bs
 
-withManagers :: FilePath
-             -> [FilePath -> IO Plugin]
-             -> (KeterConfig -> HostMan.HostManager -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO a)
-             -> IO a
-withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> do
-    processTracker <- initProcessTracker
-    hostman <- HostMan.start
-    portpool <- PortPool.start kconfigPortPool
-    tf <- TempFolder.setup $ kconfigDir </> "temp"
-    plugins <- mapM ($ kconfigDir) mkPlugins
+withManagers :: [FilePath -> IO Plugin]
+             -> (HostMan.HostManager -> AppMan.AppManager -> KeterM KeterConfig a)
+             -> KeterM KeterConfig a
+withManagers mkPlugins f = do
+    cfg@KeterConfig{..} <- ask
+    logger <- askLoggerIO
+    processTracker <- liftIO initProcessTracker
+    hostman <- liftIO HostMan.start
+    portpool <- liftIO $ PortPool.start kconfigPortPool
+    tf <- liftIO $ TempFolder.setup $ kconfigDir </> "temp"
+    plugins <- mapM (liftIO . ($ kconfigDir)) mkPlugins
     muid <-
         case kconfigSetuid of
             Nothing -> return Nothing
             Just t -> do
-                x <- try $
+                x <- liftIO $ try $
                     case Data.Text.Read.decimal t of
                         Right (i, "") -> getUserEntryForID i
                         _ -> getUserEntryForName $ T.unpack t
@@ -140,24 +166,23 @@ withManagers input mkPlugins f = withLogger input $ \kc@KeterConfig {..} log -> 
             , ascHostManager = hostman
             , ascPortPool = portpool
             , ascPlugins = plugins
-            , ascLog = log
-            , ascKeterConfig = kc
+            , ascLog = logger
+            , ascKeterConfig = cfg
             }
-    appMan <- AppMan.initialize log appStartConfig
-    f kc hostman appMan log
+    appMan <- withMappedConfig (const appStartConfig) $ AppMan.initialize
+    f hostman appMan
 
-launchInitial :: KeterConfig -> AppMan.AppManager -> IO ()
-launchInitial kc@KeterConfig {..} appMan = do
-    createDirectoryIfMissing True incoming
-    bundles0 <- filter isKeter <$> listDirectoryTree incoming
-    mapM_ (AppMan.addApp appMan) bundles0
-
-    unless (V.null kconfigBuiltinStanzas) $ AppMan.perform
-        appMan
-        AIBuiltin
-        (AppMan.Reload $ AIData $ BundleConfig kconfigBuiltinStanzas mempty)
-  where
-    incoming = getIncoming kc
+launchInitial :: AppMan.AppManager -> KeterM KeterConfig ()
+launchInitial appMan = do
+    kc@KeterConfig{..} <- ask
+    let incoming = getIncoming kc
+    liftIO $ createDirectoryIfMissing True incoming
+    bundles0 <- liftIO $ filter isKeter <$> listDirectoryTree incoming
+    withMappedConfig (const appMan) $ do
+        mapM_ AppMan.addApp bundles0
+        unless (V.null kconfigBuiltinStanzas) $ AppMan.perform
+            AIBuiltin
+            (AppMan.Reload $ AIData $ BundleConfig kconfigBuiltinStanzas mempty)
 
 getIncoming :: KeterConfig -> FilePath
 getIncoming kc = kconfigDir kc </> "incoming"
@@ -165,38 +190,37 @@ getIncoming kc = kconfigDir kc </> "incoming"
 isKeter :: FilePath -> Bool
 isKeter fp = takeExtension fp == ".keter"
 
-startWatching :: KeterConfig -> AppMan.AppManager -> (LogMessage -> IO ()) -> IO ()
-startWatching kc appMan log = do
+startWatching :: AppMan.AppManager -> KeterM KeterConfig ()
+startWatching appMan = do
+    incoming <- getIncoming <$> ask
     -- File system watching
-    wm <- FSN.startManager
-    _ <- FSN.watchTree wm (fromString incoming) (const True) $ \e -> do
-        e' <-
-            case e of
-                FSN.Removed fp _ _ -> do
-                    log $ WatchedFile "removed" (fromFilePath fp)
-                    return $ Left $ fromFilePath fp
-                FSN.Added fp _ _ -> do
-                    log $ WatchedFile "added" (fromFilePath fp)
-                    return $ Right $ fromFilePath fp
-                FSN.Modified fp _ _ -> do
-                    log $ WatchedFile "modified" (fromFilePath fp)
-                    return $ Right $ fromFilePath fp
-                _ -> do
-                    log $ WatchedFile "unknown" []
-                    return $ Left []
-        case e' of
-            Left fp -> when (isKeter fp) $ AppMan.terminateApp appMan $ getAppname fp
-            Right fp -> when (isKeter fp) $ AppMan.addApp appMan $ incoming </> fp
-
-    -- Install HUP handler for cases when inotify cannot be used.
-    void $ flip (installHandler sigHUP) Nothing $ Catch $ do
-        bundles <- fmap (filter isKeter) $ listDirectoryTree incoming
-        newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
-            time <- modificationTime <$> getFileStatus bundle
-            return (getAppname bundle, (bundle, time))
-        AppMan.reloadAppList appMan newMap
-  where
-    incoming = getIncoming kc
+    wm <- liftIO FSN.startManager
+    withMappedConfig (const appMan) $ withRunInIO $ \rio -> do
+        _ <- FSN.watchTree wm (fromString incoming) (const True) $ \e -> do
+                e' <-
+                    case e of
+                        FSN.Removed fp _ _ -> do
+                            --log $ WatchedFile "removed" (fromFilePath fp)
+                            return $ Left $ fromFilePath fp
+                        FSN.Added fp _ _ -> do
+                            ---log $ WatchedFile "added" (fromFilePath fp)
+                            return $ Right $ fromFilePath fp
+                        FSN.Modified fp _ _ -> do
+                            --log $ WatchedFile "modified" (fromFilePath fp)
+                            return $ Right $ fromFilePath fp
+                        _ -> do
+                            --log $ WatchedFile "unknown" []
+                            return $ Left []
+                rio $ case e' of
+                    Left fp -> when (isKeter fp) $ AppMan.terminateApp $ getAppname fp
+                    Right fp -> when (isKeter fp) $ AppMan.addApp $ incoming </> fp
+        -- Install HUP handler for cases when inotify cannot be used.
+        void $ flip (installHandler sigHUP) Nothing $ Catch $ do
+            bundles <- fmap (filter isKeter) $ listDirectoryTree incoming
+            newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
+                time <- modificationTime <$> getFileStatus bundle
+                return (getAppname bundle, (bundle, time))
+            rio $ AppMan.reloadAppList newMap
 
 
 -- compatibility with older versions of fsnotify which used
@@ -222,10 +246,14 @@ listDirectoryTree fp = do
              return [fp1]
            ) (filter (\x -> x /= "." && x /= "..") dir)
 
-startListening :: (LogMessage -> IO ()) -> KeterConfig -> HostMan.HostManager -> IO ()
-startListening log config hostman = do
-    settings <- Proxy.makeSettings log config hostman
-    runAndBlock (kconfigListeners config) $ Proxy.reverseProxy settings
+startListening :: HostMan.HostManager -> KeterM KeterConfig ()
+startListening hostman = do
+    cfg@KeterConfig{..} <- ask
+    logger <- askLoggerIO
+    settings <- Proxy.makeSettings hostman
+    withMappedConfig (const settings) $ withRunInIO $ \rio ->
+        liftIO $ runAndBlock kconfigListeners $ \ls -> 
+            rio $ Proxy.reverseProxy ls
 
 runAndBlock :: NonEmptyVector a
             -> (a -> IO ())

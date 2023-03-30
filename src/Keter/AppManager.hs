@@ -1,6 +1,9 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes        #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE TemplateHaskell   #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeApplications   #-}
 -- | Used for management of applications.
 module Keter.AppManager
     ( -- * Types
@@ -18,6 +21,7 @@ module Keter.AppManager
     ) where
 
 import Keter.Common
+import Keter.Context
 import           Data.Set                   (Set)
 import           Data.Text                  (Text)
 import           System.FilePath            (FilePath)
@@ -29,6 +33,10 @@ import           Control.Concurrent.MVar    (MVar, newMVar, withMVar)
 import           Control.Concurrent.STM
 import qualified Control.Exception          as E
 import           Control.Monad              (void)
+import           Control.Monad.IO.Class     (liftIO)
+import           Control.Monad.IO.Unlift    (withRunInIO)
+import           Control.Monad.Logger
+import           Control.Monad.Reader       (ask)
 import           Data.Foldable              (fold)
 import qualified Data.Map                   as Map
 import           Data.Maybe                 (catMaybes, mapMaybe)
@@ -49,7 +57,6 @@ data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
     , appStartConfig :: !AppStartConfig
     , mutex          :: !(MVar ())
-    , log            :: !(LogMessage -> IO ())
     }
 
 data AppState = ASRunning App
@@ -81,14 +88,13 @@ renderApps mngr = do
 data Action = Reload AppInput | Terminate
  deriving Show
 
-initialize :: (LogMessage -> IO ())
-           -> AppStartConfig
-           -> IO AppManager
-initialize log' asc = AppManager
-    <$> newTVarIO Map.empty
-    <*> return asc
-    <*> newMVar ()
-    <*> return log'
+initialize :: KeterM AppStartConfig AppManager
+initialize = do
+  asc <- ask
+  liftIO $ AppManager
+      <$> newTVarIO Map.empty
+      <*> return asc
+      <*> newMVar ()
 
 -- | Reset which apps are running.
 --
@@ -97,16 +103,18 @@ initialize log' asc = AppManager
 -- * Any app listed here that is currently running will be reloaded.
 --
 -- * Any app listed here that is not currently running will be started.
-reloadAppList :: AppManager
-              -> Map Appname (FilePath, EpochTime)
-              -> IO ()
-reloadAppList am@AppManager {..} newApps = withMVar mutex $ const $ do
-    actions <- atomically $ do
-        m <- readTVar apps
-        let currentApps = Set.fromList $ mapMaybe toAppName $ Map.keys m
-            allApps = Set.toList $ Map.keysSet newApps `Set.union` currentApps
-        fmap catMaybes $ mapM (getAction m) allApps
-    sequence_ actions
+reloadAppList :: Map Appname (FilePath, EpochTime)
+              -> KeterM AppManager ()
+reloadAppList newApps = do
+  am@AppManager{..} <- ask
+  withRunInIO $ \rio -> 
+    withMVar mutex $ const $ do
+      actions <- atomically $ do
+          m <- readTVar apps
+          let currentApps = Set.fromList $ mapMaybe toAppName $ Map.keys m
+              allApps = Set.toList $ Map.keysSet newApps `Set.union` currentApps
+          fmap catMaybes $ mapM (getAction m) allApps
+      sequence_ $ rio <$> actions
   where
     toAppName AIBuiltin   = Nothing
     toAppName (AINamed x) = Just x
@@ -141,8 +149,8 @@ reloadAppList am@AppManager {..} newApps = withMVar mutex $ const $ do
             case Map.lookup appname newApps of
                 Nothing              -> E.assert False Nothing
                 Just (fp, timestamp) -> reload fp timestamp
-        terminate = Just $ performNoLock am (AINamed appname) Terminate
-        reload fp timestamp = Just $ performNoLock am (AINamed appname) (Reload $ AIBundle fp timestamp)
+        terminate = Just $ performNoLock (AINamed appname) Terminate
+        reload fp timestamp = Just $ performNoLock (AINamed appname) (Reload $ AIBundle fp timestamp)
         {-
         case (Map.lookup appname currentApps, Map.lookup appname newApps) of
             (Nothing, Nothing) -> E.assert False Nothing
@@ -171,37 +179,42 @@ getAllApps AppManager {..} = atomically $ do
     return $ Set.fromList $ mapMaybe toAppName $ Map.keys m
     -}
 
-perform :: AppManager -> AppId -> Action -> IO ()
-perform am appid action = withMVar (mutex am) $ const $ performNoLock am appid action
+perform :: AppId -> Action -> KeterM AppManager ()
+perform appid action = do
+    am <- ask
+    withRunInIO $ \rio -> 
+      withMVar (mutex am) $ const $ rio $  performNoLock appid action
 
-performNoLock :: AppManager -> AppId -> Action -> IO ()
-performNoLock am@AppManager {..} aid action = E.mask_ $ do
-    launchWorker' <- atomically $ do
-        m <- readTVar apps
-        case Map.lookup aid m of
-            Just tstate -> do
-                state <- readTVar tstate
-                case state of
-                    ASStarting _mcurrent _tmtimestamp tmnext -> do
-                        writeTVar tmnext $ Just action
-                        -- use the previous worker, so nothing to do
-                        return noWorker
-                    ASRunning runningApp -> do
-                        tmnext <- newTVar Nothing
-                        tmtimestamp <- newTVar $
-                            case action of
-                                Reload (AIBundle _fp timestamp) -> Just timestamp
-                                Reload (AIData _) -> Nothing
-                                Terminate -> Nothing
-                        writeTVar tstate $ ASStarting (Just runningApp) tmtimestamp tmnext
-                        return $ launchWorker am aid tstate tmnext (Just runningApp) action
-                    ASTerminated -> onNotRunning
-            Nothing -> onNotRunning
-    launchWorker'
+performNoLock :: AppId -> Action -> KeterM AppManager ()
+performNoLock aid action = do
+    am@AppManager{..} <- ask
+    withRunInIO $ \rio -> E.mask_ $ do
+        launchWorker' <- liftIO $ atomically $ do
+            m <- readTVar apps
+            case Map.lookup aid m of
+                Just tstate -> do
+                    state <- readTVar tstate
+                    case state of
+                        ASStarting _mcurrent _tmtimestamp tmnext -> do
+                            writeTVar tmnext $ Just action
+                            -- use the previous worker, so nothing to do
+                            return noWorker
+                        ASRunning runningApp -> do
+                            tmnext <- newTVar Nothing
+                            tmtimestamp <- newTVar $
+                                case action of
+                                    Reload (AIBundle _fp timestamp) -> Just timestamp
+                                    Reload (AIData _) -> Nothing
+                                    Terminate -> Nothing
+                            writeTVar tstate $ ASStarting (Just runningApp) tmtimestamp tmnext
+                            return $ launchWorker aid tstate tmnext (Just runningApp) action
+                        ASTerminated -> onNotRunning apps
+                Nothing -> onNotRunning apps
+        rio launchWorker'
   where
     noWorker = return ()
 
-    onNotRunning =
+    onNotRunning apps =
         case action of
             Reload input -> do
                 tmnext <- newTVar Nothing
@@ -211,22 +224,23 @@ performNoLock am@AppManager {..} aid action = E.mask_ $ do
                         AIData _               -> Nothing
                 tstate <- newTVar $ ASStarting Nothing tmtimestamp tmnext
                 modifyTVar apps $ Map.insert aid tstate
-                return $ launchWorker am aid tstate tmnext Nothing action
+                return $ launchWorker aid tstate tmnext Nothing action
             Terminate -> return noWorker
 
-launchWorker :: AppManager
-             -> AppId
+-- | TODO: Propagate `KeterM` up through here?
+launchWorker :: AppId
              -> TVar AppState
              -> TVar (Maybe Action)
              -> Maybe App
              -> Action
-             -> IO ()
-launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ forkIO $ do
-    loop mcurrentApp0 action0
+             -> KeterM AppManager ()
+launchWorker appid tstate tmnext mcurrentApp0 action0 = 
+  loop mcurrentApp0 action0
   where
+    loop :: Maybe App -> Action -> KeterM AppManager ()
     loop mcurrentApp action = do
         mRunningApp <- processAction mcurrentApp action
-        mnext <- atomically $ do
+        mnext <- liftIO $ atomically $ do
             mnext <- readTVar tmnext
             writeTVar tmnext Nothing
             case mnext of
@@ -246,25 +260,37 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
             Nothing   -> return ()
             Just next -> loop mRunningApp next
 
+    reloadMsg :: String -> String -> Text
+    reloadMsg app input =
+        pack $ "Reloading from: " <> app <> input
+    
+    errorStartingBundleMsg :: String -> String -> Text
+    errorStartingBundleMsg name e = 
+        pack $ "Error occured when launching bundle " <> name <> ": " <> e
+
+    processAction :: Maybe App -> Action -> KeterM AppManager (Maybe App)
     processAction Nothing Terminate = return Nothing
     processAction (Just app) Terminate = do
-        log $ Terminating $ show app
-        App.terminate app
+        $logInfo $ pack ("Terminating" <> show app)
+        withMappedConfig (const app) App.terminate
         return Nothing
     processAction Nothing (Reload input) = do
-        log $ ReloadFrom Nothing $ show input
-        eres <- E.try $ App.start appStartConfig appid input
+        $logInfo (reloadMsg "Nothing" (show input))
+        AppManager{..} <- ask
+        eres <- withRunInIO $ \rio -> E.try @SomeException $ 
+            rio $ withMappedConfig (const appStartConfig) $ App.start appid input
         case eres of
             Left e -> do
-                log $ ErrorStartingBundle name e
+                $logError (errorStartingBundleMsg (show name) (show e))
                 return Nothing
             Right app -> return $ Just app
     processAction (Just app) (Reload input) = do
-        log $ ReloadFrom (Just $ show app) (show input)
-        eres <- E.try $ App.reload app input
+        $logInfo (reloadMsg (show $ Just app) (show input))
+        eres <- withRunInIO $ \rio -> E.try @SomeException $ 
+            rio $ withMappedConfig (const app) $ App.reload input
         case eres of
             Left e -> do
-                log $ ErrorStartingBundle name e
+                $logError (errorStartingBundleMsg (show name) (show e))
                 -- reloading will /always/ result in a valid app, either the old one
                 -- will continue running or the new one will replace it.
                 return (Just app)
@@ -275,16 +301,15 @@ launchWorker AppManager {..} appid tstate tmnext mcurrentApp0 action0 = void $ f
             AIBuiltin -> "<builtin>"
             AINamed x -> x
 
-addApp :: AppManager -> FilePath -> IO ()
-addApp appMan bundle = do
-    (input, action) <- getInputForBundle bundle
-    perform appMan input action
+addApp :: FilePath -> KeterM AppManager ()
+addApp bundle = do
+    (input, action) <- liftIO $ getInputForBundle bundle
+    perform input action
 
 getInputForBundle :: FilePath -> IO (AppId, Action)
 getInputForBundle bundle = do
     time <- modificationTime <$> getFileStatus bundle
     return (AINamed $ getAppname bundle, Reload $ AIBundle bundle time)
 
-terminateApp :: AppManager -> Appname -> IO ()
-terminateApp appMan appname = perform appMan (AINamed appname) Terminate
-
+terminateApp :: Appname -> KeterM AppManager ()
+terminateApp appname = perform (AINamed appname) Terminate

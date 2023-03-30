@@ -141,7 +141,6 @@ withManagers :: [FilePath -> IO Plugin]
              -> KeterM KeterConfig a
 withManagers mkPlugins f = do
     cfg@KeterConfig{..} <- ask
-    logger <- askLoggerIO
     processTracker <- liftIO initProcessTracker
     hostman <- liftIO HostMan.start
     portpool <- liftIO $ PortPool.start kconfigPortPool
@@ -166,7 +165,6 @@ withManagers mkPlugins f = do
             , ascHostManager = hostman
             , ascPortPool = portpool
             , ascPlugins = plugins
-            , ascLog = logger
             , ascKeterConfig = cfg
             }
     appMan <- withMappedConfig (const appStartConfig) $ AppMan.initialize

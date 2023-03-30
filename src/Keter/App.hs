@@ -141,7 +141,6 @@ data AppStartConfig = AppStartConfig
     , ascHostManager    :: !HostManager
     , ascPortPool       :: !PortPool
     , ascPlugins        :: !Plugins
-    , ascLog            :: !Logger
     , ascKeterConfig    :: !KeterConfig
     }
 

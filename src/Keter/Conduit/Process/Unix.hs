@@ -34,6 +34,7 @@ import           Control.Exception               (Exception, SomeException,
                                                   handle, mask_,
                                                   throwIO, try)
 import           Control.Monad                   (void)
+import           Control.Monad.Logger            
 import           Data.ByteString                 (ByteString)
 import qualified Data.ByteString.Char8           as S8
 import           Data.Conduit                    (ConduitM, (.|), runConduit)
@@ -271,8 +272,9 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
 -- | Run the given command, restarting if the process dies.
+-- TODO: Consider propagating KeterM to this? Hesitant as this module can stand independently otherwise.
 monitorProcess
-    :: (ByteString -> IO ()) -- ^ log
+    :: (LogLevel -> ByteString -> IO ()) -- ^ log
     -> ProcessTracker
     -> Maybe S8.ByteString -- ^ setuid
     -> S8.ByteString -- ^ executable
@@ -292,7 +294,7 @@ monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart 
                         now <- getCurrentTime
                         case mlast of
                             Just last | diffUTCTime now last < 5 -> do
-                                log $ "Process restarting too quickly, waiting before trying again: " `S8.append` exec
+                                log LevelWarn $ "Process restarting too quickly, waiting before trying again: " `S8.append` exec
                                 threadDelay $ 5 * 1000 * 1000
                             _ -> return ()
                         let (cmd, args') =
@@ -308,10 +310,10 @@ monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart 
                             rlog
                         case res of
                             Left e -> do
-                                log $ "Data.Conduit.Process.Unix.monitorProcess: " `S8.append` S8.pack (show (e :: SomeException))
+                                log LevelError $ "Data.Conduit.Process.Unix.monitorProcess: " `S8.append` S8.pack (show (e :: SomeException))
                                 return (NeedsRestart, return ())
                             Right pid -> do
-                                log $ "Process created: " `S8.append` exec
+                                log LevelInfo $ "Process created: " `S8.append` exec
                                 return (Running pid, do
                                     TrackedProcess _ _ wait <- trackProcess processTracker pid
                                     ec <- wait

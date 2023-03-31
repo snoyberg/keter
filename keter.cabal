@@ -106,7 +106,7 @@ Library
                        Keter.Rewrite
                        Keter.Yaml.FilePath
                        Keter.TempTarball
-                       Keter.Conduit.LogFile
+                       Keter.Logger
                        Keter.Conduit.Process.Unix
   Other-Modules:
                        Keter.Aeson.KeyHelper

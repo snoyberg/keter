@@ -1,7 +1,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
-module Keter.Conduit.LogFile
+module Keter.Logger
     ( Logger(..)
     , createLoggerViaConfig
     , defaultRotationSpec

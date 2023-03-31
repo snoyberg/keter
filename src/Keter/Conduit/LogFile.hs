@@ -48,8 +48,10 @@ defaultRotationSpec :: FilePath -> FL.FileLogSpec
 defaultRotationSpec dir =
     FL.FileLogSpec dir defaultMaxTotal maxBound -- TODO: do we want to overwrite logs after a certain point? leaving this INT_MAX for now
 
+-- | The default total file size before for a log file before it needs to be rotated
 defaultMaxTotal :: Integer
 defaultMaxTotal = 5 * 1024 * 1024 -- 5 MB
 
+-- | The default log message buffer size
 defaultBufferSize :: Int
-defaultBufferSize = 256 -- TODO: Reasonable value?
+defaultBufferSize = 256 -- 256 bytes, TODO: Reasonable value?

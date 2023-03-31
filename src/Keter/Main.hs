@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell            #-}
 {-# LANGUAGE TypeSynonymInstances       #-}
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module Keter.Main
     ( keter
@@ -118,9 +119,10 @@ runKeterLogger ctx = do
     where
         formatLog logger loc _ lvl msg = do
             now <- liftIO getCurrentTime
-            -- Format: "keter|$time|$module$:$line_num|$log_level> $msg"
+            -- Format: "{keter|}$time|$module$:$line_num|$log_level> $msg"
+            let tag = case Log.loggerType logger of { FL.LogStderr _ -> "keter|"; _ -> mempty }
             let bs = mconcat
-                    [ "keter|"
+                    [ tag
                     , L.toLogStr $ take 22 $ show now
                     , "|"
                     , L.toLogStr (L.loc_module loc)

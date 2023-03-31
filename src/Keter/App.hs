@@ -20,6 +20,7 @@ import Keter.Common
 import Keter.Context
 import           Data.Set                   (Set)
 import           Data.Text                  (Text)
+import           Data.ByteString            (ByteString)
 import           System.FilePath            (FilePath)
 import           Data.Map                   (Map)
 import           Keter.Rewrite (ReverseProxyConfig (..))

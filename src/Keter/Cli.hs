@@ -1,14 +1,22 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE RecordWildCards #-}
 module Keter.Cli
     ( launchCli
     , CliStates(..)
     ) where
 
 import Keter.Common
+import Keter.Context
 import Keter.AppManager
 import Control.Concurrent (forkFinally)
 import qualified Control.Exception as E
 import Control.Monad (unless, forever, void, when)
+import Control.Monad.IO.Class    (MonadIO, liftIO)
+import Control.Monad.IO.Unlift   (withRunInIO)
+import Control.Monad.Trans.Class (MonadTrans, lift)
+import Control.Monad.Logger
+import Control.Monad.Reader      (ask)
 import qualified Data.ByteString as S
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
@@ -23,16 +31,19 @@ data Commands = CmdListRunningApps
 
 data CliStates = MkCliStates
   { csAppManager :: !AppManager
-  , csLog        :: !(LogMessage -> IO ())
   , csPort       :: !Port
   }
 
-launchCli :: CliStates -> IO ()
-launchCli states = void $ forkIO $ withSocketsDo $ do
-    addr <- resolve $ show $ csPort states
-    E.bracket (open addr) close $ \x -> do
-                                    csLog states $ BindCli addr
-                                    loop states x
+launchCli :: KeterM CliStates ()
+launchCli = do
+  MkCliStates{..} <- ask
+  void $ withRunInIO $ \rio -> forkIO $ 
+    withSocketsDo $ do
+        addr <- resolve $ show csPort
+        E.bracket (open addr) close $ \x -> rio $ do
+            $logInfo $ T.pack $ "Bound cli to " <> show addr
+            loop x
+
 commandParser :: Parser Commands
 commandParser = hsubparser $
   fold [
@@ -65,31 +76,33 @@ open addr = do
     listen sock 10
     return sock
 
-loop :: CliStates -> Socket -> IO b
-loop states sock = forever $ do
-    (conn, peer) <- accept sock
-    csLog states $ ReceivedCliConnection peer
-    void $ forkFinally (talk states conn) (\_ -> close conn)
+loop :: Socket -> KeterM CliStates b
+loop sock = forever $ do
+    (conn, peer) <- liftIO $ accept sock
+    $logInfo $ T.pack $ "CLI Connection from " <> show peer
+    void $ withRunInIO $ \rio -> 
+        forkFinally (rio $ talk conn) (\_ -> close conn)
 
-listRunningApps :: CliStates -> Socket -> IO ()
-listRunningApps states conn = do
-  txt <- atomically $ renderApps $ csAppManager states
-  sendAll conn $ T.encodeUtf8 txt <> "\n"
+listRunningApps :: Socket -> KeterM CliStates ()
+listRunningApps conn = do
+  MkCliStates{..} <- ask
+  txt <- liftIO $ atomically $ renderApps csAppManager 
+  liftIO $ sendAll conn $ T.encodeUtf8 txt <> "\n"
 
-talk :: CliStates -> Socket -> IO ()
-talk states conn = do
-    msg <- recv conn 1024
+talk :: Socket -> KeterM CliStates ()
+talk conn = do
+    msg <- liftIO $ recv conn 1024
     unless (S.null msg) $ do
       case T.decodeUtf8' msg of
-        Left exception -> sendAll conn ("decode error: " <> T.encodeUtf8 (T.pack $ show exception))
+        Left exception -> liftIO $ sendAll conn ("decode error: " <> T.encodeUtf8 (T.pack $ show exception))
         Right txt -> do
           let res = execParserPure defaultPrefs (info (commandParser <**> helper)
                                                 (fullDesc <> header "server repl" <> progDesc (
                         "repl for inspecting program state. You can connect to a socket and ask predefined questions")) ) (T.unpack <$> T.words txt)
           isLoop <- case res of
-            (Success (CmdListRunningApps)) -> True <$ listRunningApps states conn
-            (Success (CmdExit   )) -> False <$ sendAll conn "bye\n"
-            (CompletionInvoked x) -> True <$ sendAll conn "completion ignored \n"
+            (Success (CmdListRunningApps)) -> True <$ listRunningApps conn
+            (Success (CmdExit   )) -> False <$ liftIO (sendAll conn "bye\n")
+            (CompletionInvoked x) -> True <$ liftIO (sendAll conn "completion ignored \n")
             Failure failure        ->
-              True <$ sendAll conn (T.encodeUtf8 (T.pack $ fst $ renderFailure failure "") <> "\n")
-          when isLoop $ talk states conn
+              True <$ liftIO (sendAll conn (T.encodeUtf8 (T.pack $ fst $ renderFailure failure "") <> "\n"))
+          when isLoop $ talk conn

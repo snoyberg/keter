@@ -17,6 +17,8 @@ import qualified Keter.HostManager         as HostMan
 import           Blaze.ByteString.Builder          (copyByteString, toByteString)
 import           Blaze.ByteString.Builder.Html.Word(fromHtmlEscapedByteString)
 import           Control.Applicative               ((<$>), (<|>))
+import           Control.Monad.Reader              (ask)
+import           Control.Monad.IO.Unlift           (withRunInIO)
 import           Control.Monad.IO.Class            (liftIO)
 import qualified Data.ByteString                   as S
 import qualified Data.ByteString.Char8             as S8
@@ -24,6 +26,7 @@ import qualified Data.ByteString.Char8             as S8
 import           Network.Wai.Middleware.Gzip       (def)
 #endif
 import           Data.Monoid                       (mappend, mempty)
+import           Data.Text                         (pack)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
@@ -52,6 +55,7 @@ import qualified Keter.Rewrite as Rewrite
 import           Data.ByteString            (ByteString)
 import Keter.Common
 import           System.FilePath            (FilePath)
+import           Control.Monad.Logger
 import           Control.Exception          (SomeException)
 import           Network.HTTP.Types                (mkStatus,
                                                     status301, status302,
@@ -68,6 +72,7 @@ import           Prelude                           hiding (FilePath, (++))
 import           WaiAppStatic.Listing              (defaultListing)
 import qualified Network.TLS as TLS
 import qualified System.Directory as Dir
+import Keter.Context
 
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
 defaultWaiProxySettings = def
@@ -87,30 +92,29 @@ data ProxySettings = MkProxySettings
   , psUnkownHost     :: ByteString -> ByteString
   , psMissingHost    :: ByteString
   , psProxyException :: ByteString
-  , psLogException   :: Wai.Request -> SomeException -> IO ()
   }
 
-makeSettings :: (LogMessage -> IO ()) -> KeterConfig -> HostMan.HostManager -> IO ProxySettings
-makeSettings log KeterConfig {..} hostman = do
-    psManager <- HTTP.newManager HTTP.tlsManagerSettings
+makeSettings :: HostMan.HostManager -> KeterM KeterConfig ProxySettings
+makeSettings hostman = do
+    KeterConfig{..} <- ask
+    psManager <- liftIO $ HTTP.newManager HTTP.tlsManagerSettings
     psMissingHost <- case kconfigMissingHostResponse of
       Nothing -> pure defaultMissingHostBody
-      Just x -> taggedReadFile "unknown-host-response-file" x
+      Just x -> liftIO $ taggedReadFile "unknown-host-response-file" x
     psUnkownHost <- case kconfigUnknownHostResponse  of
                 Nothing -> pure defaultUnknownHostBody
-                Just x -> const <$> taggedReadFile "missing-host-response-file" x
+                Just x ->  fmap const $ liftIO $ taggedReadFile "missing-host-response-file" x
     psProxyException <- case kconfigProxyException of
                 Nothing -> pure defaultProxyException
-                Just x -> taggedReadFile "proxy-exception-response-file" x
+                Just x -> liftIO $ taggedReadFile "proxy-exception-response-file" x
+    -- calculate the number of microseconds since the
+    -- configuration option is in milliseconds
+    let psConnectionTimeBound = kconfigConnectionTimeBound * 1000
+    let psIpFromHeader = kconfigIpFromHeader
     pure $ MkProxySettings{..}
     where
-        psLogException a b = log $ ProxyException a b
         psHostLookup = HostMan.lookupAction hostman . CI.mk
 
-        -- | calculate the number of microseconds since the
-        --   configuration option is in milliseconds
-        psConnectionTimeBound = kconfigConnectionTimeBound * 1000
-        psIpFromHeader   = kconfigIpFromHeader
 
 taggedReadFile :: String -> FilePath -> IO ByteString
 taggedReadFile tag file = do
@@ -119,20 +123,23 @@ taggedReadFile tag file = do
           wd <- Dir.getCurrentDirectory
           error $ "could not find " <> tag <> " on path '" <> file <> "' with working dir '" <> wd <> "'"
 
-reverseProxy :: ProxySettings -> ListeningPort -> IO ()
-reverseProxy settings listener =
-    run $ gzip def{gzipFiles = GzipPreCompressed GzipIgnore} $ withClient isSecure settings
+reverseProxy :: ListeningPort -> KeterM ProxySettings ()
+reverseProxy listener = do
+  settings <- ask
+  let (run, isSecure) =
+          case listener of
+              LPInsecure host port -> 
+                  (liftIO . Warp.runSettings (warp host port), False)
+              LPSecure host port cert chainCerts key session -> 
+                  (liftIO . WarpTLS.runTLS
+                      (connectClientCertificates (psHostLookup settings) session $ WarpTLS.tlsSettingsChain
+                          cert
+                          (V.toList chainCerts)
+                          key)
+                      (warp host port), True)
+  withClient isSecure >>= run . gzip def{gzipFiles = GzipPreCompressed GzipIgnore}
   where
     warp host port = Warp.setHost host $ Warp.setPort port Warp.defaultSettings
-    (run, isSecure) =
-        case listener of
-            LPInsecure host port -> (Warp.runSettings (warp host port), False)
-            LPSecure host port cert chainCerts key session -> (WarpTLS.runTLS
-                (connectClientCertificates (psHostLookup settings) session $ WarpTLS.tlsSettingsChain
-                    cert
-                    (V.toList chainCerts)
-                    key)
-                (warp host port), True)
 
 connectClientCertificates :: (ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))) -> Bool -> WarpTLS.TLSSettings -> WarpTLS.TLSSettings
 connectClientCertificates hl session s =
@@ -148,37 +155,37 @@ connectClientCertificates hl session s =
           , WarpTLS.tlsSessionManagerConfig = if session then (Just TLSSession.defaultConfig) else Nothing }
 
 
-
 withClient :: Bool -- ^ is secure?
-           -> ProxySettings
-           -> Wai.Application
-withClient isSecure MkProxySettings {..} =
-    waiProxyToSettings
-       (error "First argument to waiProxyToSettings forced, even thought wpsGetDest provided")
-       defaultWaiProxySettings
-        { wpsSetIpHeader =
-            if useHeader
-                then SIHFromHeader
-                else SIHFromSocket
-        ,  wpsGetDest = Just getDest
-        ,  wpsOnExc = handleProxyException psLogException psProxyException
-        } psManager
+           -> KeterM ProxySettings Wai.Application
+withClient isSecure = do
+    cfg@MkProxySettings{..} <- ask
+    let useHeader = psIpFromHeader
+    withRunInIO $ \rio ->
+        pure $ waiProxyToSettings
+           (error "First argument to waiProxyToSettings forced, even thought wpsGetDest provided")
+           defaultWaiProxySettings
+            { wpsSetIpHeader =
+                if useHeader
+                    then SIHFromHeader
+                    else SIHFromSocket
+            ,  wpsGetDest = Just (getDest cfg)
+            ,  wpsOnExc = handleProxyException (\app e -> rio $ logException app e) psProxyException
+            } psManager
   where
-    useHeader :: Bool
-    useHeader = psIpFromHeader
+    logException :: Wai.Request -> SomeException -> KeterM ProxySettings ()
+    logException a b = logErrorN $ pack $ 
+      "Got a proxy exception on request " <> show a <> " with exception "  <> show b
 
-    bound :: Int
-    bound = psConnectionTimeBound
 
-    getDest :: Wai.Request -> IO (LocalWaiProxySettings, WaiProxyResponse)
-    getDest req =
+    getDest :: ProxySettings -> Wai.Request -> IO (LocalWaiProxySettings, WaiProxyResponse)
+    getDest cfg@MkProxySettings{..} req =
         case Wai.requestHeaderHost req of
             Nothing -> do
               return (defaultLocalWaiProxySettings, WPRResponse $ missingHostResponse psMissingHost)
-            Just host -> processHost req host
+            Just host -> processHost cfg req host
 
-    processHost :: Wai.Request -> S.ByteString -> IO (LocalWaiProxySettings, WaiProxyResponse)
-    processHost req host = do
+    processHost :: ProxySettings -> Wai.Request -> S.ByteString -> IO (LocalWaiProxySettings, WaiProxyResponse)
+    processHost cfg@MkProxySettings{..} req host = do
         -- Perform two levels of lookup. First: look up the entire host. If
         -- that fails, try stripping off any port number and try again.
         mport <- liftIO $ do
@@ -194,11 +201,11 @@ withClient isSecure MkProxySettings {..} =
             Nothing -> do -- we don't know the host that was asked for
               return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host (psUnkownHost host))
             Just ((action, requiresSecure), _)
-                | requiresSecure && not isSecure -> performHttpsRedirect host req
-                | otherwise -> performAction psManager isSecure bound req action
+                | requiresSecure && not isSecure -> performHttpsRedirect cfg host req
+                | otherwise -> performAction psManager isSecure psConnectionTimeBound req action
 
-    performHttpsRedirect host =
-        return . (addjustGlobalBound bound Nothing,) . WPRResponse . redirectApp config
+    performHttpsRedirect MkProxySettings{..} host =
+        return . (addjustGlobalBound psConnectionTimeBound Nothing,) . WPRResponse . redirectApp config
       where
         host' = CI.mk $ decodeUtf8With lenientDecode host
         config = RedirectConfig

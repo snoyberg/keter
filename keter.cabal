@@ -1,6 +1,6 @@
 Cabal-version:       >=1.10
 Name:                keter
-Version:             2.0.1
+Version:             2.1.0
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Deployment system for web applications, originally intended for hosting Yesod
@@ -62,6 +62,9 @@ Library
                      , attoparsec                >= 0.10
                      , http-client               >= 0.5.0
                      , http-conduit              >= 2.1
+                     , fast-logger               < 3.3
+                     , monad-logger              < 0.4
+                     , unliftio-core             < 0.3
                      , case-insensitive
                      , array
                      , mtl
@@ -95,6 +98,7 @@ Library
                        Keter.AppManager
                        Keter.LabelMap
                        Keter.Cli
+                       Keter.Context
                        Keter.Main
                        Keter.PortPool
                        Keter.Proxy
@@ -102,7 +106,7 @@ Library
                        Keter.Rewrite
                        Keter.Yaml.FilePath
                        Keter.TempTarball
-                       Keter.Conduit.LogFile
+                       Keter.Logger
                        Keter.Conduit.Process.Unix
   Other-Modules:
                        Keter.Aeson.KeyHelper
@@ -124,6 +128,8 @@ test-suite test
     type: exitcode-stdio-1.0
     build-depends:   base
                    , transformers
+                   , mtl
+                   , monad-logger
                    , conduit
                    , bytestring
                    , unix

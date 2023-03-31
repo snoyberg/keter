@@ -34,6 +34,7 @@ import           Control.Exception               (Exception, SomeException,
                                                   handle, mask_,
                                                   throwIO, try)
 import           Control.Monad                   (void)
+import           Control.Monad.Logger            
 import           Data.ByteString                 (ByteString)
 import qualified Data.ByteString.Char8           as S8
 import           Data.Conduit                    (ConduitM, (.|), runConduit)
@@ -199,7 +200,7 @@ forkExecuteLog :: ByteString -- ^ command
                -> Maybe (ConduitM () ByteString IO ()) -- ^ stdin
                -> (ByteString -> IO ()) -- ^ both stdout and stderr will be sent to this location
                -> IO ProcessHandle
-forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
+forkExecuteLog cmd args menv mwdir mstdin log = bracketOnError
     setupPipe
     cleanupPipes
     usePipes
@@ -238,7 +239,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
             }
         ignoreExceptions $ addAttachMessage pipes ph
         void $ forkIO $ ignoreExceptions $
-            (runConduit $ sourceHandle readerH .| CL.mapM_ rlog) `finally` hClose readerH
+            (runConduit $ sourceHandle readerH .| CL.mapM_ log) `finally` hClose readerH
         case (min, mstdin) of
             (Just h, Just source) -> void $ forkIO $ ignoreExceptions $
                 (runConduit $ source .| sinkHandle h) `finally` hClose h
@@ -250,7 +251,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
         now <- getCurrentTime
         case p_ of
             ClosedHandle ec -> do
-                rlog $ S8.concat
+                log $ S8.concat
                     [ "\n\n"
                     , S8.pack $ show now
                     , ": Process immediately died with exit code "
@@ -259,7 +260,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
                     ]
                 cleanupPipes pipes
             OpenHandle h -> do
-                rlog $ S8.concat
+                log $ S8.concat
                     [ "\n\n"
                     , S8.pack $ show now
                     , ": Attached new process "
@@ -271,6 +272,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
 -- | Run the given command, restarting if the process dies.
+-- TODO: Consider propagating KeterM to this? Hesitant as this module can stand independently otherwise.
 monitorProcess
     :: (ByteString -> IO ()) -- ^ log
     -> ProcessTracker

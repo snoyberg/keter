@@ -56,107 +56,6 @@ type HostBS = CI ByteString
 getAppname :: FilePath -> Text
 getAppname = pack . takeBaseName
 
-data LogMessage
-    = ProcessCreated FilePath
-    | InvalidBundle FilePath SomeException
-    | ProcessDidNotStart FilePath
-    | ExceptionThrown Text SomeException
-    | RemovingPort Int
-    | UnpackingBundle FilePath
-    | TerminatingApp Text
-    | FinishedReloading Text
-    | TerminatingOldProcess AppId
-    | RemovingOldFolder FilePath
-    | ReceivedInotifyEvent Text
-    | ProcessWaiting FilePath
-    | OtherMessage Text
-    | ErrorStartingBundle Text SomeException
-    | SanityChecksPassed
-    | ReservingHosts AppId (Set Host)
-    | ForgetingReservations AppId (Set Host)
-    | ActivatingApp AppId (Set Host)
-    | DeactivatingApp AppId (Set Host)
-    | ReactivatingApp AppId (Set Host) (Set Host)
-    | WatchedFile Text FilePath
-    | ReloadFrom (Maybe String) String
-    | Terminating String
-    | LaunchInitial
-    | LaunchCli
-    | StartWatching
-    | StartListening
-    | BindCli AddrInfo
-    | ReceivedCliConnection SockAddr
-    | KillingApp Port Text
-    | ProxyException Wai.Request SomeException
-
-instance Show LogMessage where
-    show (ProcessCreated f) = "Created process: " ++ f
-    show (ReloadFrom app input) = "Reloading from: " ++ show app  ++ " to " ++ show input
-    show (Terminating app) = "Terminating " ++ show app
-    show (InvalidBundle f e) = concat
-        [ "Unable to parse bundle file '"
-        , f
-        , "': "
-        , show e
-        ]
-    show (ProcessDidNotStart fp) = concat
-        [ "Could not start process within timeout period: "
-        , fp
-        ]
-    show (ExceptionThrown t e) = concat
-        [ unpack t
-        , ": "
-        , show e
-        ]
-    show (RemovingPort p) = "Port in use, removing from port pool: " ++ show p
-    show (UnpackingBundle b) = concat
-        [ "Unpacking bundle '"
-        , b
-        , "'"
-        ]
-    show (TerminatingApp t) = "Shutting down app: " ++ unpack t
-    show (FinishedReloading t) = "App finished reloading: " ++ unpack t
-    show (TerminatingOldProcess (AINamed t)) = "Sending old process TERM signal: " ++ unpack t
-    show (TerminatingOldProcess AIBuiltin) = "Sending old process TERM signal: builtin"
-    show (RemovingOldFolder fp) = "Removing unneeded folder: " ++ fp
-    show (ReceivedInotifyEvent t) = "Received unknown INotify event: " ++ unpack t
-    show (ProcessWaiting f) = "Process restarting too quickly, waiting before trying again: " ++ f
-    show (OtherMessage t) = unpack t
-    show (ErrorStartingBundle name e) = concat
-        [ "Error occured when launching bundle "
-        , unpack name
-        , ": "
-        , show e
-        ]
-    show SanityChecksPassed = "Sanity checks passed"
-    show (ReservingHosts app hosts) = "Reserving hosts for app " ++ show app ++ ": " ++ unwords (map (unpack . original) $ Set.toList hosts)
-    show (ForgetingReservations app hosts) = "Forgetting host reservations for app " ++ show app ++ ": " ++ unwords (map (unpack . original) $ Set.toList hosts)
-    show (ActivatingApp app hosts) = "Activating app " ++ show app ++ " with hosts: " ++ unwords (map (unpack . original) $ Set.toList hosts)
-    show (DeactivatingApp app hosts) = "Deactivating app " ++ show app ++ " with hosts: " ++ unwords (map (unpack . original) $ Set.toList hosts)
-    show (ReactivatingApp app old new) = concat
-        [ "Reactivating app "
-        , show app
-        , ".  Old hosts: "
-        , unwords (map (unpack . original) $ Set.toList old)
-        , ". New hosts: "
-        , unwords (map (unpack . original) $ Set.toList new)
-        , "."
-        ]
-    show (WatchedFile action fp) = concat
-        [ "Watched file "
-        , unpack action
-        , ": "
-        , fp
-        ]
-    show LaunchInitial = "Launching initial"
-    show (KillingApp port txt) = "Killing " <> unpack txt <> " running on port: "  <> show port
-    show LaunchCli     = "Launching cli"
-    show StartWatching = "Started watching"
-    show StartListening = "Started listening"
-    show (BindCli addr) = "Bound cli to " <> show addr
-    show (ReceivedCliConnection peer) = "CLI Connection from " <> show peer
-    show (ProxyException req except) = "Got a proxy exception on request " <> show req <> " with exception "  <> show except
-
 data KeterException = CannotParsePostgres FilePath
                     | ExitCodeFailure FilePath ExitCode
                     | NoPortsAvailable
@@ -168,18 +67,6 @@ data KeterException = CannotParsePostgres FilePath
                     | EnsureAliveShouldBeBiggerThenZero { keterExceptionGot:: !Int }
     deriving (Show, Typeable)
 instance Exception KeterException
-
-logEx :: TH.Q TH.Exp
-logEx = do
-    let showLoc TH.Loc { TH.loc_module = m, TH.loc_start = (l, c) } = concat
-            [ m
-            , ":"
-            , show l
-            , ":"
-            , show c
-            ]
-    loc <- fmap showLoc TH.qLocation
-    [|(. ExceptionThrown (pack $(TH.lift loc)))|]
 
 data AppId = AIBuiltin | AINamed !Appname
     deriving (Eq, Ord)

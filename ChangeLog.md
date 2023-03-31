@@ -1,3 +1,35 @@
+## 2.1
+
++ Log naming and directory scheme has changed for both main keter logs and app logs.  
+  Old logs were named `dir/current.log` for the current log and `%Y%m%d_%H%M%S.log` 
+  (`time` package conventions) for rotated logs.  
+  Current logs have been brought up one level and named after their old directory:  
+  `logs/keter/current.log` -> `logs/keter.log`  
+  Rotated logs will now simply have `.1` `.2` ascending appended to the name of the base logs 
+  rather than be named after the date and time they were rotated at:  
+  `logs/keter/20230413_231415.log` -> `logs/keter.log.1`  
+  `logs/__builtin__/20230413_231415.log` -> `logs/__builtin__.log.1`  
+  `logs/app-foo/20230413_231415.log` -> `logs/app-foo.log.1`  
+  Please update anything that depended on the old log naming and directory conventions accordingly.
++ Added the `rotate-logs` option (default: true) in the keter config file.  
+  When true, the main keter (non-app!) logs will rotate like they have in previous versions.  
+  When false, the main keter logs will emit straight to stderr; this is useful e.g. if you're 
+  running keter via systemd, which captures stderr output for you.
++ Internal logging implementation has been switched over to `fast-logger` instead of the
+  old in-house logging solution.  
+  Please be aware that compared to the old logging solution, the usage of `fast-logger` does
+  not 100% guarantee consistent time ordering. If anything previously depended on tailing the last
+  line of a log and critically assumed that messages will be in order, it should now parse via 
+  timestamp instead.
++ The `LogMessage` ADT has been removed.
++ Replaced individual logging calls with TH splice -style calls where sensible to have access to source location info.
++ Updated log message format to make use of the additional info:  
+  `"$time|$module$:$line_num|$log_level> $msg"`
++ Added `Keter.Context`, exposing the new `KeterM` monad and related functions.  
+  This monad carries a mappable global config and logger around, eliminating the need to pass various configuration data and the logger to everything.
++ Refactored most `Keter.*` module functions to be actions in `KeterM`  
+  Please anticipate breaking changes for anything written against the exposed API.
+
 ## 2.0.1
 
 + Force usage of http-reverse-proxy versions above 0.6.0.1.

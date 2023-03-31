@@ -120,7 +120,7 @@ runKeterLogger ctx = do
             now <- liftIO getCurrentTime
             -- Format: "keter|$time|$module$:$line_num|$log_level> $msg"
             let bs = mconcat
-                    [ "keter"
+                    [ "keter|"
                     , L.toLogStr $ take 22 $ show now
                     , "|"
                     , L.toLogStr (L.loc_module loc)

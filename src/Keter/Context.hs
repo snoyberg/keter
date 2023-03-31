@@ -12,6 +12,9 @@ import           Control.Monad.Reader      (MonadReader, ReaderT, runReaderT, as
                                            , withReaderT)
 
 -- | The top-level keter context monad, carrying around the main logger and some locally relevant configuration structure.
+--
+-- See this blog post for an explanation of the design philosophy: https://www.fpcomplete.com/blog/2017/06/readert-design-pattern/
+--
 -- TODO: generalize as /contexts/ instead of /configs/? Since not every state being passed
 -- around can be intuitively thought of as a config per se. Ex. AppManager
 newtype KeterM cfg a = KeterM { runKeterM :: LoggingT (ReaderT cfg IO) a }

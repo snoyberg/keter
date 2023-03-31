@@ -5,6 +5,7 @@
 {-# LANGUAGE TupleSections       #-}
 {-# LANGUAGE NamedFieldPuns      #-}
 {-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TypeFamilies        #-}
 
 module Keter.App
     ( App
@@ -314,12 +315,14 @@ withWebApps aid bconfig mdir appLogger configs0 f =
     alloc = launchWebApp aid bconfig mdir appLogger
 
 -- | Format a log message for the process monitor by tagging it with 'process-monitor>'
-formatProcessMonitorLog :: LogStr -> LogStr
-formatProcessMonitorLog msg = "process-monitor> " <> msg
+formatProcessMonitorLog :: FL.LogType -> LogStr -> LogStr
+formatProcessMonitorLog (FL.LogStderr _) msg = "process-monitor> " <> msg
+formatProcessMonitorLog _ msg = msg
 
 -- | Format a log message for an app by tagging it with 'app-$name>'
-formatAppLog :: AppId -> LogStr -> LogStr
-formatAppLog aid msg = toLogStr (appLogName aid) <> "> " <> msg
+formatAppLog :: AppId -> FL.LogType -> LogStr -> LogStr
+formatAppLog aid (FL.LogStderr _) msg = toLogStr (appLogName aid) <> "> " <> msg
+formatAppLog _ _ msg = msg
 
 launchWebApp :: AppId
              -> BundleConfig
@@ -352,14 +355,14 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (Log.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
+            (Log.loggerLog appLogger . formatProcessMonitorLog (Log.loggerType appLogger) . toLogStr)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (Log.loggerLog appLogger . formatAppLog aid . toLogStr)
+            (Log.loggerLog appLogger . formatAppLog aid (Log.loggerType appLogger) . toLogStr)
             (const $ return True))
         terminateMonitoredProcess
         $ \mp -> rio $ f RunningWebApp
@@ -478,14 +481,14 @@ launchBackgroundApp aid BundleConfig {..} mdir appLogger BackgroundConfig {..} f
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (Log.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
+            (Log.loggerLog appLogger . formatProcessMonitorLog (Log.loggerType appLogger) . toLogStr)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList bgconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (Log.loggerLog appLogger . formatAppLog aid . toLogStr)
+            (Log.loggerLog appLogger . formatAppLog aid (Log.loggerType appLogger) . toLogStr)
             (const shouldRestart))
         terminateMonitoredProcess
         (f . RunningBackgroundApp)

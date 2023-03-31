@@ -38,8 +38,8 @@ import           Control.Monad.IO.Unlift   (withRunInIO)
 import           Control.Monad.Logger      
 import           Control.Monad.Reader      (ask)
 import qualified Data.CaseInsensitive      as CI
-import           Keter.Conduit.LogFile      (Logger)
-import qualified Keter.Conduit.LogFile      as LogFile
+import           Keter.Conduit.Log      (Logger)
+import qualified Keter.Conduit.Log      as Log
 import           Keter.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
                                             terminateMonitoredProcess, printStatus)
@@ -238,7 +238,7 @@ withLogger aid (Just var) f = do
     mappLogger <- liftIO $ readTVarIO var
     case mappLogger of
         Nothing -> withRunInIO $ \rio -> 
-          bracketOnError (LogFile.createLoggerViaConfig ascKeterConfig (appLogName aid)) LogFile.loggerClose (rio . f var)
+          bracketOnError (Log.createLoggerViaConfig ascKeterConfig (appLogName aid)) Log.loggerClose (rio . f var)
         Just appLogger ->  f var appLogger
   where
 
@@ -352,14 +352,14 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (LogFile.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
+            (Log.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.loggerLog appLogger . formatAppLog aid . toLogStr)
+            (Log.loggerLog appLogger . formatAppLog aid . toLogStr)
             (const $ return True))
         terminateMonitoredProcess
         $ \mp -> rio $ f RunningWebApp
@@ -478,14 +478,14 @@ launchBackgroundApp aid BundleConfig {..} mdir appLogger BackgroundConfig {..} f
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (LogFile.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
+            (Log.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList bgconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.loggerLog appLogger . formatAppLog aid . toLogStr)
+            (Log.loggerLog appLogger . formatAppLog aid . toLogStr)
             (const shouldRestart))
         terminateMonitoredProcess
         (f . RunningBackgroundApp)
@@ -675,7 +675,7 @@ terminate = do
     void $ withRunInIO $ \rio ->
       forkIO $ rio $ withMappedConfig (const appAsc) $ 
         terminateHelper appId apps backs mdir appLogger
-    liftIO $ maybe (return ()) LogFile.loggerClose appLogger
+    liftIO $ maybe (return ()) Log.loggerClose appLogger
 
 terminateHelper :: AppId
                 -> [RunningWebApp]
@@ -740,15 +740,15 @@ getForwardedEnv vars = filterEnv <$> getEnvironment
                         mappLogger <- do
                             let dirout = kconfigDir </> "log" </> fromText ("app-" ++ appname)
                                 direrr = dirout </> "err"
-                            eappLogger <- liftIO $ LogFile.openRotatingLog
+                            eappLogger <- liftIO $ Log.openRotatingLog
                                 (F.encodeString dirout)
-                                LogFile.defaultMaxTotal
+                                Log.defaultMaxTotal
                             case eappLogger of
                                 Left e -> do
                                     $logEx e
                                     return Nothing
                                 Right appLogger -> return (Just appLogger)
-                        let appLogger = fromMaybe LogFile.dummy mappLogger
+                        let appLogger = fromMaybe Log.dummy mappLogger
                         (app, rest) <- App.start
                             tf
                             muid

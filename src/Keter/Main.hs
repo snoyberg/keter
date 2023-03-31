@@ -16,7 +16,7 @@ import           System.FilePath            (FilePath)
 import qualified Keter.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
 import           Control.Monad             (unless)
-import qualified Keter.Conduit.LogFile      as LogFile
+import qualified Keter.Conduit.Log      as Log
 import           Data.Monoid               (mempty)
 import           Data.String               (fromString)
 import qualified Data.Vector               as V
@@ -113,7 +113,7 @@ runKeterLogger :: (MonadReader KeterConfig m, MonadIO m, MonadUnliftIO m)
                -> m a
 runKeterLogger ctx = do
     cfg@KeterConfig{..} <- ask
-    withRunInIO $ \rio -> bracket (LogFile.createLoggerViaConfig cfg "keter") LogFile.loggerClose $
+    withRunInIO $ \rio -> bracket (Log.createLoggerViaConfig cfg "keter") Log.loggerClose $
         rio . runLoggingT ctx . formatLog 
     where
         formatLog logger loc _ lvl msg = do
@@ -132,7 +132,7 @@ runKeterLogger ctx = do
                     , msg
                     , "\n"
                     ]
-            LogFile.loggerLog logger bs
+            Log.loggerLog logger bs
 
 withManagers :: [FilePath -> IO Plugin]
              -> (HostMan.HostManager -> AppMan.AppManager -> KeterM KeterConfig a)

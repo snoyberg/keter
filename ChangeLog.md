@@ -21,6 +21,14 @@
   not 100% guarantee consistent time ordering. If anything previously depended on tailing the last
   line of a log and critically assumed that messages will be in order, it should now parse via 
   timestamp instead.
++ The `LogMessage` ADT has been removed.
++ Replaced individual logging calls with TH splice -style calls where sensible to have access to source location info.
++ Updated log message format to make use of the additional info:  
+  `"$time|$module$:$line_num|$log_level> $msg"`
++ Added `Keter.Context`, exposing the new `KeterM` monad and related functions.  
+  This monad carries a mappable global config and logger around, eliminating the need to pass various configuration data and the logger to everything.
++ Refactored most `Keter.*` module functions to be actions in `KeterM`  
+  Please anticipate breaking changes for anything written against the exposed API.
 
 ## 2.0.1
 

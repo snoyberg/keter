@@ -5,7 +5,7 @@
 root: ..
 
 # Whether or not to rotate logs, otherwise log straight to stderr
-rotate-logs: False
+rotate-logs: false
 
 # Keter can listen on multiple ports for incoming connections. These ports can
 # have HTTPS either enabled or disabled.

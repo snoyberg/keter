@@ -12,6 +12,8 @@ import Keter.LabelMap as LM
 import Test.Tasty
 import Test.Tasty.HUnit
 import Control.Monad
+import Control.Monad.Reader
+import Control.Monad.Logger
 import           Control.Exception          (SomeException)
 import           Network.HTTP.Conduit              (Manager)
 import Data.ByteString(ByteString)
@@ -20,6 +22,7 @@ import Control.Monad.STM
 import Control.Concurrent.STM.TQueue
 import qualified Network.Wai                       as Wai
 import qualified Network.HTTP.Conduit      as HTTP
+import Keter.Context
 import Keter.Proxy
 
 main :: IO ()
@@ -56,15 +59,18 @@ headThenPostNoCrash :: IO ()
 headThenPostNoCrash = do
   manager <- HTTP.newManager HTTP.tlsManagerSettings
   exceptions <- newTQueueIO
-
+  
   forkIO $ do
     Warp.run 6781 $ \req resp -> do
       void $ Wai.strictRequestBody req
       resp $ Wai.responseLBS ok200 [] "ok"
 
-  -- TODO: revise to accomodate for reverseProxy now being KeterM
-  --forkIO $ do
-  --  reverseProxy (settings exceptions manager) $ LPInsecure "*" 6780
+  forkIO $ 
+    flip runReaderT (settings manager) $ 
+      flip runLoggingT (\_ _ _ msg -> atomically $ writeTQueue exceptions msg) $
+        filterLogger isException $ 
+          runKeterM $ 
+            reverseProxy $ LPInsecure "*" 6780
 
   threadDelay 0_100_000
 
@@ -73,22 +79,23 @@ headThenPostNoCrash = do
   void $ Wreq.post "http://localhost:6780" content
 
   found <- atomically $ flushTQueue exceptions
-  -- TODO: remove dummy type sig to make test suite compile for now
-  assertBool ("the list is not empty " <> show (found :: [()])) (null found)
+  assertBool ("the list is not empty " <> show found) (null found)
   where
     content :: ByteString
     content = "a"
+    
+    -- For 'reverseProxy', only exceptions (and strictly exceptions!) are logged as LevelError.
+    isException :: LogSource -> LogLevel -> Bool
+    isException _ LevelError = True
+    isException _ _ = False
 
-    settings :: TQueue (Wai.Request, SomeException) ->  Manager -> ProxySettings
-    settings expections manager = MkProxySettings {
+    settings :: Manager -> ProxySettings
+    settings manager = MkProxySettings {
         psHostLookup     = const $ pure $ Just ((PAPort 6781 Nothing, False), error "unused tls certificate")
       , psManager        = manager
       , psUnkownHost     = const ""
       , psMissingHost    = ""
       , psProxyException = ""
-      -- TODO: write replacement tests for  exception logging under the new monadlogger-based system
-      --, psLogException   = \req exception ->
-      --    atomically $ writeTQueue expections (req, exception)
       , psIpFromHeader   = False
       , psConnectionTimeBound = 5 * 60 * 1000
       }

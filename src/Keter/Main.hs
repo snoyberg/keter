@@ -32,7 +32,7 @@ import           System.Posix.Signals      (Handler (Catch), installHandler,
                                             sigHUP)
 
 import           Control.Applicative       ((<$>))
-import           Control.Exception         (throwIO, try, SomeException)
+import           Control.Exception         (throwIO, try, bracket, SomeException)
 import           Control.Monad             (forM, void, when)
 import           Control.Monad.IO.Class    (MonadIO, liftIO)
 import           Control.Monad.Trans.Class (MonadTrans, lift)
@@ -53,7 +53,7 @@ import           System.Directory          (createDirectoryIfMissing,
                                             createDirectoryIfMissing,
                                             doesDirectoryExist, doesFileExist,
                                             getDirectoryContents)
-import           System.FilePath           (takeExtension, (</>))
+import           System.FilePath           (takeExtension, takeDirectory, (</>))
 import qualified System.FSNotify           as FSN
 import qualified System.Log.FastLogger     as FL
 import           System.Posix.User         (getUserEntryForID,
@@ -69,7 +69,7 @@ import Keter.Context
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
       -> IO ()
-keter input mkPlugins = 
+keter input mkPlugins =
     runKeterConfigReader input . runKeterLogger . runKeterM $
         withManagers mkPlugins $ \hostman appMan -> do
             cfg@KeterConfig{..} <- ask
@@ -112,29 +112,26 @@ runKeterLogger :: (MonadReader KeterConfig m, MonadIO m, MonadUnliftIO m)
                => LoggingT m a
                -> m a
 runKeterLogger ctx = do
-    KeterConfig{..} <- ask
-    let logName = kconfigDir </> "log" </> "keter.log"
-    let logType = 
-          if kconfigRotateLogs
-            then FL.LogFile (LogFile.defaultRotationSpec logName) LogFile.defaultBufferSize
-            else FL.LogStderr LogFile.defaultBufferSize
-    withRunInIO $ \rio -> FL.withFastLogger logType $ \logger ->
-        rio $ runLoggingT ctx (formatLog logger)
+    cfg@KeterConfig{..} <- ask
+    withRunInIO $ \rio -> bracket (LogFile.createLoggerViaConfig cfg "keter") LogFile.loggerClose $
+        rio . runLoggingT ctx . formatLog 
     where
-        formatLog log loc _ lvl msg = do
+        formatLog logger loc _ lvl msg = do
             now <- liftIO getCurrentTime
             -- Format: "$time|$module$:$line_num|$log_level> $msg"
-            let bs = FL.toLogStr $ encodeUtf8 $ T.pack $ concat
-                    [ take 22 $ show now
+            let bs = mconcat
+                    [ L.toLogStr $ take 22 $ show now
                     , "|"
-                    , show (L.loc_module loc) <> ":" <> show (fst $ L.loc_start loc)
+                    , L.toLogStr (L.loc_module loc)
+                    , ":"
+                    , L.toLogStr (fst $ L.loc_start loc)
                     , "|"
-                    , drop 3 $ show lvl
+                    , L.toLogStr $ drop 5 $ show lvl
                     , "> "
-                    , show msg
+                    , msg
                     , "\n"
                     ]
-            log bs
+            LogFile.loggerLog logger bs
 
 withManagers :: [FilePath -> IO Plugin]
              -> (HostMan.HostManager -> AppMan.AppManager -> KeterM KeterConfig a)

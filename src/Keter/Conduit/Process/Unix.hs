@@ -200,7 +200,7 @@ forkExecuteLog :: ByteString -- ^ command
                -> Maybe (ConduitM () ByteString IO ()) -- ^ stdin
                -> (ByteString -> IO ()) -- ^ both stdout and stderr will be sent to this location
                -> IO ProcessHandle
-forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
+forkExecuteLog cmd args menv mwdir mstdin log = bracketOnError
     setupPipe
     cleanupPipes
     usePipes
@@ -239,7 +239,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
             }
         ignoreExceptions $ addAttachMessage pipes ph
         void $ forkIO $ ignoreExceptions $
-            (runConduit $ sourceHandle readerH .| CL.mapM_ rlog) `finally` hClose readerH
+            (runConduit $ sourceHandle readerH .| CL.mapM_ log) `finally` hClose readerH
         case (min, mstdin) of
             (Just h, Just source) -> void $ forkIO $ ignoreExceptions $
                 (runConduit $ source .| sinkHandle h) `finally` hClose h
@@ -251,7 +251,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
         now <- getCurrentTime
         case p_ of
             ClosedHandle ec -> do
-                rlog $ S8.concat
+                log $ S8.concat
                     [ "\n\n"
                     , S8.pack $ show now
                     , ": Process immediately died with exit code "
@@ -260,7 +260,7 @@ forkExecuteLog cmd args menv mwdir mstdin rlog = bracketOnError
                     ]
                 cleanupPipes pipes
             OpenHandle h -> do
-                rlog $ S8.concat
+                log $ S8.concat
                     [ "\n\n"
                     , S8.pack $ show now
                     , ": Attached new process "
@@ -274,7 +274,7 @@ data Status = NeedsRestart | NoRestart | Running ProcessHandle
 -- | Run the given command, restarting if the process dies.
 -- TODO: Consider propagating KeterM to this? Hesitant as this module can stand independently otherwise.
 monitorProcess
-    :: (LogLevel -> ByteString -> IO ()) -- ^ log
+    :: (ByteString -> IO ()) -- ^ log
     -> ProcessTracker
     -> Maybe S8.ByteString -- ^ setuid
     -> S8.ByteString -- ^ executable
@@ -294,7 +294,7 @@ monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart 
                         now <- getCurrentTime
                         case mlast of
                             Just last | diffUTCTime now last < 5 -> do
-                                log LevelWarn $ "Process restarting too quickly, waiting before trying again: " `S8.append` exec
+                                log $ "Process restarting too quickly, waiting before trying again: " `S8.append` exec
                                 threadDelay $ 5 * 1000 * 1000
                             _ -> return ()
                         let (cmd, args') =
@@ -310,10 +310,10 @@ monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart 
                             rlog
                         case res of
                             Left e -> do
-                                log LevelError $ "Data.Conduit.Process.Unix.monitorProcess: " `S8.append` S8.pack (show (e :: SomeException))
+                                log $ "Data.Conduit.Process.Unix.monitorProcess: " `S8.append` S8.pack (show (e :: SomeException))
                                 return (NeedsRestart, return ())
                             Right pid -> do
-                                log LevelInfo $ "Process created: " `S8.append` exec
+                                log $ "Process created: " `S8.append` exec
                                 return (Running pid, do
                                     TrackedProcess _ _ wait <- trackProcess processTracker pid
                                     ec <- wait

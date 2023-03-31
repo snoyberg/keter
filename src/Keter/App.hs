@@ -220,31 +220,25 @@ withActions bconfig f =
     loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
-withRotatingLog :: AppId
-                -> Maybe (TVar (Maybe RotatingLog))
-                -> ((TVar (Maybe RotatingLog)) -> RotatingLog -> KeterM AppStartConfig a)
-                -> KeterM AppStartConfig a
-withRotatingLog aid Nothing f = do
+withLogger :: AppId
+           -> Maybe (TVar (Maybe Logger))
+           -> ((TVar (Maybe Logger)) -> Logger -> KeterM AppStartConfig a)
+           -> KeterM AppStartConfig a
+withLogger aid Nothing f = do
     var <- liftIO $ newTVarIO Nothing
-    withRotatingLog aid (Just var) f
-withRotatingLog aid (Just var) f = do
+    withLogger aid (Just var) f
+withLogger aid (Just var) f = do
     AppStartConfig{..} <- ask
-    let logName = kconfigDir ascKeterConfig </> "log" </> (pfx <> ".log")
-    liftIO $ createDirectoryIfMissing True dir 
-    mrlog <- liftIO $ readTVarIO var
-    case mrlog of
+    mappLogger <- liftIO $ readTVarIO var
+    case mappLogger of
         Nothing -> withRunInIO $ \rio -> 
-          bracketOnError
-            (mkRotatingLog <$> FL.newFastLogger (FL.LogFile (LogFile.defaultRotationSpec logName) LogFile.defaultBufferSize))
-            LogFile.rlClose 
-            (rio . f var)
-        Just rlog ->  f var rlog
+          bracketOnError (LogFile.createLoggerViaConfig ascKeterConfig logName) LogFile.loggerClose (rio . f var)
+        Just appLogger ->  f var appLogger
   where
-    pfx =
+    logName =
         case aid of
             AIBuiltin -> "__builtin__"
             AINamed x -> unpack $ "app-" <> x
-    mkRotatingLog (logFn, closeFn) = LogFile.RotatingLog (logFn . FL.toLogStr) closeFn
 
 withSanityChecks :: BundleConfig -> KeterM AppStartConfig a -> KeterM AppStartConfig a
 withSanityChecks BundleConfig{..} f = do

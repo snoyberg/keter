@@ -22,9 +22,11 @@ import Keter.Context
 import Keter.Config.V10
 
 -- | Record wrapper over a fast logger (log,close) function tuple, just to make it less unwieldy and obscure.
+-- The 'LogType' is also tracked, in case formatting depends on it.
 data Logger = Logger
   { loggerLog :: forall a. FL.ToLogStr a => a -> IO ()
   , loggerClose :: IO () 
+  , loggerType :: FL.LogType
   }
 
 -- | Create a logger based on a 'KeterConfig'.
@@ -40,9 +42,9 @@ createLoggerViaConfig KeterConfig{..} name = do
          then FL.LogFile (defaultRotationSpec logFile) defaultBufferSize
          else FL.LogStderr defaultBufferSize
   liftIO $ createDirectoryIfMissing True (takeDirectory logFile)
-  mkLogger <$> FL.newFastLogger logType
+  mkLogger logType <$> FL.newFastLogger logType
   where
-    mkLogger (logFn, closeFn) = Logger (logFn . FL.toLogStr) closeFn
+    mkLogger logType (logFn, closeFn) = Logger (logFn . FL.toLogStr) closeFn logType
 
 defaultRotationSpec :: FilePath -> FL.FileLogSpec
 defaultRotationSpec dir =

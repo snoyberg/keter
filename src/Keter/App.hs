@@ -38,8 +38,8 @@ import           Control.Monad.IO.Unlift   (withRunInIO)
 import           Control.Monad.Logger      
 import           Control.Monad.Reader      (ask)
 import qualified Data.CaseInsensitive      as CI
-import           Keter.Conduit.Log      (Logger)
-import qualified Keter.Conduit.Log      as Log
+import           Keter.Logger              (Logger)
+import qualified Keter.Logger              as Log
 import           Keter.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
                                             terminateMonitoredProcess, printStatus)

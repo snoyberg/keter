@@ -16,7 +16,7 @@ import           System.FilePath            (FilePath)
 import qualified Keter.TempTarball as TempFolder
 import           Control.Concurrent.Async  (waitAny, withAsync)
 import           Control.Monad             (unless)
-import qualified Keter.Conduit.Log      as Log
+import qualified Keter.Logger              as Log
 import           Data.Monoid               (mempty)
 import           Data.String               (fromString)
 import qualified Data.Vector               as V

@@ -196,16 +196,16 @@ startWatching appMan = do
                 e' <-
                     case e of
                         FSN.Removed fp _ _ -> do
-                            --log $ WatchedFile "removed" (fromFilePath fp)
+                            rio $ $logInfo $ "Watched file removed: " <> T.pack (fromFilePath fp)
                             return $ Left $ fromFilePath fp
                         FSN.Added fp _ _ -> do
-                            ---log $ WatchedFile "added" (fromFilePath fp)
+                            rio $ $logInfo $ "Watched file added: " <> T.pack (fromFilePath fp)
                             return $ Right $ fromFilePath fp
                         FSN.Modified fp _ _ -> do
-                            --log $ WatchedFile "modified" (fromFilePath fp)
+                            rio $ $logInfo $ "Watched file modified: " <> T.pack (fromFilePath fp)
                             return $ Right $ fromFilePath fp
                         _ -> do
-                            --log $ WatchedFile "unknown" []
+                            rio $ $logInfo $ "Watched file unknown" <> T.pack mempty
                             return $ Left []
                 rio $ case e' of
                     Left fp -> when (isKeter fp) $ AppMan.terminateApp $ getAppname fp

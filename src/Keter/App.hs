@@ -224,7 +224,7 @@ withActions bconfig f =
 -- | Gives the log file or log tag name for a given 'AppId'
 appLogName :: AppId -> String
 appLogName AIBuiltin = "__builtin__"
-appLogName (AINamed x) = "app-" <> show x
+appLogName (AINamed x) = "app-" <> unpack x
 
 withLogger :: AppId
            -> Maybe (TVar (Maybe Logger))

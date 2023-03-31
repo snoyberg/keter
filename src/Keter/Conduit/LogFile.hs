@@ -9,12 +9,10 @@ module Keter.Conduit.LogFile
 
 import qualified System.Log.FastLogger as FL
 
--- | Represents a folder used for totating log files.
---
--- Since 0.2.1
-data RotatingLog = RotatingLog
-  { rlLog :: forall a. FL.ToLogStr a => a -> IO ()
-  , rlClose :: IO () 
+-- | Record wrapper over a fast logger (log,close) function tuple, just to make it less unwieldy and obscure.
+data Logger = Logger
+  { loggerLog :: forall a. FL.ToLogStr a => a -> IO ()
+  , loggerClose :: IO () 
   }
 
 defaultRotationSpec :: FilePath -> FL.FileLogSpec

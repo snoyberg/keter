@@ -229,6 +229,7 @@ withRotatingLog aid Nothing f = do
 withRotatingLog aid (Just var) f = do
     AppStartConfig{..} <- ask
     let logName = kconfigDir ascKeterConfig </> "log" </> (pfx <> ".log")
+    liftIO $ createDirectoryIfMissing True dir 
     mrlog <- liftIO $ readTVarIO var
     case mrlog of
         Nothing -> withRunInIO $ \rio -> 

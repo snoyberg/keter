@@ -227,7 +227,6 @@ performNoLock aid action = do
                 return $ launchWorker aid tstate tmnext Nothing action
             Terminate -> return noWorker
 
--- | TODO: Propagate `KeterM` up through here?
 launchWorker :: AppId
              -> TVar AppState
              -> TVar (Maybe Action)

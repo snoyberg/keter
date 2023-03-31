@@ -79,7 +79,7 @@ data App = App
     , appHosts          :: !(TVar (Set Host))
     , appDir            :: !(TVar (Maybe FilePath))
     , appAsc            :: !AppStartConfig
-    , appRlog           :: !(TVar (Maybe RotatingLog))
+    , appLog           :: !(TVar (Maybe Logger))
     }
 instance Show App where
   show App {appId, ..} = "App{appId=" <> show appId <> "}"
@@ -274,12 +274,12 @@ start :: AppId
       -> AppInput
       -> KeterM AppStartConfig App
 start aid input =
-    withRotatingLog aid Nothing $ \trlog rlog ->
+    withLogger aid Nothing $ \tAppLogger appLogger ->
     withConfig aid input $ \newdir bconfig mmodtime ->
     withSanityChecks bconfig $
     withReservations aid bconfig $ \webapps backs actions ->
-    withBackgroundApps aid bconfig newdir rlog backs $ \runningBacks ->
-    withWebApps aid bconfig newdir rlog webapps $ \runningWebapps -> do
+    withBackgroundApps aid bconfig newdir appLogger backs $ \runningBacks ->
+    withWebApps aid bconfig newdir appLogger webapps $ \runningWebapps -> do
         asc@AppStartConfig{..} <- ask
         liftIO $ mapM_ ensureAlive runningWebapps
         withMappedConfig (const ascHostManager) $ activateApp aid actions
@@ -292,7 +292,7 @@ start aid input =
             <*> newTVarIO (Map.keysSet actions)
             <*> newTVarIO newdir
             <*> return asc
-            <*> return trlog
+            <*> return tAppLogger
 
 bracketedMap :: (a -> (b -> IO c) -> IO c)
              -> ([b] -> IO c)
@@ -307,24 +307,24 @@ bracketedMap with inside =
 withWebApps :: AppId
             -> BundleConfig
             -> Maybe FilePath
-            -> RotatingLog
+            -> Logger
             -> [WebAppConfig Port]
             -> ([RunningWebApp] -> KeterM AppStartConfig a)
             -> KeterM AppStartConfig a
-withWebApps aid bconfig mdir rlog configs0 f =
+withWebApps aid bconfig mdir appLogger configs0 f =
     withRunInIO $ \rio -> 
       bracketedMap (\wac f -> rio $ alloc wac (liftIO <$> f)) (rio . f) configs0
   where
-    alloc = launchWebApp aid bconfig mdir rlog
+    alloc = launchWebApp aid bconfig mdir appLogger
 
 launchWebApp :: AppId
              -> BundleConfig
              -> Maybe FilePath
-             -> RotatingLog
+             -> Logger
              -> WebAppConfig Port
              -> (RunningWebApp -> KeterM AppStartConfig a)
              -> KeterM AppStartConfig a
-launchWebApp aid BundleConfig {..} mdir rlogger WebAppConfig {..} f = do
+launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
     AppStartConfig{..} <- ask
     otherEnv <- liftIO $ pluginsGetEnv ascPlugins name bconfigPlugins
     forwardedEnv <- liftIO $ getForwardedEnv waconfigForwardEnv
@@ -345,17 +345,17 @@ launchWebApp aid BundleConfig {..} mdir rlogger WebAppConfig {..} f = do
             , Map.singleton "APPROOT" $ scheme <> CI.original waconfigApprootHost <> pack extport
             ]
     exec <- liftIO $ canonicalizePath waconfigExec
-    logger <- askLoggerIO
+    mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (\lvl msg -> logger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
+            (\lvl msg -> mainLogger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.rlLog rlogger)
+            (LogFile.loggerLog appLogger)
             (const $ return True))
         terminateMonitoredProcess
         $ \mp -> rio $ f RunningWebApp
@@ -429,23 +429,23 @@ ensureAlive RunningWebApp {..} = do
 withBackgroundApps :: AppId
                    -> BundleConfig
                    -> Maybe FilePath
-                   -> RotatingLog
+                   -> Logger
                    -> [BackgroundConfig]
                    -> ([RunningBackgroundApp] -> KeterM AppStartConfig a)
                    -> KeterM AppStartConfig a
-withBackgroundApps aid bconfig mdir rlog configs f =
+withBackgroundApps aid bconfig mdir appLogger configs f =
     withRunInIO $ \rio -> bracketedMap (\cfg f -> rio $ alloc cfg (liftIO <$> f)) (rio . f) configs
   where
-    alloc = launchBackgroundApp aid bconfig mdir rlog
+    alloc = launchBackgroundApp aid bconfig mdir appLogger
 
 launchBackgroundApp :: AppId
                     -> BundleConfig
                     -> Maybe FilePath
-                    -> RotatingLog
+                    -> Logger 
                     -> BackgroundConfig
                     -> (RunningBackgroundApp -> IO a)
                     -> KeterM AppStartConfig a
-launchBackgroundApp aid BundleConfig {..} mdir rlogger BackgroundConfig {..} f = do
+launchBackgroundApp aid BundleConfig {..} mdir appLogger BackgroundConfig {..} f = do
     AppStartConfig{..} <- ask
     otherEnv <- liftIO $ pluginsGetEnv ascPlugins name bconfigPlugins
     forwardedEnv <- liftIO $ getForwardedEnv bgconfigForwardEnv
@@ -471,17 +471,17 @@ launchBackgroundApp aid BundleConfig {..} mdir rlogger BackgroundConfig {..} f =
                         (count + 1, count < maxCount)
                     when res delay
                     return res
-    logger <- askLoggerIO
+    mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (\lvl msg -> logger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
+            (\lvl msg -> mainLogger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList bgconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.rlLog rlogger)
+            (LogFile.loggerLog appLogger)
             (const shouldRestart))
         terminateMonitoredProcess
         (f . RunningBackgroundApp)
@@ -506,7 +506,7 @@ start :: TempFolder
       -> (Maybe BundleConfig)
       -> KIO () -- ^ action to perform to remove this App from list of actives
       -> KIO (App, KIO ())
-start tf muid processTracker portman plugins rlog appname bundle removeFromList = do
+start tf muid processTracker portman plugins appLogger appname bundle removeFromList = do
     Prelude.error "FIXME Keter.App.start"
     chan <- newChan
     return (App $ writeChan chan, rest chan)
@@ -620,12 +620,12 @@ reload :: AppInput -> KeterM App ()
 reload input = do
     App{..} <- ask
     withMappedConfig (const appAsc) $ 
-      withRotatingLog appId (Just appRlog) $ \_ rlog ->
+      withLogger appId (Just appLog) $ \_ appLogger ->
       withConfig appId input $ \newdir bconfig mmodtime ->
       withSanityChecks bconfig $
       withReservations appId bconfig $ \webapps backs actions ->
-      withBackgroundApps appId bconfig newdir rlog backs $ \runningBacks ->
-      withWebApps appId bconfig newdir rlog webapps $ \runningWebapps -> do
+      withBackgroundApps appId bconfig newdir appLogger backs $ \runningBacks ->
+      withWebApps appId bconfig newdir appLogger webapps $ \runningWebapps -> do
           liftIO $ mapM_ ensureAlive runningWebapps
           liftIO (readTVarIO appHosts) >>= \hosts ->
             withMappedConfig (const $ ascHostManager appAsc) $ 
@@ -634,7 +634,7 @@ reload input = do
               oldApps <- readTVar appRunningWebApps
               oldBacks <- readTVar appBackgroundApps
               oldDir <- readTVar appDir
-              oldRlog <- readTVar appRlog
+              oldRlog <- readTVar appLog
 
               writeTVar appModTime mmodtime
               writeTVar appRunningWebApps runningWebapps
@@ -649,37 +649,37 @@ terminate :: KeterM App ()
 terminate = do
     App{..} <- ask
     let AppStartConfig {..} = appAsc
-    (hosts, apps, backs, mdir, rlog) <- liftIO $ atomically $ do
+    (hosts, apps, backs, mdir, appLogger) <- liftIO $ atomically $ do
         hosts <- readTVar appHosts
         apps <- readTVar appRunningWebApps
         backs <- readTVar appBackgroundApps
         mdir <- readTVar appDir
-        rlog <- readTVar appRlog
+        appLogger <- readTVar appLog
 
         writeTVar appModTime Nothing
         writeTVar appRunningWebApps []
         writeTVar appBackgroundApps []
         writeTVar appHosts Set.empty
         writeTVar appDir Nothing
-        writeTVar appRlog Nothing
+        writeTVar appLog Nothing
 
-        return (hosts, apps, backs, mdir, rlog)
+        return (hosts, apps, backs, mdir, appLogger)
 
     withMappedConfig (const ascHostManager) $
         deactivateApp appId hosts
 
     void $ withRunInIO $ \rio ->
       forkIO $ rio $ withMappedConfig (const appAsc) $ 
-        terminateHelper appId apps backs mdir rlog
-    liftIO $ maybe (return ()) LogFile.rlClose rlog
+        terminateHelper appId apps backs mdir appLogger
+    liftIO $ maybe (return ()) LogFile.loggerClose appLogger
 
 terminateHelper :: AppId
                 -> [RunningWebApp]
                 -> [RunningBackgroundApp]
                 -> Maybe FilePath
-                -> Maybe RotatingLog
+                -> Maybe Logger
                 -> KeterM AppStartConfig ()
-terminateHelper aid apps backs mdir rlog = do
+terminateHelper aid apps backs mdir appLogger = do
     AppStartConfig{..} <- ask
     liftIO $ threadDelay $ 20 * 1000 * 1000
     $logInfo $ pack $ 
@@ -733,25 +733,25 @@ getForwardedEnv vars = filterEnv <$> getEnvironment
                         let time = either (P.const 0) id etime
                         return (Map.insert appname (app, time) appMap, return ())
                     Nothing -> do
-                        mlogger <- do
+                        mappLogger <- do
                             let dirout = kconfigDir </> "log" </> fromText ("app-" ++ appname)
                                 direrr = dirout </> "err"
-                            erlog <- liftIO $ LogFile.openRotatingLog
+                            eappLogger <- liftIO $ LogFile.openRotatingLog
                                 (F.encodeString dirout)
                                 LogFile.defaultMaxTotal
-                            case erlog of
+                            case eappLogger of
                                 Left e -> do
                                     $logEx e
                                     return Nothing
-                                Right rlog -> return (Just rlog)
-                        let logger = fromMaybe LogFile.dummy mlogger
+                                Right appLogger -> return (Just appLogger)
+                        let appLogger = fromMaybe LogFile.dummy mappLogger
                         (app, rest) <- App.start
                             tf
                             muid
                             processTracker
                             hostman
                             plugins
-                            logger
+                            appLogger
                             appname
                             bundle
                             (removeApp appname)

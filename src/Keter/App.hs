@@ -151,10 +151,8 @@ withConfig :: AppId
 withConfig _aid (AIData bconfig) f = f Nothing bconfig Nothing
 withConfig aid (AIBundle fp modtime) f = do
     withRunInIO $ \rio ->
-        bracketOnError
-            (rio $ unpackBundle fp aid)
-            (\(newdir, _) -> removeDirectoryRecursive newdir)
-            $ \(newdir, bconfig) -> rio $ f (Just newdir) bconfig (Just modtime)
+        bracketOnError (rio $ unpackBundle fp aid) (\(newdir, _) -> removeDirectoryRecursive newdir) $ \(newdir, bconfig) -> 
+            rio $ f (Just newdir) bconfig (Just modtime)
 
 withReservations :: AppId
                  -> BundleConfig

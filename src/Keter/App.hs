@@ -37,7 +37,7 @@ import           Control.Monad.IO.Unlift   (withRunInIO)
 import           Control.Monad.Logger      
 import           Control.Monad.Reader      (ask)
 import qualified Data.CaseInsensitive      as CI
-import           Keter.Conduit.LogFile      (RotatingLog)
+import           Keter.Conduit.LogFile      (Logger)
 import qualified Keter.Conduit.LogFile      as LogFile
 import           Keter.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
                                             monitorProcess,
@@ -56,7 +56,8 @@ import           Data.Yaml
 import           Keter.Yaml.FilePath
 import System.FilePath ((</>))
 import           System.Directory          (canonicalizePath, doesFileExist,
-                                            removeDirectoryRecursive)
+                                            removeDirectoryRecursive,
+                                            createDirectoryIfMissing)
 import           Keter.HostManager         hiding (start)
 import           Keter.PortPool            (PortPool, getPort, releasePort)
 import           Keter.Config
@@ -64,7 +65,7 @@ import           Network.Socket
 import           Prelude                   hiding (FilePath)
 import           System.Environment        (getEnvironment)
 import           System.IO                 (hClose, IOMode(..))
-import qualified System.Log.FastLogger     as FL
+import qualified System.Log.FastLogger  as FL
 import           System.Posix.Files        (fileAccess)
 import           System.Posix.Types        (EpochTime, GroupID, UserID)
 import           System.Timeout            (timeout)

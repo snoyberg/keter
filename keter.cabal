@@ -62,9 +62,9 @@ Library
                      , attoparsec                >= 0.10
                      , http-client               >= 0.5.0
                      , http-conduit              >= 2.1
-                     , fast-logger
-                     , monad-logger
-                     , unliftio-core
+                     , fast-logger               < 3.3
+                     , monad-logger              < 0.4
+                     , unliftio-core             < 0.3
                      , case-insensitive
                      , array
                      , mtl

@@ -314,15 +314,20 @@ withWebApps aid bconfig mdir appLogger configs0 f =
   where
     alloc = launchWebApp aid bconfig mdir appLogger
 
+formatTag :: FL.LogType
+          -> LogStr -- ^ tag
+          -> LogStr -- ^ message
+          -> LogStr
+formatTag (FL.LogStderr _) tag msg = tag <> "> " <> msg
+formatTag _ _ msg = msg
+
 -- | Format a log message for the process monitor by tagging it with 'process-monitor>'
 formatProcessMonitorLog :: FL.LogType -> LogStr -> LogStr
-formatProcessMonitorLog (FL.LogStderr _) msg = "process-monitor> " <> msg
-formatProcessMonitorLog _ msg = msg
+formatProcessMonitorLog lt = formatTag lt "process-monitor"
 
 -- | Format a log message for an app by tagging it with 'app-$name>'
 formatAppLog :: AppId -> FL.LogType -> LogStr -> LogStr
-formatAppLog aid (FL.LogStderr _) msg = toLogStr (appLogName aid) <> "> " <> msg
-formatAppLog _ _ msg = msg
+formatAppLog aid lt msg = formatTag lt (toLogStr (appLogName aid)) msg
 
 launchWebApp :: AppId
              -> BundleConfig

@@ -118,9 +118,10 @@ runKeterLogger ctx = do
     where
         formatLog logger loc _ lvl msg = do
             now <- liftIO getCurrentTime
-            -- Format: "$time|$module$:$line_num|$log_level> $msg"
+            -- Format: "keter|$time|$module$:$line_num|$log_level> $msg"
             let bs = mconcat
-                    [ L.toLogStr $ take 22 $ show now
+                    [ "keter"
+                    , L.toLogStr $ take 22 $ show now
                     , "|"
                     , L.toLogStr (L.loc_module loc)
                     , ":"

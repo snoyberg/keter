@@ -220,6 +220,11 @@ withActions bconfig f =
     loop (Stanza (StanzaBackground back) _:stanzas) wacs backs actions =
         loop stanzas wacs (back:backs) actions
 
+-- | Gives the log file or log tag name for a given 'AppId'
+appLogName :: AppId -> String
+appLogName AIBuiltin = "__builtin__"
+appLogName (AINamed x) = "app-" <> show x
+
 withLogger :: AppId
            -> Maybe (TVar (Maybe Logger))
            -> ((TVar (Maybe Logger)) -> Logger -> KeterM AppStartConfig a)
@@ -232,13 +237,9 @@ withLogger aid (Just var) f = do
     mappLogger <- liftIO $ readTVarIO var
     case mappLogger of
         Nothing -> withRunInIO $ \rio -> 
-          bracketOnError (LogFile.createLoggerViaConfig ascKeterConfig logName) LogFile.loggerClose (rio . f var)
+          bracketOnError (LogFile.createLoggerViaConfig ascKeterConfig (appLogName aid)) LogFile.loggerClose (rio . f var)
         Just appLogger ->  f var appLogger
   where
-    logName =
-        case aid of
-            AIBuiltin -> "__builtin__"
-            AINamed x -> unpack $ "app-" <> x
 
 withSanityChecks :: BundleConfig -> KeterM AppStartConfig a -> KeterM AppStartConfig a
 withSanityChecks BundleConfig{..} f = do
@@ -311,6 +312,14 @@ withWebApps aid bconfig mdir appLogger configs0 f =
   where
     alloc = launchWebApp aid bconfig mdir appLogger
 
+-- | Format a log message for the process monitor by tagging it with 'process-monitor>'
+formatProcessMonitorLog :: LogStr -> LogStr
+formatProcessMonitorLog msg = "process-monitor> " <> msg
+
+-- | Format a log message for an app by tagging it with 'app-$name>'
+formatAppLog :: AppId -> LogStr -> LogStr
+formatAppLog aid msg = toLogStr (appLogName aid) <> "> " <> msg
+
 launchWebApp :: AppId
              -> BundleConfig
              -> Maybe FilePath
@@ -342,14 +351,14 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (\lvl msg -> mainLogger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
+            (LogFile.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList waconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.loggerLog appLogger)
+            (LogFile.loggerLog appLogger . formatAppLog aid . toLogStr)
             (const $ return True))
         terminateMonitoredProcess
         $ \mp -> rio $ f RunningWebApp
@@ -468,14 +477,14 @@ launchBackgroundApp aid BundleConfig {..} mdir appLogger BackgroundConfig {..} f
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (monitorProcess
-            (\lvl msg -> mainLogger defaultLoc mempty lvl $ toLogStr $ decodeUtf8With lenientDecode msg)
+            (LogFile.loggerLog appLogger . formatProcessMonitorLog . toLogStr)
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
             (maybe "/tmp" (encodeUtf8 . pack) mdir)
             (map encodeUtf8 $ V.toList bgconfigArgs)
             (map (encodeUtf8 *** encodeUtf8) env)
-            (LogFile.loggerLog appLogger)
+            (LogFile.loggerLog appLogger . formatAppLog aid . toLogStr)
             (const shouldRestart))
         terminateMonitoredProcess
         (f . RunningBackgroundApp)

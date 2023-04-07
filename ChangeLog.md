@@ -1,5 +1,7 @@
 ## 2.1
 
+Please reference `MigrationGuide-2.1.md` for in-depth documentation on breaking changes to be aware of, examples of said changes, and potential solutions/workarounds for them if you plan on upgrading to this version of `keter`.
+
 + Log naming and directory scheme has changed for both main keter logs and app logs.  
   Old logs were named `dir/current.log` for the current log and `%Y%m%d_%H%M%S.log` 
   (`time` package conventions) for rotated logs.  

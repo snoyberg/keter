@@ -3,6 +3,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE OverloadedStrings        #-}
 {-# LANGUAGE ScopedTypeVariables      #-}
+{-# LANGUAGE TemplateHaskell          #-}
 
 module Keter.Conduit.Process.Unix
     ( -- * Process tracking
@@ -21,6 +22,7 @@ module Keter.Conduit.Process.Unix
     ) where
 
 import           Data.Text(Text, pack)
+import           Data.Text.Encoding              (decodeUtf8)
 import           Control.Applicative             ((<$>), (<*>), pure)
 import           Control.Arrow                   ((***))
 import           Control.Concurrent              (forkIO)
@@ -34,6 +36,8 @@ import           Control.Exception               (Exception, SomeException,
                                                   handle, mask_,
                                                   throwIO, try)
 import           Control.Monad                   (void)
+import           Control.Monad.IO.Class
+import           Control.Monad.IO.Unlift
 import           Control.Monad.Logger            
 import           Data.ByteString                 (ByteString)
 import qualified Data.ByteString.Char8           as S8
@@ -272,10 +276,9 @@ forkExecuteLog cmd args menv mwdir mstdin log = bracketOnError
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
 
 -- | Run the given command, restarting if the process dies.
--- TODO: Consider propagating KeterM to this? Hesitant as this module can stand independently otherwise.
 monitorProcess
-    :: (ByteString -> IO ()) -- ^ log
-    -> ProcessTracker
+    :: (MonadUnliftIO m, MonadLogger m)
+    => ProcessTracker
     -> Maybe S8.ByteString -- ^ setuid
     -> S8.ByteString -- ^ executable
     -> S8.ByteString -- ^ working directory
@@ -283,47 +286,48 @@ monitorProcess
     -> [(S8.ByteString, S8.ByteString)] -- ^ environment
     -> (ByteString -> IO ())
     -> (ExitCode -> IO Bool) -- ^ should we restart?
-    -> IO MonitoredProcess
-monitorProcess log processTracker msetuid exec dir args env' rlog shouldRestart = do
-    mstatus <- newMVar NeedsRestart
-    let loop mlast = do
-            next <- modifyMVar mstatus $ \status ->
-                case status of
-                    NoRestart -> return (NoRestart, return ())
-                    _ -> do
-                        now <- getCurrentTime
-                        case mlast of
-                            Just last | diffUTCTime now last < 5 -> do
-                                log $ "Process restarting too quickly, waiting before trying again: " `S8.append` exec
-                                threadDelay $ 5 * 1000 * 1000
-                            _ -> return ()
-                        let (cmd, args') =
-                                case msetuid of
-                                    Nothing -> (exec, args)
-                                    Just setuid -> ("sudo", "-E" : "-u" : setuid : "--" : exec : args)
-                        res <- try $ forkExecuteLog
-                            cmd
-                            args'
-                            (Just env')
-                            (Just dir)
-                            (Just $ return ())
-                            rlog
-                        case res of
-                            Left e -> do
-                                log $ "Data.Conduit.Process.Unix.monitorProcess: " `S8.append` S8.pack (show (e :: SomeException))
-                                return (NeedsRestart, return ())
-                            Right pid -> do
-                                log $ "Process created: " `S8.append` exec
-                                return (Running pid, do
-                                    TrackedProcess _ _ wait <- trackProcess processTracker pid
-                                    ec <- wait
-                                    shouldRestart' <- shouldRestart ec
-                                    if shouldRestart'
-                                        then loop (Just now)
-                                        else return ())
-            next
-    _ <- forkIO $ loop Nothing
-    return $ MonitoredProcess mstatus
+    -> m MonitoredProcess
+monitorProcess processTracker msetuid exec dir args env' rlog shouldRestart =
+    withRunInIO $ \rio -> do
+        mstatus <- newMVar NeedsRestart
+        let loop mlast = do
+                next <- modifyMVar mstatus $ \status ->
+                    case status of
+                        NoRestart -> return (NoRestart, return ())
+                        _ -> do
+                            now <- getCurrentTime
+                            case mlast of
+                                Just last | diffUTCTime now last < 5 -> do
+                                    rio $ $logWarn $ "Process restarting too quickly, waiting before trying again: " <> decodeUtf8 exec
+                                    threadDelay $ 5 * 1000 * 1000
+                                _ -> return ()
+                            let (cmd, args') =
+                                    case msetuid of
+                                        Nothing -> (exec, args)
+                                        Just setuid -> ("sudo", "-E" : "-u" : setuid : "--" : exec : args)
+                            res <- try $ forkExecuteLog
+                                cmd
+                                args'
+                                (Just env')
+                                (Just dir)
+                                (Just $ return ())
+                                rlog
+                            case res of
+                                Left e -> do
+                                    rio $ $logError $ "Data.Conduit.Process.Unix.monitorProcess: " <> pack (show (e :: SomeException))
+                                    return (NeedsRestart, return ())
+                                Right pid -> do
+                                    rio $ $logInfo $ "Process created: " <> decodeUtf8 exec
+                                    return (Running pid, do
+                                        TrackedProcess _ _ wait <- trackProcess processTracker pid
+                                        ec <- wait
+                                        shouldRestart' <- shouldRestart ec
+                                        if shouldRestart'
+                                            then loop (Just now)
+                                            else return ())
+                next
+        _ <- forkIO $ loop Nothing
+        return $ MonitoredProcess mstatus
 
 -- | Abstract type containing information on a process which will be restarted.
 newtype MonitoredProcess = MonitoredProcess (MVar Status)

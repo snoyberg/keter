@@ -359,8 +359,7 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
     exec <- liftIO $ canonicalizePath waconfigExec
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
-        (monitorProcess
-            (Log.loggerLog appLogger . formatProcessMonitorLog (Log.loggerType appLogger) . toLogStr)
+        (rio $ monitorProcess
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
@@ -485,8 +484,7 @@ launchBackgroundApp aid BundleConfig {..} mdir appLogger BackgroundConfig {..} f
                     return res
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
-        (monitorProcess
-            (Log.loggerLog appLogger . formatProcessMonitorLog (Log.loggerType appLogger) . toLogStr)
+        (rio $ monitorProcess
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)

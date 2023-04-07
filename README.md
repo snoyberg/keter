@@ -152,6 +152,11 @@ folder to your user account, so that you can deploy without `sudo`ing.
 
     sudo mkdir -p /opt/keter/incoming
     sudo chown $USER /opt/keter/incoming
+
+Additionally, you may want to enable logging to stderr by disabling `rotate-logs` in `config/keter.yaml`, since systemd will automatically capture and manage stderr output for you:
+
+    rotate-logs: false
+
 ---    
 For versions of Ubuntu and derivatives less than 15.04, configure an Upstart job.
 

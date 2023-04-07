@@ -314,20 +314,10 @@ withWebApps aid bconfig mdir appLogger configs0 f =
   where
     alloc = launchWebApp aid bconfig mdir appLogger
 
-formatTag :: FL.LogType
-          -> LogStr -- ^ tag
-          -> LogStr -- ^ message
-          -> LogStr
-formatTag (FL.LogStderr _) tag msg = tag <> "> " <> msg
-formatTag _ _ msg = msg
-
--- | Format a log message for the process monitor by tagging it with 'process-monitor>'
-formatProcessMonitorLog :: FL.LogType -> LogStr -> LogStr
-formatProcessMonitorLog lt = formatTag lt "process-monitor"
-
--- | Format a log message for an app by tagging it with 'app-$name>'
+-- | Format a log message for an app by tagging it with 'app-$name>' (only when it is being logged to stderr)
 formatAppLog :: AppId -> FL.LogType -> LogStr -> LogStr
-formatAppLog aid lt msg = formatTag lt (toLogStr (appLogName aid)) msg
+formatAppLog aid (FL.LogStderr _) msg = toLogStr (appLogName aid) <> "> " <> msg
+formatAppLog _ _ msg = msg
 
 launchWebApp :: AppId
              -> BundleConfig
@@ -359,8 +349,7 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
     exec <- liftIO $ canonicalizePath waconfigExec
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
-        (monitorProcess
-            (Log.loggerLog appLogger . formatProcessMonitorLog (Log.loggerType appLogger) . toLogStr)
+        (rio $ monitorProcess
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)
@@ -485,8 +474,7 @@ launchBackgroundApp aid BundleConfig {..} mdir appLogger BackgroundConfig {..} f
                     return res
     mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
-        (monitorProcess
-            (Log.loggerLog appLogger . formatProcessMonitorLog (Log.loggerType appLogger) . toLogStr)
+        (rio $ monitorProcess
             ascProcessTracker
             (encodeUtf8 . fst <$> ascSetuid)
             (encodeUtf8 $ pack exec)

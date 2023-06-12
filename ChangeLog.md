@@ -1,3 +1,7 @@
+## 2.1.1
+
++ Bump unix-compat bound to accept 0.7
+
 ## 2.1
 
 Please reference `MigrationGuide-2.1.md` for in-depth documentation on breaking changes to be aware of, examples of said changes, and potential solutions/workarounds for them if you plan on upgrading to this version of `keter`.

@@ -1,6 +1,6 @@
 Cabal-version:       >=1.10
 Name:                keter
-Version:             2.1.0
+Version:             2.1.1
 Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
 Description:
     Deployment system for web applications, originally intended for hosting Yesod
@@ -48,7 +48,7 @@ Library
                      , template-haskell
                      , blaze-builder             >= 0.3           && < 0.5
                      , yaml                      >= 0.8.4         && < 0.12
-                     , unix-compat               >= 0.3           && < 0.7
+                     , unix-compat               >= 0.3           && < 0.8
                      , conduit                   >= 1.1
                      , conduit-extra             >= 1.1
                      , http-reverse-proxy        >= 0.6.0.1       && < 0.7

@@ -1,150 +1,162 @@
-Cabal-version:       >=1.10
-Name:                keter
-Version:             2.1.1
-Synopsis:            Web application deployment manager, focusing on Haskell web frameworks
-Description:
-    Deployment system for web applications, originally intended for hosting Yesod
-    applications. Keter does the following actions for your application:
-    .
-    * Binds to the main port (usually port 80) and reverse proxies requests to your application based on virtual hostnames.
-    * Provides SSL support if requested.
-    * Automatically launches applications, monitors processes, and relaunches any processes which die.
-    * Provides graceful redeployment support, by launching a second copy of your application, performing a health check, and then switching reverse proxying to the new process.
-    .
-    Keter provides many more advanced features and extension points. It allows configuration of static hosts, redirect rules, management of PostgreSQL databases, and more. It supports a simple bundle format for applications which allows for easy management of your web apps.
+cabal-version:      >=1.10
+name:               keter
+version:            2.1.1
+synopsis:
+  Web application deployment manager, focusing on Haskell web frameworks
 
-Homepage:            http://www.yesodweb.com/
-License:             MIT
-License-file:        LICENSE
-Author:              Michael Snoyman
-Maintainer:          michael@snoyman.com
-Category:            Web, Yesod
-Build-type:          Simple
-extra-source-files:  ChangeLog.md
-                     README.md
+description:
+  Deployment system for web applications, originally intended for hosting Yesod
+  applications. Keter does the following actions for your application:
+  .
+  * Binds to the main port (usually port 80) and reverse proxies requests to your application based on virtual hostnames.
+  * Provides SSL support if requested.
+  * Automatically launches applications, monitors processes, and relaunches any processes which die.
+  * Provides graceful redeployment support, by launching a second copy of your application, performing a health check, and then switching reverse proxying to the new process.
+  .
+  Keter provides many more advanced features and extension points. It allows configuration of static hosts, redirect rules, management of PostgreSQL databases, and more. It supports a simple bundle format for applications which allows for easy management of your web apps.
+
+homepage:           http://www.yesodweb.com/
+license:            MIT
+license-file:       LICENSE
+author:             Michael Snoyman
+maintainer:         michael@snoyman.com
+category:           Web, Yesod
+build-type:         Simple
+extra-source-files:
+  ChangeLog.md
+  README.md
 
 --Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
 
 flag system-filepath
   description: Use system-filepath
-  default: False
+  default:     False
 
-Library
-  default-language:    Haskell98
-  Build-depends:       base                      >= 4             && < 5
-                     , directory
-                     , fsnotify >= 0.3
-                     , bytestring
-                     , text
-                     , containers
-                     , transformers
-                     , process                   >= 1.4.3         && < 1.7
-                     , random
-                     , filepath
-                     , zlib
-                     , network
-                     , time
-                     , tar                       >= 0.4
-                     , template-haskell
-                     , blaze-builder             >= 0.3           && < 0.5
-                     , yaml                      >= 0.8.4         && < 0.12
-                     , unix-compat               >= 0.3           && < 0.8
-                     , conduit                   >= 1.1
-                     , conduit-extra             >= 1.1
-                     , http-reverse-proxy        >= 0.6.0.1       && < 0.7
-                     , unix                      >= 2.5
-                     , wai-app-static            >= 3.1           && < 3.2
-                     , wai                       >= 3.2.2
-                     , wai-extra                 >= 3.0.3         && < 3.2
-                     , http-types
-                     , regex-tdfa                >= 1.1
-                     , attoparsec                >= 0.10
-                     , http-client               >= 0.5.0
-                     , http-conduit              >= 2.1
-                     , fast-logger               < 3.3
-                     , monad-logger              < 0.4
-                     , unliftio-core             < 0.3
-                     , case-insensitive
-                     , array
-                     , mtl
-                     , warp
-                     , warp-tls                  >= 3.0.3         && < 3.4.0
-                     , aeson
-                     , unordered-containers
-                     , vector
-                     , stm                       >= 2.4
-                     , async
-                     , lifted-base
-                     , tls                       >= 1.4
-                     , tls-session-manager
-                     , optparse-applicative
-                     , indexed-traversable
+library
+  default-language: Haskell98
+  build-depends:
+      aeson                 >=2.0.0   && <2.1
+    , array                 >=0.5.4   && <0.6
+    , async                 >=2.2.4   && <2.3
+    , attoparsec            >=0.14.4  && <0.15
+    , base                  >=4       && <5
+    , unliftio-core         >=0.2.0.0 && <0.3.0.0
+    , monad-logger          >=0.3.0   && <0.4.0
+    , fast-logger           >=3.0.0   && <3.2.0
+    , blaze-builder         >=0.3     && <0.5
+    , bytestring            >=0.10.12 && <0.11
+    , case-insensitive      >=1.2.1   && <1.3
+    , conduit               >=1.3.4   && <1.4
+    , conduit-extra         >=1.3.5   && <1.4
+    , containers            >=0.6.4   && <0.7
+    , directory             >=1.3.6   && <1.4
+    , filepath              >=1.4.2   && <1.5
+    , fsnotify              >=0.3.0   && <0.4
+    , http-client           >=0.7.11  && <0.8
+    , http-conduit          >=2.3.8   && <2.4
+    , http-reverse-proxy    >=0.6.0.1 && <0.7
+    , http-types            >=0.12.3  && <0.13
+    , indexed-traversable   >=0.1.2   && <0.2
+    , lifted-base           >=0.2.3   && <0.3
+    , mtl                   >=2.2.2   && <2.3
+    , network               >=3.1.2   && <3.2
+    , optparse-applicative  >=0.16.1  && <0.17
+    , process               >=1.4.3   && <1.7
+    , random                >=1.2.1   && <1.3
+    , regex-tdfa            >=1.3.1   && <1.4
+    , stm                   >=2.5.0   && <2.6
+    , tar                   >=0.5.1   && <0.6
+    , template-haskell      >=2.17.0  && <2.18
+    , text                  >=1.2.5   && <1.3
+    , time                  >=1.9.3   && <1.10
+    , tls                   >=1.5.7   && <1.6
+    , tls-session-manager   >=0.0.4   && <0.1
+    , transformers          >=0.5.6   && <0.6
+    , unix                  >=2.7.2   && <2.8
+    , unix-compat           >=0.3     && <0.8
+    , unordered-containers  >=0.2.17  && <0.3
+    , vector                >=0.12.3  && <0.13
+    , wai                   >=3.2.3   && <3.3
+    , wai-app-static        >=3.1     && <3.2
+    , wai-extra             >=3.0.3   && <3.2
+    , warp                  >=3.3.20  && <3.4
+    , warp-tls              >=3.0.3   && <3.4.0
+    , yaml                  >=0.8.4   && <0.12
+    , zlib                  >=0.6.2   && <0.7
 
-  if impl(ghc < 7.6)
-    build-depends:     ghc-prim
+  if impl(ghc <7.6)
+    build-depends: ghc-prim
+
   if flag(system-filepath)
-    build-depends:
-                     system-filepath
-    cpp-options:       -DSYSTEM_FILEPATH
+    build-depends: system-filepath
+    cpp-options:   -DSYSTEM_FILEPATH
 
-  Exposed-Modules:     Keter.Plugin.Postgres
-                       Keter.Config
-                       Keter.Config.V04
-                       Keter.Config.V10
-                       Keter.Common
-                       Keter.Config.Middleware
-                       Keter.App
-                       Keter.AppManager
-                       Keter.LabelMap
-                       Keter.Cli
-                       Keter.Context
-                       Keter.Main
-                       Keter.PortPool
-                       Keter.Proxy
-                       Keter.HostManager
-                       Keter.Rewrite
-                       Keter.Yaml.FilePath
-                       Keter.TempTarball
-                       Keter.Logger
-                       Keter.Conduit.Process.Unix
-  Other-Modules:
-                       Keter.Aeson.KeyHelper
-  ghc-options:         -Wall
-  c-sources:           cbits/process-tracker.c
-  hs-source-dirs: src
-Executable keter
-  default-language:    Haskell98
-  Main-is:             keter.hs
-  hs-source-dirs:      src/main
-  Build-depends:       base, keter, filepath
-  ghc-options:         -threaded -Wall
-  other-modules:       Paths_keter
+  exposed-modules:
+    Keter.App
+    Keter.AppManager
+    Keter.Cli
+    Keter.Common
+    Keter.Conduit.Process.Unix
+    Keter.Config
+    Keter.Config.Middleware
+    Keter.Config.V04
+    Keter.Config.V10
+    Keter.Context
+    Keter.HostManager
+    Keter.LabelMap
+    Keter.Logger
+    Keter.Main
+    Keter.Plugin.Postgres
+    Keter.PortPool
+    Keter.Proxy
+    Keter.Rewrite
+    Keter.TempTarball
+    Keter.Yaml.FilePath
+
+  other-modules:    Keter.Aeson.KeyHelper
+  ghc-options:      -Wall
+  c-sources:        cbits/process-tracker.c
+  hs-source-dirs:   src
+
+executable keter
+  default-language: Haskell98
+  main-is:          keter.hs
+  hs-source-dirs:   src/main
+  build-depends:
+      base
+    , filepath
+    , keter
+
+  ghc-options:      -threaded -Wall
+  other-modules:    Paths_keter
 
 test-suite test
-    default-language:    Haskell98
-    hs-source-dirs: test
-    main-is: Spec.hs
-    type: exitcode-stdio-1.0
-    build-depends:   base
-                   , transformers
-                   , mtl
-                   , monad-logger
-                   , conduit
-                   , bytestring
-                   , unix
-                   , tasty
-                   , tasty-hunit
-                   , keter
-                   , HUnit
-                   , wreq
-                   , lens
-                   , stm
-                   , http-conduit
-                   , wai
-                   , warp
-                   , http-types
-                   , http-client
-    ghc-options:     -Wall -threaded
+  default-language: Haskell98
+  hs-source-dirs:   test
+  main-is:          Spec.hs
+  type:             exitcode-stdio-1.0
+  build-depends:
+      base
+    , bytestring
+    , conduit
+    , http-client
+    , http-conduit
+    , http-types
+    , HUnit
+    , keter
+    , lens
+    , monad-logger
+    , mtl
+    , stm
+    , tasty
+    , tasty-hunit
+    , transformers
+    , unix
+    , wai
+    , warp
+    , wreq
+
+  ghc-options:      -Wall -threaded
 
 source-repository head
   type:     git

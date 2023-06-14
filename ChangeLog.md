@@ -1,6 +1,8 @@
 ## 2.1.1
 
 + Bump unix-compat bound to accept 0.7
++ Add upper bounds to all dependencies in the main library
++ Run cabal-fmt
 
 ## 2.1
 

@@ -2,6 +2,5 @@ flags:
   keter: {}
 packages:
 - '.'
-extra-deps: 
-  - http-reverse-proxy-0.6.0.1@sha256:0eb27277306b4950046bf9acc2c721f219d6e9eb939d950cd8cc32c4b9433800,2542
-resolver: lts-18
+extra-deps: []
+resolver: lts-20

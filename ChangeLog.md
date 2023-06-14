@@ -1,6 +1,12 @@
 ## 2.1.1
 
 + Bump unix-compat bound to accept 0.7
++ Add upper bounds to all dependencies in the main library
++ Run cabal-fmt
++ Drop support for stackage lts-17 and lts-18
+  I don't think it's worth mainting these with the aeson issues involved.
+  Eg you open yourself to a [DoS attack](https://github.com/haskell/aeson/issues/864)
+  by staying on these old versions
 
 ## 2.1
 

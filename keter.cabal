@@ -128,7 +128,8 @@ executable keter
       keter
 
   ghc-options:      -threaded -Wall
-  other-modules:    Paths_keter
+  other-modules:   Paths_keter
+  autogen-modules: Paths_keter
 
 test-suite test
   default-language: Haskell98

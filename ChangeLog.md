@@ -1,3 +1,16 @@
+## 2.1.2
+
+* Bump bounds:
+  ```
+    aeson >=2.0.0 && <2.2 (latest: 2.2.0.0)
+    bytestring >=0.10.12 && <0.12 (latest: 0.12.0.0)
+    mtl >=2.2.2 && <2.3 (latest: 2.3.1)
+    optparse-applicative >=0.16.1 && <0.18 (latest: 0.18.1.0)
+    transformers >=0.5.6 && <0.6 (latest: 0.6.1.1)
+    unix >=2.7.2 && <2.8 (latest: 2.8.1.1)
+    warp-tls >=3.0.3 && <3.4.0 (latest: 3.4.0)
+  ```
+
 ## 2.1.1
 
 + Bump unix-compat bound to accept 0.7

@@ -1,6 +1,6 @@
 cabal-version:      3.0
 name:               keter
-version:            2.1.1
+version:            2.1.2
 synopsis:
   Web application deployment manager, focusing on Haskell web frameworks
 

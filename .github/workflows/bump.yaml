@@ -1,0 +1,28 @@
+# https://github.com/nomeata/haskell-bounds-bump-action
+on:
+  # allows manual triggering from https://github.com/../../actions/workflows/bump.yml
+  workflow_dispatch:
+  # runs weekly on Thursday at 8:00
+  schedule:
+           # ┌───────────── minute (0 - 59)
+           # │ ┌───────────── hour (0 - 23)
+           # │ │ ┌───────────── day of the month (1 - 31)
+           # │ │ │ ┌───────────── month (1 - 12 or JAN-DEC)
+           # │ │ │ │ ┌───────────── day of the week (0 - 6 or SUN-SAT)
+           # │ │ │ │ │
+           # │ │ │ │ │
+           # │ │ │ │ │
+           # * * * * *
+    - cron: '0 0 * * 3'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: nomeata/haskell-bounds-bump-action@main
+      with:
+        test: false

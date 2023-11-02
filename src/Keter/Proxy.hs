@@ -90,7 +90,7 @@ data ProxySettings = MkProxySettings
   , psManager        :: !Manager
   , psIpFromHeader   :: Bool
   , psConnectionTimeBound :: Int
-  , psUnkownHost     :: ByteString -> ByteString
+  , psUnknownHost    :: ByteString -> ByteString
   , psMissingHost    :: ByteString
   , psProxyException :: ByteString
   }
@@ -100,7 +100,7 @@ makeSettings hostman = do
     KeterConfig{..} <- ask
     psManager <- liftIO $ HTTP.newManager HTTP.tlsManagerSettings
     psMissingHost <- taggedReadFile "unknown-host-response-file" kconfigMissingHostResponse defaultMissingHostBody id
-    psUnkownHost <- taggedReadFile "missing-host-response-file" kconfigUnknownHostResponse defaultUnknownHostBody const
+    psUnknownHost <- taggedReadFile "missing-host-response-file" kconfigUnknownHostResponse defaultUnknownHostBody const
     psProxyException <- taggedReadFile "proxy-exception-response-file" kconfigProxyException defaultProxyException id
     -- calculate the number of microseconds since the
     -- configuration option is in milliseconds
@@ -196,7 +196,7 @@ withClient isSecure = do
                         else psHostLookup host'
         case mport of
             Nothing -> do -- we don't know the host that was asked for
-              return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host (psUnkownHost host))
+              return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host (psUnknownHost host))
             Just ((action, requiresSecure), _)
                 | requiresSecure && not isSecure -> performHttpsRedirect cfg host req
                 | otherwise -> performAction psManager isSecure psConnectionTimeBound req action

@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections   #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE CPP #-}
@@ -27,10 +28,13 @@ import qualified Data.ByteString.Char8             as S8
 import           Network.Wai.Middleware.Gzip       (def)
 #endif
 import           Data.Monoid                       (mappend, mempty)
+import           Data.Proxy
+import           Data.Tagged
 import           Data.Text                         (pack)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
+import           GHC.TypeLits (KnownSymbol, symbolVal)
 import           Keter.Config
 import           Keter.Config.Middleware
 import           Network.HTTP.Conduit              (Manager)
@@ -99,9 +103,9 @@ makeSettings :: HostMan.HostManager -> KeterM KeterConfig ProxySettings
 makeSettings hostman = do
     KeterConfig{..} <- ask
     psManager <- liftIO $ HTTP.newManager HTTP.tlsManagerSettings
-    psMissingHost <- taggedReadFile "unknown-host-response-file" kconfigMissingHostResponse defaultMissingHostBody id
-    psUnknownHost <- taggedReadFile "missing-host-response-file" kconfigUnknownHostResponse defaultUnknownHostBody const
-    psProxyException <- taggedReadFile "proxy-exception-response-file" kconfigProxyException defaultProxyException id
+    psMissingHost <- taggedReadFile kconfigMissingHostResponse defaultMissingHostBody id
+    psUnknownHost <- taggedReadFile kconfigUnknownHostResponse defaultUnknownHostBody const
+    psProxyException <- taggedReadFile kconfigProxyException defaultProxyException id
     -- calculate the number of microseconds since the
     -- configuration option is in milliseconds
     let psConnectionTimeBound = kconfigConnectionTimeBound * 1000
@@ -111,14 +115,16 @@ makeSettings hostman = do
         psHostLookup = HostMan.lookupAction hostman . CI.mk
 
 
-taggedReadFile :: String -> Maybe FilePath -> ret -> (ByteString -> ret) -> IO ret
-taggedReadFile _ Nothing fallback _ = pure fallback
-taggedReadFile tag (Just file) _ processContents = do
-  isExist <- Dir.doesFileExist file
-  if isExist then S.readFile file <&> processContents else do
-    wd <- Dir.getCurrentDirectory
+taggedReadFile :: forall r key. KnownSymbol key
+               => Tagged key (Maybe FilePath) -> r -> (ByteString -> r) -> KeterM KeterConfig r
+taggedReadFile (Tagged Nothing)     fallback _        = pure fallback
+taggedReadFile (Tagged (Just file)) _ processContents = do
+  isExist <- liftIO $ Dir.doesFileExist file
+  if isExist then liftIO (S.readFile file) <&> processContents else do
+    wd <- liftIO Dir.getCurrentDirectory
     error $ "could not find " <> tag <> " on path '" <> file <> "' with working dir '" <> wd <> "'"
     -- FIXME instead of failing, log a warning and return fallback value?
+  where tag = symbolVal (Proxy :: Proxy key)
 
 reverseProxy :: ListeningPort -> KeterM ProxySettings ()
 reverseProxy listener = do

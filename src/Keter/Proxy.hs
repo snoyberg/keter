@@ -13,6 +13,7 @@ module Keter.Proxy
 
 import qualified Network.HTTP.Conduit      as HTTP
 import qualified Data.CaseInsensitive      as CI
+import           Data.Functor ((<&>))
 import qualified Keter.HostManager         as HostMan
 import           Blaze.ByteString.Builder          (copyByteString, toByteString)
 import           Blaze.ByteString.Builder.Html.Word(fromHtmlEscapedByteString)
@@ -98,15 +99,9 @@ makeSettings :: HostMan.HostManager -> KeterM KeterConfig ProxySettings
 makeSettings hostman = do
     KeterConfig{..} <- ask
     psManager <- liftIO $ HTTP.newManager HTTP.tlsManagerSettings
-    psMissingHost <- case kconfigMissingHostResponse of
-      Nothing -> pure defaultMissingHostBody
-      Just x -> liftIO $ taggedReadFile "unknown-host-response-file" x
-    psUnkownHost <- case kconfigUnknownHostResponse  of
-                Nothing -> pure defaultUnknownHostBody
-                Just x ->  fmap const $ liftIO $ taggedReadFile "missing-host-response-file" x
-    psProxyException <- case kconfigProxyException of
-                Nothing -> pure defaultProxyException
-                Just x -> liftIO $ taggedReadFile "proxy-exception-response-file" x
+    psMissingHost <- taggedReadFile "unknown-host-response-file" kconfigMissingHostResponse defaultMissingHostBody id
+    psUnkownHost <- taggedReadFile "missing-host-response-file" kconfigUnknownHostResponse defaultUnknownHostBody const
+    psProxyException <- taggedReadFile "proxy-exception-response-file" kconfigProxyException defaultProxyException id
     -- calculate the number of microseconds since the
     -- configuration option is in milliseconds
     let psConnectionTimeBound = kconfigConnectionTimeBound * 1000
@@ -116,12 +111,14 @@ makeSettings hostman = do
         psHostLookup = HostMan.lookupAction hostman . CI.mk
 
 
-taggedReadFile :: String -> FilePath -> IO ByteString
-taggedReadFile tag file = do
-        isExist <- Dir.doesFileExist file
-        if isExist then S.readFile file else do
-          wd <- Dir.getCurrentDirectory
-          error $ "could not find " <> tag <> " on path '" <> file <> "' with working dir '" <> wd <> "'"
+taggedReadFile :: String -> Maybe FilePath -> ret -> (ByteString -> ret) -> IO ret
+taggedReadFile _ Nothing fallback _ = pure fallback
+taggedReadFile tag (Just file) _ processContents = do
+  isExist <- Dir.doesFileExist file
+  if isExist then S.readFile file <&> processContents else do
+    wd <- Dir.getCurrentDirectory
+    error $ "could not find " <> tag <> " on path '" <> file <> "' with working dir '" <> wd <> "'"
+    -- FIXME instead of failing, log a warning and return fallback value?
 
 reverseProxy :: ListeningPort -> KeterM ProxySettings ()
 reverseProxy listener = do

@@ -21,7 +21,6 @@ import           Data.Maybe                        (catMaybes, fromMaybe, isJust
 import           Data.Proxy (Proxy(Proxy))
 import qualified Data.Set                          as Set
 import           Data.String                       (fromString)
-import           Data.Tagged
 import           Data.Vector                       (Vector)
 import qualified Data.Vector                       as V
 import           Data.Word                         (Word)

@@ -29,7 +29,6 @@ import           Network.Wai.Middleware.Gzip       (def)
 #endif
 import           Data.Monoid                       (mappend, mempty)
 import           Data.Proxy
-import           Data.Tagged
 import           Data.Text                         as T (pack, unwords)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)

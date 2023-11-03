@@ -30,10 +30,11 @@ import           Network.Wai.Middleware.Gzip       (def)
 import           Data.Monoid                       (mappend, mempty)
 import           Data.Proxy
 import           Data.Tagged
-import           Data.Text                         (pack)
+import           Data.Text                         as T (pack, unwords)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
+import           GHC.Exts (fromString)
 import           GHC.TypeLits (KnownSymbol, symbolVal)
 import           Keter.Config
 import           Keter.Config.Middleware
@@ -117,14 +118,16 @@ makeSettings hostman = do
 
 taggedReadFile :: forall r key. KnownSymbol key
                => Tagged key (Maybe FilePath) -> r -> (ByteString -> r) -> KeterM KeterConfig r
-taggedReadFile (Tagged Nothing)     fallback _        = pure fallback
-taggedReadFile (Tagged (Just file)) _ processContents = do
+taggedReadFile (Tagged Nothing)     fallback _               = pure fallback
+taggedReadFile (Tagged (Just file)) fallback processContents = do
   isExist <- liftIO $ Dir.doesFileExist file
   if isExist then liftIO (S.readFile file) <&> processContents else do
     wd <- liftIO Dir.getCurrentDirectory
-    error $ "could not find " <> tag <> " on path '" <> file <> "' with working dir '" <> wd <> "'"
-    -- FIXME instead of failing, log a warning and return fallback value?
-  where tag = symbolVal (Proxy :: Proxy key)
+    logWarnN . T.unwords $ ["could not find", tag, "on path", quote file, "with working dir", quote wd]
+    return fallback
+  where
+    tag = fromString $ symbolVal (Proxy :: Proxy key)
+    quote = ("'" <>) . (<> "'") . fromString
 
 reverseProxy :: ListeningPort -> KeterM ProxySettings ()
 reverseProxy listener = do

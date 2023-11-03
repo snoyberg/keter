@@ -112,6 +112,7 @@ data KeterConfig = KeterConfig
     , kconfigUnknownHostResponse  :: !(Maybe F.FilePath)
     , kconfigMissingHostResponse  :: !(Maybe F.FilePath)
     , kconfigProxyException       :: !(Maybe F.FilePath)
+
     , kconfigRotateLogs           :: !Bool
     }
 
@@ -129,9 +130,9 @@ instance ToCurrent KeterConfig where
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = connectionTimeBound
         , kconfigCliPort             = Nothing
-        , kconfigUnknownHostResponse  = Nothing
+        , kconfigUnknownHostResponse = Nothing
         , kconfigMissingHostResponse = Nothing
-        , kconfigProxyException      = Nothing
+        , kconfigProxyException = Nothing
         , kconfigRotateLogs = True
         }
       where
@@ -182,8 +183,8 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "env" .!= Map.empty
             <*> o .:? "connection-time-bound" .!= V04.fiveMinutes
             <*> o .:? "cli-port"
-            <*> o .:? "missing-host-response-file"
             <*> o .:? "unknown-host-response-file"
+            <*> o .:? "missing-host-response-file"
             <*> o .:? "proxy-exception-response-file"
             <*> o .:? "rotate-logs" .!= True
 

@@ -13,6 +13,7 @@ module Keter.Proxy
 
 import qualified Network.HTTP.Conduit      as HTTP
 import qualified Data.CaseInsensitive      as CI
+import           Data.Functor ((<&>))
 import qualified Keter.HostManager         as HostMan
 import           Blaze.ByteString.Builder          (copyByteString, toByteString)
 import           Blaze.ByteString.Builder.Html.Word(fromHtmlEscapedByteString)
@@ -26,10 +27,11 @@ import qualified Data.ByteString.Char8             as S8
 import           Network.Wai.Middleware.Gzip       (def)
 #endif
 import           Data.Monoid                       (mappend, mempty)
-import           Data.Text                         (pack)
+import           Data.Text                         as T (Text, pack, unwords)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)
 import qualified Data.Vector                       as V
+import           GHC.Exts (fromString)
 import           Keter.Config
 import           Keter.Config.Middleware
 import           Network.HTTP.Conduit              (Manager)
@@ -89,7 +91,7 @@ data ProxySettings = MkProxySettings
   , psManager        :: !Manager
   , psIpFromHeader   :: Bool
   , psConnectionTimeBound :: Int
-  , psUnkownHost     :: ByteString -> ByteString
+  , psUnknownHost    :: ByteString -> ByteString
   , psMissingHost    :: ByteString
   , psProxyException :: ByteString
   }
@@ -98,15 +100,9 @@ makeSettings :: HostMan.HostManager -> KeterM KeterConfig ProxySettings
 makeSettings hostman = do
     KeterConfig{..} <- ask
     psManager <- liftIO $ HTTP.newManager HTTP.tlsManagerSettings
-    psMissingHost <- case kconfigMissingHostResponse of
-      Nothing -> pure defaultMissingHostBody
-      Just x -> liftIO $ taggedReadFile "unknown-host-response-file" x
-    psUnkownHost <- case kconfigUnknownHostResponse  of
-                Nothing -> pure defaultUnknownHostBody
-                Just x ->  fmap const $ liftIO $ taggedReadFile "missing-host-response-file" x
-    psProxyException <- case kconfigProxyException of
-                Nothing -> pure defaultProxyException
-                Just x -> liftIO $ taggedReadFile "proxy-exception-response-file" x
+    psMissingHost <- taggedReadFile "missing-host-response-file" kconfigMissingHostResponse defaultMissingHostBody id
+    psUnknownHost <- taggedReadFile "unknown-host-response-file" kconfigUnknownHostResponse defaultUnknownHostBody const
+    psProxyException <- taggedReadFile "proxy-exception-response-file" kconfigProxyException defaultProxyException id
     -- calculate the number of microseconds since the
     -- configuration option is in milliseconds
     let psConnectionTimeBound = kconfigConnectionTimeBound * 1000
@@ -116,12 +112,16 @@ makeSettings hostman = do
         psHostLookup = HostMan.lookupAction hostman . CI.mk
 
 
-taggedReadFile :: String -> FilePath -> IO ByteString
-taggedReadFile tag file = do
-        isExist <- Dir.doesFileExist file
-        if isExist then S.readFile file else do
-          wd <- Dir.getCurrentDirectory
-          error $ "could not find " <> tag <> " on path '" <> file <> "' with working dir '" <> wd <> "'"
+taggedReadFile :: Text -> Maybe FilePath -> r -> (ByteString -> r) -> KeterM KeterConfig r
+taggedReadFile _    Nothing    fallback _               = pure fallback
+taggedReadFile tag (Just file) fallback processContents = do
+  isExist <- liftIO $ Dir.doesFileExist file
+  if isExist then liftIO (S.readFile file) <&> processContents else do
+    wd <- liftIO Dir.getCurrentDirectory
+    logWarnN . T.unwords $ ["could not find", tag, "on path", quote file, "with working dir", quote wd]
+    return fallback
+  where
+    quote = ("'" <>) . (<> "'") . fromString
 
 reverseProxy :: ListeningPort -> KeterM ProxySettings ()
 reverseProxy listener = do
@@ -199,7 +199,7 @@ withClient isSecure = do
                         else psHostLookup host'
         case mport of
             Nothing -> do -- we don't know the host that was asked for
-              return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host (psUnkownHost host))
+              return (defaultLocalWaiProxySettings, WPRResponse $ unknownHostResponse host (psUnknownHost host))
             Just ((action, requiresSecure), _)
                 | requiresSecure && not isSecure -> performHttpsRedirect cfg host req
                 | otherwise -> performAction psManager isSecure psConnectionTimeBound req action

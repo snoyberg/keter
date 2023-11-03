@@ -37,7 +37,7 @@ import           Data.Text                  (Text)
 import           System.FilePath            (FilePath)
 import           Data.Set                   (Set)
 import           Data.Map                   (Map)
-import           GHC.TypeLits (KnownSymbol, Symbol, symbolVal)
+import           GHC.TypeLits (KnownSymbol, symbolVal)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
@@ -114,9 +114,9 @@ data KeterConfig = KeterConfig
     , kconfigCliPort             :: !(Maybe Port)
     -- ^ Port for the cli to listen on
 
-    , kconfigUnknownHostResponse  :: !(Tagged "unknown-host-response-file" (Maybe F.FilePath))
-    , kconfigMissingHostResponse  :: !(Tagged "missing-host-response-file" (Maybe F.FilePath))
-    , kconfigProxyException       :: !(Tagged "proxy-exception-response-file" (Maybe F.FilePath))
+    , kconfigUnknownHostResponse  :: !(Maybe F.FilePath)
+    , kconfigMissingHostResponse  :: !(Maybe F.FilePath)
+    , kconfigProxyException       :: !(Maybe F.FilePath)
 
     , kconfigRotateLogs           :: !Bool
     }
@@ -135,9 +135,9 @@ instance ToCurrent KeterConfig where
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = connectionTimeBound
         , kconfigCliPort             = Nothing
-        , kconfigUnknownHostResponse = Tagged Nothing
-        , kconfigMissingHostResponse = Tagged Nothing
-        , kconfigProxyException = Tagged Nothing
+        , kconfigUnknownHostResponse = Nothing
+        , kconfigMissingHostResponse = Nothing
+        , kconfigProxyException = Nothing
         , kconfigRotateLogs = True
         }
       where
@@ -163,9 +163,9 @@ defaultKeterConfig = KeterConfig
         , kconfigEnvironment = Map.empty
         , kconfigConnectionTimeBound = V04.fiveMinutes
         , kconfigCliPort = Nothing
-        , kconfigUnknownHostResponse = Tagged Nothing
-        , kconfigMissingHostResponse = Tagged Nothing
-        , kconfigProxyException = Tagged Nothing
+        , kconfigUnknownHostResponse = Nothing
+        , kconfigMissingHostResponse = Nothing
+        , kconfigProxyException = Nothing
         , kconfigRotateLogs = True
         }
 
@@ -188,9 +188,9 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "env" .!= Map.empty
             <*> o .:? "connection-time-bound" .!= V04.fiveMinutes
             <*> o .:? "cli-port"
-            <*> inferOptKeyFromTaggedType o
-            <*> inferOptKeyFromTaggedType o
-            <*> inferOptKeyFromTaggedType o
+            <*> o .:? "unknown-host-response-file"
+            <*> o .:? "missing-host-response-file"
+            <*> o .:? "proxy-exception-response-file"
             <*> o .:? "rotate-logs" .!= True
 
 -- | Parse an object's optional key of type 'Tagged "foo-bar" Something'

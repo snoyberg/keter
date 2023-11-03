@@ -1,8 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE DeriveFunctor #-}
-{-# LANGUAGE PolyKinds #-}
 {-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE TemplateHaskell    #-}
 {-# LANGUAGE TypeFamilies       #-}
 
 -- | Provides logging, versioning and some type aliases
@@ -116,8 +113,3 @@ instance FromJSON SSLConfig where
                             return $ SSL cert chainCerts key
                         _ -> return SSLFalse -- fail "Must provide both certificate and key files"
                     ) v
-
--- | A helper to attach arbitrary "phantom type" to a value type.
--- Reimplemented minimally from the `tagged` package to avoid a dependency.
-newtype Tagged (phantomtag :: anykind) a = Tagged { untag :: a }
-    deriving Functor

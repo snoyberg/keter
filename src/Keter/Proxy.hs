@@ -1,6 +1,5 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections   #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE CPP #-}
@@ -28,7 +27,6 @@ import qualified Data.ByteString.Char8             as S8
 import           Network.Wai.Middleware.Gzip       (def)
 #endif
 import           Data.Monoid                       (mappend, mempty)
-import           Data.Proxy
 import           Data.Text                         as T (Text, pack, unwords)
 import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
 import           Data.Text.Encoding.Error          (lenientDecode)

@@ -1,9 +1,7 @@
-{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies      #-}
 module Keter.Config.V10 where
 
@@ -12,13 +10,11 @@ import           Data.Aeson                        (FromJSON (..), ToJSON (..), 
                                                     Value (Object, String, Bool),
                                                     withObject, (.!=), (.:),
                                                     (.:?), object, (.=))
-import           Data.Aeson.Types (Parser)
 import           Keter.Aeson.KeyHelper              as AK (lookup, singleton, empty, insert)
 import qualified Data.CaseInsensitive              as CI
 import           Data.Conduit.Network              (HostPreference)
 import qualified Data.Map                          as Map
 import           Data.Maybe                        (catMaybes, fromMaybe, isJust)
-import           Data.Proxy (Proxy(Proxy))
 import qualified Data.Set                          as Set
 import           Data.String                       (fromString)
 import           Data.Vector                       (Vector)
@@ -37,7 +33,6 @@ import           Data.Text                  (Text)
 import           System.FilePath            (FilePath)
 import           Data.Set                   (Set)
 import           Data.Map                   (Map)
-import           GHC.TypeLits (KnownSymbol, symbolVal)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
@@ -192,15 +187,6 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "missing-host-response-file"
             <*> o .:? "proxy-exception-response-file"
             <*> o .:? "rotate-logs" .!= True
-
--- | Parse an object's optional key of type 'Tagged "foo-bar" Something'
--- automatically from key "foo-bar".
-inferOptKeyFromTaggedType :: forall j key. (FromJSON j, KnownSymbol key)
-                          => Object
-                          -> Parser (Tagged key (Maybe j))
-inferOptKeyFromTaggedType o
-    = Tagged <$> o .:? fromString tag
-    where tag = symbolVal (Proxy :: Proxy key)
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool

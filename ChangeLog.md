@@ -1,3 +1,10 @@
+## 2.1.3
+
+* Fix config keys `unknown-host-response-file` and `missing-host-response-file`
+  accidentally flipped. PR #282
+* In case reading any one of `*-host-response-file` fails, keter now logs a warning,
+  and falls back to builtin defaults. Before 2.1.3, this is a fatal error.
+
 ## 2.1.2
 
 * Bump bounds:

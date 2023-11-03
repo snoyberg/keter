@@ -102,8 +102,8 @@ makeSettings :: HostMan.HostManager -> KeterM KeterConfig ProxySettings
 makeSettings hostman = do
     KeterConfig{..} <- ask
     psManager <- liftIO $ HTTP.newManager HTTP.tlsManagerSettings
-    psMissingHost <- taggedReadFile "unknown-host-response-file" kconfigMissingHostResponse defaultMissingHostBody id
-    psUnknownHost <- taggedReadFile "missing-host-response-file" kconfigUnknownHostResponse defaultUnknownHostBody const
+    psMissingHost <- taggedReadFile "missing-host-response-file" kconfigMissingHostResponse defaultMissingHostBody id
+    psUnknownHost <- taggedReadFile "unknown-host-response-file" kconfigUnknownHostResponse defaultUnknownHostBody const
     psProxyException <- taggedReadFile "proxy-exception-response-file" kconfigProxyException defaultProxyException id
     -- calculate the number of microseconds since the
     -- configuration option is in milliseconds

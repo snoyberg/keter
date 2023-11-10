@@ -114,6 +114,7 @@ data KeterConfig = KeterConfig
     , kconfigProxyException       :: !(Maybe F.FilePath)
 
     , kconfigRotateLogs           :: !Bool
+    , kconfigHealthcheckPath      :: !(Maybe Text)
     }
 
 instance ToCurrent KeterConfig where
@@ -134,6 +135,7 @@ instance ToCurrent KeterConfig where
         , kconfigMissingHostResponse = Nothing
         , kconfigProxyException = Nothing
         , kconfigRotateLogs = True
+        , kconfigHealthcheckPath = Nothing
         }
       where
         getSSL Nothing = V.empty
@@ -162,6 +164,7 @@ defaultKeterConfig = KeterConfig
         , kconfigMissingHostResponse = Nothing
         , kconfigProxyException = Nothing
         , kconfigRotateLogs = True
+        , kconfigHealthcheckPath = Nothing
         }
 
 instance ParseYamlFile KeterConfig where
@@ -187,6 +190,7 @@ instance ParseYamlFile KeterConfig where
             <*> o .:? "missing-host-response-file"
             <*> o .:? "proxy-exception-response-file"
             <*> o .:? "rotate-logs" .!= True
+            <*> o .:? "app-crash-hook"
 
 -- | Whether we should force redirect to HTTPS routes.
 type RequiresSecure = Bool
@@ -317,7 +321,7 @@ instance ToCurrent RedirectConfig where
 
 instance ParseYamlFile RedirectConfig where
     parseYamlFile _ = withObject "RedirectConfig" $ \o -> RedirectConfig
-        <$> (Set.map CI.mk <$> ((o .: "hosts" <|> (Set.singleton <$> (o .: "host")))))
+        <$> (Set.map CI.mk <$> (o .: "hosts" <|> Set.singleton <$> o .: "host"))
         <*> o .:? "status" .!= 303
         <*> o .: "actions"
         <*> o .:? "ssl" .!= SSLFalse

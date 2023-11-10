@@ -21,13 +21,14 @@ listeners:
       session: true
 
 # User to run applications as
-
 # setuid: ubuntu
 
 # Get the user's IP address from x-forwarded-for. Useful when sitting behind a
 # load balancer like Amazon ELB.
-
 # ip-from-header: true
+
+# If set, this path will respond 200 OK to requests on any vhost
+# healthcheck-path: /keter-health
 
 # Control the port numbers assigned via APPROOT
 # external-http-port: 8080

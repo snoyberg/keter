@@ -1,5 +1,7 @@
 ## 2.1.3
 
+* Add `healthcheck-path` global config for Keter-only healthchecks. PR #283
+
 * Fix config keys `unknown-host-response-file` and `missing-host-response-file`
   accidentally flipped. PR #282
 * In case reading any one of `*-host-response-file` fails, keter now logs a warning,

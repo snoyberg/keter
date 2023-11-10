@@ -98,4 +98,5 @@ headThenPostNoCrash = do
       , psProxyException = ""
       , psIpFromHeader   = False
       , psConnectionTimeBound = 5 * 60 * 1000
+      , psHealthcheckPath = Nothing
       }

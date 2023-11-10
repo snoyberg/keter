@@ -60,6 +60,7 @@ import           System.FilePath            (FilePath)
 import           Control.Monad.Logger
 import           Control.Exception          (SomeException)
 import           Network.HTTP.Types                (mkStatus,
+                                                    status200,
                                                     status301, status302,
                                                     status303, status307,
                                                     status404, status502)
@@ -76,6 +77,9 @@ import qualified Network.TLS as TLS
 import qualified System.Directory as Dir
 import Keter.Context
 
+import           Data.Version (showVersion)
+import qualified Paths_keter as Pkg
+
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
 defaultWaiProxySettings = def
 #endif
@@ -91,6 +95,7 @@ data ProxySettings = MkProxySettings
   , psManager        :: !Manager
   , psIpFromHeader   :: Bool
   , psConnectionTimeBound :: Int
+  , psHealthcheckPath :: !(Maybe ByteString)
   , psUnknownHost    :: ByteString -> ByteString
   , psMissingHost    :: ByteString
   , psProxyException :: ByteString
@@ -107,6 +112,7 @@ makeSettings hostman = do
     -- configuration option is in milliseconds
     let psConnectionTimeBound = kconfigConnectionTimeBound * 1000
     let psIpFromHeader = kconfigIpFromHeader
+    let psHealthcheckPath = encodeUtf8 <$> kconfigHealthcheckPath
     pure $ MkProxySettings{..}
     where
         psHostLookup = HostMan.lookupAction hostman . CI.mk
@@ -178,6 +184,10 @@ withClient isSecure = do
 
 
     getDest :: ProxySettings -> Wai.Request -> IO (LocalWaiProxySettings, WaiProxyResponse)
+    -- respond to healthckecks, regardless of Host header value and presence
+    getDest MkProxySettings{..} req | psHealthcheckPath == Just (Wai.rawPathInfo req)
+      = return (defaultLocalWaiProxySettings, WPRResponse healthcheckResponse)
+    -- inspect Host header to determine which App to proxy to
     getDest cfg@MkProxySettings{..} req =
         case Wai.requestHeaderHost req of
             Nothing -> do
@@ -302,6 +312,13 @@ handleProxyException :: (Wai.Request -> SomeException -> IO ()) -> ByteString ->
 handleProxyException handleException onexceptBody except req respond = do
   handleException req except
   respond $ missingHostResponse onexceptBody
+
+healthcheckResponse :: Wai.Response
+healthcheckResponse = Wai.responseBuilder
+    status200
+    [("Content-Type", "text/plain; charset=utf-8")]
+    $ "Keter " <> (copyByteString . S8.pack . showVersion) Pkg.version
+               <> " is doing okay!\n"
 
 defaultProxyException :: ByteString
 defaultProxyException = "<!DOCTYPE html>\n<html><head><title>Welcome to Keter</title></head><body><h1>Welcome to Keter</h1><p>There was a proxy error, check the keter logs for details.</p></body></html>"

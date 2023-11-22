@@ -2,18 +2,16 @@ cabal-version:      3.0
 name:               keter
 version:            2.1.2
 synopsis:
-  Web application deployment manager, focusing on Haskell web frameworks
+  Web application deployment manager, focusing on Haskell web frameworks. It mitigates downtime.
 
 description:
   Deployment system for web applications, originally intended for hosting Yesod
-  applications. Keter does the following actions for your application:
-  .
-  * Binds to the main port (usually port 80) and reverse proxies requests to your application based on virtual hostnames.
-  * Provides SSL support if requested.
-  * Automatically launches applications, monitors processes, and relaunches any processes which die.
-  * Provides graceful redeployment support, by launching a second copy of your application, performing a health check, and then switching reverse proxying to the new process.
-  .
-  Keter provides many more advanced features and extension points. It allows configuration of static hosts, redirect rules, management of PostgreSQL databases, and more. It supports a simple bundle format for applications which allows for easy management of your web apps.
+  applications.
+  It binds to the main port (usually port 80) and reverse proxies requests to your application based on virtual hostnames.
+  It provides SSL support if requested.
+  It automatically launches applications, monitors processes, and relaunches any processes which die.
+  It also provides graceful redeployment support, which mitigates downtime.
+
 
 homepage:           http://www.yesodweb.com/
 license:            MIT
@@ -25,8 +23,6 @@ build-type:         Simple
 extra-source-files:
   ChangeLog.md
   README.md
-
---Data-Files:        incoming/foo/bundle.sh, incoming/foo/config/keter.yaml
 
 flag system-filepath
   description: Use system-filepath

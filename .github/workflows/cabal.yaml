@@ -1,0 +1,37 @@
+on: [pull_request]
+jobs:
+  build:
+
+    runs-on: ${{ matrix.os }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        ghc: # should mirror current stable releases: https://www.haskell.org/ghc/download.html
+          - '9.8'
+          - '9.6'
+          - '9.4'
+          - '9.2'
+        os: [ubuntu-latest, macOS-latest]
+
+    steps:
+    - uses: actions/checkout@v3
+    - uses: haskell/actions/setup@v2 # https://github.com/haskell/actions/tree/main/setup#haskellactionssetup
+      with:
+        ghc-version: ${{ matrix.ghc }}
+
+    - name: Cabal cache
+      uses: actions/cache@v3
+      env:
+        cache-name: cache-cabal
+      with:
+        path: ~/.cabal
+        key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ hashFiles('**/*.cabal') }}-${{ hashFiles('**/cabal.project') }}
+        restore-keys: |
+          ${{ runner.os }}-build-${{ env.cache-name }}-
+    - name: Cabal update
+      run: cabal update
+    - name: Build using cabal
+      run: cabal build all
+    - name: Test
+      run: cabal test all

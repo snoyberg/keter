@@ -15,7 +15,7 @@ import qualified Codec.Archive.Tar.Check   as Tar
 import qualified Codec.Archive.Tar.Entry   as Tar
 import           Codec.Compression.GZip    (decompress)
 import           Control.Exception         (bracket, bracketOnError, throwIO)
-import           Control.Monad             (unless, when)
+import           Control.Monad             (unless, when, forM)
 import qualified Data.ByteString.Lazy      as L
 import           Data.ByteString.Unsafe    (unsafeUseAsCStringLen)
 import qualified Data.IORef                as I
@@ -67,51 +67,13 @@ unpackTempTar :: Maybe (UserID, GroupID)
 unpackTempTar muid tf bundle appname withDir = do
     lbs <- L.readFile bundle
     bracketOnError (getFolder muid tf appname) D.removeDirectoryRecursive $ \dir -> do
-        unpackTar muid dir $ Tar.read $ decompress lbs
+        D.createDirectoryIfMissing True dir
+        let entries = Tar.read $ decompress lbs
+        Tar.unpack dir entries
+        _ <- forM muid $ \perms ->
+          Tar.foldEntries (setEntryPermission perms) (pure ()) throwIO entries
         withDir dir
 
-unpackTar :: Maybe (UserID, GroupID)
-          -> FilePath
-          -> Tar.Entries Tar.FormatError
-          -> IO ()
-unpackTar muid dir =
-    loop . Tar.checkSecurity
-  where
-    loop Tar.Done = return ()
-    loop (Tar.Fail e) = either throwIO throwIO e
-    loop (Tar.Next e es) = go e >> loop es
-
-    go e = do
-        let fp = dir </> Tar.entryPath e
-        case Tar.entryContent e of
-            Tar.NormalFile lbs _ -> do
-                case muid of
-                    Nothing -> D.createDirectoryIfMissing True $ F.takeDirectory fp
-                    Just (uid, gid) -> createTreeUID uid gid $ F.takeDirectory fp
-                let write fd bs = unsafeUseAsCStringLen bs $ \(ptr, len) -> do
-                        _ <- fdWriteBuf fd (castPtr ptr) (fromIntegral len)
-                        return ()
-                bracket
-                    (do
-                        fd <- createFile fp $ Tar.entryPermissions e
-                        setFdOption fd CloseOnExec True
-                        case muid of
-                            Nothing -> return ()
-                            Just (uid, gid) -> setFdOwnerAndGroup fd uid gid
-                        return fd)
-                    closeFd
-                    (\fd -> mapM_ (write fd) (L.toChunks lbs))
-            _ -> return ()
-
--- | Create a directory tree, setting the uid and gid of all newly created
--- folders.
-createTreeUID :: UserID -> GroupID -> FilePath -> IO ()
-createTreeUID uid gid =
-    go
-  where
-    go fp = do
-        exists <- D.doesDirectoryExist fp
-        unless exists $ do
-            go $ F.takeDirectory fp
-            D.createDirectoryIfMissing False fp
-            setOwnerAndGroup fp uid gid
+setEntryPermission :: (UserID, GroupID) -> Tar.Entry ->  IO () -> IO ()
+setEntryPermission (uid, gid) entry io =
+  io >> setOwnerAndGroup (Tar.entryPath entry) uid gid

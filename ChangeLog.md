@@ -6,6 +6,8 @@
   accidentally flipped. PR #282
 * In case reading any one of `*-host-response-file` fails, keter now logs a warning,
   and falls back to builtin defaults. Before 2.1.3, this is a fatal error.
+* Add support for tar 0.6, drop NIH tar unpack.
++ Change CI to be cabal based instead of stack.
 
 ## 2.1.2
 

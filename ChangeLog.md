@@ -1,3 +1,7 @@
+
+## 2.1.4
++ bump package versions, tls, warp and zlib
+
 ## 2.1.3
 
 * Add `healthcheck-path` global config for Keter-only healthchecks. PR #283

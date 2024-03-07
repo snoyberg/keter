@@ -1,4 +1,7 @@
 
+## 2.1.5
++ Fix OOM bug on logfile rotation
+
 ## 2.1.4
 + bump package versions, tls, warp and zlib
 

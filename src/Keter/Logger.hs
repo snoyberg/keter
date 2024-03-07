@@ -48,7 +48,11 @@ createLoggerViaConfig KeterConfig{..} name = do
 
 defaultRotationSpec :: FilePath -> FL.FileLogSpec
 defaultRotationSpec dir =
-    FL.FileLogSpec dir defaultMaxTotal maxBound -- TODO: do we want to overwrite logs after a certain point? leaving this INT_MAX for now
+    FL.FileLogSpec
+      { log_file = dir
+      , log_file_size = defaultMaxTotal
+      , log_backup_number = 20
+      }
 
 -- | The default total file size before for a log file before it needs to be rotated
 defaultMaxTotal :: Integer

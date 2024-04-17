@@ -54,7 +54,7 @@ library
       lifted-base >=0.2.3 && <0.3,
       monad-logger >=0.3.0 && <0.4.0,
       mtl >=2.2.2 && <2.3 || ^>=2.3.1,
-      network >=3.1.2 && <3.2,
+      network >=3.1.2 && <3.2 || ^>=3.2.0,
       optparse-applicative >=0.16.1 && <0.18 || ^>=0.18.1.0,
       process >=1.4.3 && <1.7,
       random >=1.2.1 && <1.3,

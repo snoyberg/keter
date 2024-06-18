@@ -1,4 +1,7 @@
 
+## 2.1.6
++ Bump network
+
 ## 2.1.5
 + Fix OOM bug on logfile rotation
 

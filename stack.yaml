@@ -1,6 +1,12 @@
+resolver: lts-20.26
 flags:
   keter: {}
 packages:
 - '.'
-extra-deps: []
-resolver: lts-20
+extra-deps:
+  # pull newer from hackage; tar 0.6+ is only in Stackage Nighly, not in any LTS e.g. 22.30.
+  # we require tar 0.6+ due to https://github.com/snoyberg/keter/pull/292
+  - tar-0.6.2.0@sha256:619828cae098a7b6deeb0316e12f55011101d88f756787ed024ceedb81cf1eba,4576
+
+  # os-string is a dependency of tar 0.6.1.0 onwards. on Stackage starting from LTS 22.12.
+  - os-string-2.0.2.1@sha256:0bf4ff8f387d7fd05a43c18fa677dd02259c99d63c2d02c5823f152736513bef,3261

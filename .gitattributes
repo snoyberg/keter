@@ -1,0 +1,3 @@
+# this tells Github to hide (collapse by default) generated files in diffs & PRs
+stack.yaml.lock linguist-generated=true
+

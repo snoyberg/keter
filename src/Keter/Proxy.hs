@@ -134,9 +134,9 @@ reverseProxy listener = do
   settings <- ask
   let (run, isSecure) =
           case listener of
-              LPInsecure host port -> 
+              LPInsecure host port ->
                   (liftIO . Warp.runSettings (warp host port), False)
-              LPSecure host port cert chainCerts key session -> 
+              LPSecure host port cert chainCerts key session ->
                   (liftIO . WarpTLS.runTLS
                       (connectClientCertificates (psHostLookup settings) session $ WarpTLS.tlsSettingsChain
                           cert
@@ -150,7 +150,7 @@ reverseProxy listener = do
 connectClientCertificates :: (ByteString -> IO (Maybe (ProxyAction, TLS.Credentials))) -> Bool -> WarpTLS.TLSSettings -> WarpTLS.TLSSettings
 connectClientCertificates hl session s =
     let
-        newHooks@TLS.ServerHooks{..} = WarpTLS.tlsServerHooks s
+        newHooks = WarpTLS.tlsServerHooks s
         -- todo: add nested lookup
         newOnServerNameIndication (Just n) =
              maybe mempty snd <$> hl (S8.pack n)
@@ -179,7 +179,7 @@ withClient isSecure = do
             } psManager
   where
     logException :: Wai.Request -> SomeException -> KeterM ProxySettings ()
-    logException a b = logErrorN $ pack $ 
+    logException a b = logErrorN $ pack $
       "Got a proxy exception on request " <> show a <> " with exception "  <> show b
 
 

@@ -1,3 +1,6 @@
+## 2.1.8
++ Bump tls, make it build with new release
+
 ## 2.1.7
 + add lower limit for tar to 0.6.0.0, which fixes "FileNotExecutable" bug.
   see #291, special thanks to @scheottl for finding and debugging.

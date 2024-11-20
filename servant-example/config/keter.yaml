@@ -1,0 +1,2 @@
+exec: ./servant-example-exe
+host: localhost

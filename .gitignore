@@ -2,6 +2,7 @@
 nginx.conf
 dist/
 dist-stack/
+dist-newstyle/
 process.txt
 process2.txt
 postgres.yaml

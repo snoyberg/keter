@@ -10,3 +10,4 @@ extra-deps:
 
   # os-string is a dependency of tar 0.6.1.0 onwards. on Stackage starting from LTS 22.12.
   - os-string-2.0.2.1@sha256:0bf4ff8f387d7fd05a43c18fa677dd02259c99d63c2d02c5823f152736513bef,3261
+  - http-reverse-proxy-0.6.1.0@sha256:5bc151ed0c22e8493a7bb5e6e1a5de51fff0450f47733e9bc5044aaafdf7dac6,2542

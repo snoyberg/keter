@@ -1,0 +1,60 @@
+# Sample Keter config file. Would generally be placed at /opt/keter/etc/keter-config.yaml.
+
+# Directory containing incoming folder, where to store logs, etc. Relative to
+# the config file directory.
+root: /home/oleksandr/projects/keter/root
+
+# Whether or not to rotate logs, otherwise log straight to stderr
+rotate-logs: true
+
+# Keter can listen on multiple ports for incoming connections. These ports can
+# have HTTPS either enabled or disabled.
+listeners:
+    # HTTP
+    - host: "*4" # Listen on all IPv4 hosts
+      port: 80 # Could be used to modify port
+    # HTTPS
+    - host: "*4"
+      port: 443
+      key: /home/oleksandr/projects/keter/etc/key.pem
+      certificate: /home/oleksandr/projects/keter/etc/certificate.pem
+      session: true
+
+# User to run applications as
+# setuid: ubuntu
+
+# Get the user's IP address from x-forwarded-for. Useful when sitting behind a
+# load balancer like Amazon ELB.
+# ip-from-header: true
+
+# If set, this path will respond 200 OK to requests on any vhost
+# healthcheck-path: /keter-health
+
+# Control the port numbers assigned via APPROOT
+# external-http-port: 8080
+# external-https-port: 450
+
+# Set additional environment variables for all apps
+# env:
+#    key: value
+
+# Connection time bound in milliseconds, set to 0 to have no time bound,
+# i.e. keep connections alive indefinitely. Default value is 5 minutes.
+# connection-time-bound: 300000
+
+# replace the default keter responses with your company branding
+# These could point the the same file, that's fine.
+#
+# If a host is requested that doesn't exist next to other apps
+# this response is used
+# missing-host-response-file: ./missing-host.html
+#
+# If no hosts at all are available this file is used
+# unknown-host-response-file: ./unkown-host.html
+#
+# if a proxy exception occurs, serve this file.
+# the exception gets printed to the log anyway
+# proxy-exception-response-file: ./proxy-exception.html
+
+# set a debug port
+cli-port: 1234

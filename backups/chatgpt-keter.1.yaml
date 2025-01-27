@@ -1,0 +1,22 @@
+# Main configuration for Keter
+root: /home/oleksandr/projects/keter/root  # Path to the directory containing bundles
+port: 8080  # HTTP port Keter listens on
+
+# Default host configuration
+hosts:
+  - example.com
+  - www.example.com
+
+# Optional logging configuration
+log:
+  - stdout
+
+# Reverse Proxy Configuration (Example)
+reverse-proxy:
+  example.com:  # Hostname for the proxy
+    - backend: 
+        - address: http://127.0.0.1:3000  # Local application server
+        #  weight: 1  # Optional: Balancing weight
+    - ssl: true  # Optional: Enable SSL for this host
+    - tls-cert-file: /home/oleksandr/projects/keter/etc/certificate.pem  # Path to TLS certificate
+    - tls-key-file: /home/oleksandr/projects/keter/etc/key.pem    # Path to TLS private key

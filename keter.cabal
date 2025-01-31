@@ -48,7 +48,7 @@ library
       fsnotify >=0.3.0 && <0.5,
       http-client >=0.7.11 && <0.8,
       http-conduit >=2.3.8 && <2.4,
-      http-reverse-proxy >=0.6.0.1 && <0.7,
+      http-reverse-proxy >=0.6.1 && <0.7,
       http-types >=0.12.3 && <0.13,
       indexed-traversable >=0.1.2 && <0.2,
       lifted-base >=0.2.3 && <0.3,

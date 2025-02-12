@@ -14,7 +14,7 @@ module Keter.Proxy
 
 import Blaze.ByteString.Builder (copyByteString, toByteString)
 import Blaze.ByteString.Builder.Html.Word (fromHtmlEscapedByteString)
-import Control.Applicative ((<$>), (<|>))
+import Control.Applicative ((<|>))
 import Control.Exception (SomeException)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.IO.Unlift (withRunInIO)
@@ -25,7 +25,6 @@ import Data.ByteString qualified as S
 import Data.ByteString.Char8 qualified as S8
 import Data.CaseInsensitive qualified as CI
 import Data.Functor ((<&>))
-import Data.Monoid (mappend, mempty)
 import Data.Text as T (Text, pack, unwords)
 import Data.Text.Encoding (decodeUtf8With, encodeUtf8)
 import Data.Text.Encoding.Error (lenientDecode)
@@ -45,6 +44,7 @@ import Network.HTTP.ReverseProxy
        , ProxyDest(ProxyDest)
        , SetIpHeader(..)
        , WaiProxyResponse(..)
+       , defaultLocalWaiProxySettings
        , defaultWaiProxySettings
        , setLpsTimeBound
        , waiProxyToSettings
@@ -75,8 +75,6 @@ import Prelude hiding (FilePath, (++))
 import System.Directory qualified as Dir
 import System.FilePath (FilePath)
 import WaiAppStatic.Listing (defaultListing)
-
-defaultWaiProxySettings = def
 
 data ProxySettings = MkProxySettings
   { -- | Mapping from virtual hostname to port number.

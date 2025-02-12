@@ -7,9 +7,7 @@ import Control.Monad.IO.Class (MonadIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO)
 import Control.Monad.Logger
        (LoggingT(..), MonadLogger, MonadLoggerIO, runLoggingT)
-import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT, withReaderT)
-import Control.Monad.Trans (lift)
-import Keter.Common
+import Control.Monad.Reader (MonadReader, ReaderT, withReaderT)
 
 -- | The top-level keter context monad, carrying around the main logger and some locally relevant configuration structure.
 --

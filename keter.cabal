@@ -118,23 +118,25 @@ library
   hs-source-dirs:     src
 
 executable keter
-  default-language: Haskell98
-  main-is:          keter.hs
-  hs-source-dirs:   src/main
+  default-language:   Haskell98
+  default-extensions: ImportQualifiedPost
+  main-is:            keter.hs
+  hs-source-dirs:     src/main
   build-depends:
     , base
     , filepath
     , keter
 
-  ghc-options:      -threaded -Wall
-  other-modules:    Paths_keter
-  autogen-modules:  Paths_keter
+  ghc-options:        -threaded -Wall
+  other-modules:      Paths_keter
+  autogen-modules:    Paths_keter
 
 test-suite test
-  default-language: Haskell98
-  hs-source-dirs:   test
-  main-is:          Spec.hs
-  type:             exitcode-stdio-1.0
+  default-language:   Haskell98
+  hs-source-dirs:     test
+  default-extensions: ImportQualifiedPost
+  main-is:            Spec.hs
+  type:               exitcode-stdio-1.0
   build-depends:
     , base
     , bytestring
@@ -156,7 +158,7 @@ test-suite test
     , warp
     , wreq
 
-  ghc-options:      -Wall -threaded
+  ghc-options:        -Wall -threaded
 
 source-repository head
   type:     git

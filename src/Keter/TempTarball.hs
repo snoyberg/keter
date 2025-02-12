@@ -11,24 +11,15 @@ module Keter.TempTarball
     ) where
 
 import Codec.Archive.Tar qualified as Tar
-import Codec.Archive.Tar.Check qualified as Tar
-import Codec.Archive.Tar.Entry qualified as Tar
 import Codec.Compression.GZip (decompress)
-import Control.Exception (bracket, bracketOnError, throwIO)
-import Control.Monad (forM, unless, when)
+import Control.Exception (bracketOnError, throwIO)
+import Control.Monad (forM_, when)
 import Data.ByteString.Lazy qualified as L
-import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
 import Data.IORef qualified as I
-import Data.Monoid ((<>))
 import Data.Text (Text, pack, unpack)
-import Data.Word (Word)
-import Foreign.Ptr (castPtr)
 import System.Directory qualified as D
 import System.FilePath ((</>))
-import System.FilePath qualified as F
-import System.Posix.Files (setFdOwnerAndGroup, setOwnerAndGroup)
-import System.Posix.IO
-       (FdOption(CloseOnExec), closeFd, createFile, fdWriteBuf, setFdOption)
+import System.Posix.Files (setOwnerAndGroup)
 import System.Posix.Types (GroupID, UserID)
 
 data TempFolder = TempFolder

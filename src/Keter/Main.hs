@@ -12,29 +12,17 @@ module Keter.Main
     ( keter
     ) where
 
-import Control.Applicative ((<$>))
 import Control.Concurrent.Async (waitAny, withAsync)
 import Control.Exception (SomeException, bracket, throwIO, try)
-import Control.Monad (forM, unless, void, when)
+import Control.Monad (forM, forM_, unless, void, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
-import Control.Monad.Logger
-       ( LoggingT
-       , MonadLogger
-       , MonadLoggerIO
-       , askLoggerIO
-       , logDebug
-       , logInfo
-       , runLoggingT
-       )
+import Control.Monad.Logger (LoggingT, logInfo, runLoggingT)
 import Control.Monad.Logger qualified as L
-import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
-import Control.Monad.Trans.Class (MonadTrans, lift)
+import Control.Monad.Reader (MonadReader, ReaderT, ask, asks, runReaderT)
 import Data.Map qualified as Map
-import Data.Monoid (mempty)
 import Data.String (fromString)
 import Data.Text qualified as T
-import Data.Text.Encoding (encodeUtf8)
 import Data.Text.Read qualified
 import Data.Time (getCurrentTime)
 import Data.Vector qualified as V
@@ -59,7 +47,7 @@ import System.Directory
        , doesFileExist
        , getDirectoryContents
        )
-import System.FilePath (FilePath, takeDirectory, takeExtension, (</>))
+import System.FilePath (FilePath, takeExtension, (</>))
 import System.FSNotify qualified as FSN
 import System.Log.FastLogger qualified as FL
 import System.Posix.Files (getFileStatus, modificationTime)
@@ -78,7 +66,7 @@ keter :: FilePath -- ^ root directory or config file
 keter input mkPlugins =
     runKeterConfigReader input . runKeterLogger . runKeterM $
         withManagers mkPlugins $ \hostman appMan -> do
-            cfg@KeterConfig{..} <- ask
+            KeterConfig{..} <- ask
             $logInfo "Launching cli"
             forM_ kconfigCliPort $ \port ->
               withMappedConfig
@@ -118,7 +106,7 @@ runKeterLogger :: (MonadReader KeterConfig m, MonadIO m, MonadUnliftIO m)
                => LoggingT m a
                -> m a
 runKeterLogger ctx = do
-    cfg@KeterConfig{..} <- ask
+    cfg <- ask
     withRunInIO $ \rio -> bracket (Log.createLoggerViaConfig cfg "keter") Log.loggerClose $
         rio . runLoggingT ctx . formatLog
     where
@@ -251,8 +239,7 @@ listDirectoryTree fp = do
 
 startListening :: HostMan.HostManager -> KeterM KeterConfig ()
 startListening hostman = do
-    cfg@KeterConfig{..} <- ask
-    logger <- askLoggerIO
+    KeterConfig{..} <- ask
     settings <- Proxy.makeSettings hostman
     withMappedConfig (const settings) $ withRunInIO $ \rio ->
         liftIO $ runAndBlock kconfigListeners $ \ls ->

@@ -5,7 +5,6 @@ module Main where
 
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM.TQueue
-import Control.Exception (SomeException)
 import Control.Monad
 import Control.Monad.Logger
 import Control.Monad.Reader
@@ -60,12 +59,12 @@ headThenPostNoCrash = do
   manager <- HTTP.newManager HTTP.tlsManagerSettings
   exceptions <- newTQueueIO
 
-  forkIO $ do
+  _ <- forkIO $ do
     Warp.run 6781 $ \req resp -> do
       void $ Wai.strictRequestBody req
       resp $ Wai.responseLBS ok200 [] "ok"
 
-  forkIO $
+  _ <- forkIO $
     flip runReaderT (settings manager) $
       flip runLoggingT (\_ _ _ msg -> atomically $ writeTQueue exceptions msg) $
         filterLogger isException $
@@ -74,7 +73,7 @@ headThenPostNoCrash = do
 
   threadDelay 0_100_000
 
-  res <- Wreq.head_ "http://localhost:6780"
+  _res <- Wreq.head_ "http://localhost:6780"
 
   void $ Wreq.post "http://localhost:6780" content
 

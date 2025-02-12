@@ -1,9 +1,10 @@
-{-# LANGUAGE CPP                      #-}
-{-# LANGUAGE DeriveDataTypeable       #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE OverloadedStrings        #-}
-{-# LANGUAGE ScopedTypeVariables      #-}
-{-# LANGUAGE TemplateHaskell          #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Keter.Conduit.Process.Unix
     ( -- * Process tracking
@@ -21,54 +22,80 @@ module Keter.Conduit.Process.Unix
     , printStatus
     ) where
 
-import           Data.Text(Text, pack)
-import           Data.Text.Encoding              (decodeUtf8)
-import           Control.Applicative             ((<$>), (<*>), pure)
-import           Control.Arrow                   ((***))
-import           Control.Concurrent              (forkIO)
-import           Control.Concurrent              (threadDelay)
-import           Control.Concurrent.MVar         (MVar, modifyMVar, modifyMVar_,
-                                                  newEmptyMVar, newMVar,
-                                                  putMVar, readMVar, swapMVar,
-                                                  takeMVar, tryReadMVar)
-import           Control.Exception               (Exception, SomeException,
-                                                  bracketOnError, finally,
-                                                  handle, mask_,
-                                                  throwIO, try)
-import           Control.Monad                   (void)
-import           Control.Monad.IO.Class
-import           Control.Monad.IO.Unlift
-import           Control.Monad.Logger            
-import           Data.ByteString                 (ByteString)
-import qualified Data.ByteString.Char8           as S8
-import           Data.Conduit                    (ConduitM, (.|), runConduit)
-import           Data.Conduit.Binary             (sinkHandle, sourceHandle)
-import qualified Data.Conduit.List               as CL
-import           Data.IORef                      (IORef, newIORef, readIORef,
-                                                  writeIORef)
-import           Data.Time                       (getCurrentTime)
-import           Data.Time                       (diffUTCTime)
-import           Data.Typeable                   (Typeable)
-import           Foreign.C.Types
-import           Prelude                         (Bool (..), Either (..), IO,
-                                                  Maybe (..), Monad (..), Show,
-                                                  const, error,
-                                                  map, maybe, show,
-                                                  ($), ($!), (*), (<),
-                                                  (==))
-import           System.Exit                     (ExitCode)
-import           System.IO                       (hClose)
-import           System.Posix.IO.ByteString      ( closeFd, createPipe,
-                                                  fdToHandle)
-import           System.Posix.Signals            (sigKILL, signalProcess)
-import           System.Posix.Types              (CPid (..))
-import           System.Process                  (CmdSpec (..), CreateProcess (..),
-                                                  StdStream (..), createProcess,
-                                                  terminateProcess, waitForProcess,
-                                                  getPid)
-import           System.Process.Internals        (ProcessHandle (..),
-                                                  ProcessHandle__ (..))
-import Data.Monoid ((<>)) -- sauron
+import Control.Applicative (pure, (<$>), (<*>))
+import Control.Arrow ((***))
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.MVar
+       ( MVar
+       , modifyMVar
+       , modifyMVar_
+       , newEmptyMVar
+       , newMVar
+       , putMVar
+       , readMVar
+       , swapMVar
+       , takeMVar
+       , tryReadMVar
+       )
+import Control.Exception
+       ( Exception
+       , SomeException
+       , bracketOnError
+       , finally
+       , handle
+       , mask_
+       , throwIO
+       , try
+       )
+import Control.Monad (void)
+import Control.Monad.IO.Class
+import Control.Monad.IO.Unlift
+import Control.Monad.Logger
+import Data.ByteString (ByteString)
+import Data.ByteString.Char8 qualified as S8
+import Data.Conduit (ConduitM, runConduit, (.|))
+import Data.Conduit.Binary (sinkHandle, sourceHandle)
+import Data.Conduit.List qualified as CL
+import Data.IORef (IORef, newIORef, readIORef, writeIORef)
+import Data.Monoid ((<>))
+import Data.Text (Text, pack)
+import Data.Text.Encoding (decodeUtf8)
+import Data.Time (diffUTCTime, getCurrentTime)
+import Data.Typeable (Typeable)
+import Foreign.C.Types
+import Prelude
+       ( Bool(..)
+       , Either(..)
+       , IO
+       , Maybe(..)
+       , Monad(..)
+       , Show
+       , const
+       , error
+       , map
+       , maybe
+       , show
+       , ($!)
+       , ($)
+       , (*)
+       , (<)
+       , (==)
+       )
+import System.Exit (ExitCode)
+import System.IO (hClose)
+import System.Posix.IO.ByteString (closeFd, createPipe, fdToHandle)
+import System.Posix.Signals (sigKILL, signalProcess)
+import System.Posix.Types (CPid(..))
+import System.Process
+       ( CmdSpec(..)
+       , CreateProcess(..)
+       , StdStream(..)
+       , createProcess
+       , getPid
+       , terminateProcess
+       , waitForProcess
+       )
+import System.Process.Internals (ProcessHandle(..), ProcessHandle__(..))
 
 processHandleMVar :: ProcessHandle -> MVar ProcessHandle__
 #if MIN_VERSION_process(1, 6, 0)
@@ -79,11 +106,11 @@ processHandleMVar (ProcessHandle m _) = m
 processHandleMVar (ProcessHandle m) = m
 #endif
 
-withProcessHandle_
-        :: ProcessHandle
-        -> (ProcessHandle__ -> IO ProcessHandle__)
-        -> IO ()
-withProcessHandle_ ph io = modifyMVar_ (processHandleMVar ph) io
+withProcessHandle_ ::
+     ProcessHandle
+  -> (ProcessHandle__ -> IO ProcessHandle__)
+  -> IO ()
+withProcessHandle_ ph = modifyMVar_ (processHandleMVar ph)
 
 -- | Kill a process by sending it the KILL (9) signal.
 --
@@ -243,12 +270,12 @@ forkExecuteLog cmd args menv mwdir mstdin log = bracketOnError
             }
         ignoreExceptions $ addAttachMessage pipes ph
         void $ forkIO $ ignoreExceptions $
-            (runConduit $ sourceHandle readerH .| CL.mapM_ log) `finally` hClose readerH
+            runConduit (sourceHandle readerH .| CL.mapM_ log) `finally` hClose readerH
         case (min, mstdin) of
             (Just h, Just source) -> void $ forkIO $ ignoreExceptions $
-                (runConduit $ source .| sinkHandle h) `finally` hClose h
+                runConduit (source .| sinkHandle h) `finally` hClose h
             (Nothing, Nothing) -> return ()
-            _ -> error $ "Invariant violated: Data.Conduit.Process.Unix.forkExecuteLog"
+            _ -> error "Invariant violated: Data.Conduit.Process.Unix.forkExecuteLog"
         return ph
 
     addAttachMessage pipes ph = withProcessHandle_ ph $ \p_ -> do
@@ -290,42 +317,38 @@ monitorProcess
 monitorProcess processTracker msetuid exec dir args env' rlog shouldRestart =
     withRunInIO $ \rio -> do
         mstatus <- newMVar NeedsRestart
-        let loop mlast = do
-                next <- modifyMVar mstatus $ \status ->
-                    case status of
-                        NoRestart -> return (NoRestart, return ())
-                        _ -> do
-                            now <- getCurrentTime
-                            case mlast of
-                                Just last | diffUTCTime now last < 5 -> do
-                                    rio $ $logWarn $ "Process restarting too quickly, waiting before trying again: " <> decodeUtf8 exec
-                                    threadDelay $ 5 * 1000 * 1000
-                                _ -> return ()
-                            let (cmd, args') =
-                                    case msetuid of
-                                        Nothing -> (exec, args)
-                                        Just setuid -> ("sudo", "-E" : "-u" : setuid : "--" : exec : args)
-                            res <- try $ forkExecuteLog
-                                cmd
-                                args'
-                                (Just env')
-                                (Just dir)
-                                (Just $ return ())
-                                rlog
-                            case res of
-                                Left e -> do
-                                    rio $ $logError $ "Data.Conduit.Process.Unix.monitorProcess: " <> pack (show (e :: SomeException))
-                                    return (NeedsRestart, return ())
-                                Right pid -> do
-                                    rio $ $logInfo $ "Process created: " <> decodeUtf8 exec
-                                    return (Running pid, do
-                                        TrackedProcess _ _ wait <- trackProcess processTracker pid
-                                        ec <- wait
-                                        shouldRestart' <- shouldRestart ec
-                                        if shouldRestart'
-                                            then loop (Just now)
-                                            else return ())
-                next
+        let loop mlast = do $ join
+              (modifyMVar mstatus $ \case
+                NoRestart -> return (NoRestart, return ())
+                _ -> do
+                    now <- getCurrentTime
+                    case mlast of
+                        Just last | diffUTCTime now last < 5 -> do
+                            rio $ $logWarn $ "Process restarting too quickly, waiting before trying again: " <> decodeUtf8 exec
+                            threadDelay $ 5 * 1000 * 1000
+                        _ -> return ()
+                    let (cmd, args') =
+                            case msetuid of
+                                Nothing -> (exec, args)
+                                Just setuid -> ("sudo", "-E" : "-u" : setuid : "--" : exec : args)
+                    res <- try $ forkExecuteLog
+                        cmd
+                        args'
+                        (Just env')
+                        (Just dir)
+                        (Just $ return ())
+                        rlog
+                    case res of
+                        Left e -> do
+                            rio $ $logError $ "Data.Conduit.Process.Unix.monitorProcess: " <> pack (show (e :: SomeException))
+                            return (NeedsRestart, return ())
+                        Right pid -> do
+                            rio $ $logInfo $ "Process created: " <> decodeUtf8 exec
+                            return (Running pid, do
+                                TrackedProcess _ _ wait <- trackProcess processTracker pid
+                                ec <- wait
+                                shouldRestart' <- shouldRestart ec
+                                when shouldRestart' $ loop (Just now)))
         _ <- forkIO $ loop Nothing
         return $ MonitoredProcess mstatus
 

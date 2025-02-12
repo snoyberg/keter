@@ -49,7 +49,7 @@ instance FromJSON MiddlewareConfig where
   parseJSON (String "method-override-post") = pure MethodOverridePost
   parseJSON (Object o) =
      case AK.toList o of
-      [("basic-auth", Object ( o'))] -> BasicAuth  <$> o' .:? "realm" .!= "keter"
+      [("basic-auth", Object o')] -> BasicAuth  <$> o' .:? "realm" .!= "keter"
                                                 <*> (map ((T.encodeUtf8 . AK.toText) *** T.encodeUtf8) . AK.toList <$> o' .:? "creds"   .!= AK.empty)
       [("headers"   , Object _ )]    -> AddHeaders . map ((T.encodeUtf8 . AK.toText) *** T.encodeUtf8) . AK.toList <$> o  .:? "headers" .!= AK.empty
       [("local"     , Object o')] -> Local  <$> o' .:? "status" .!=  401
@@ -92,7 +92,7 @@ toMiddleware Jsonp              = jsonp
 toMiddleware (Local s c )       = local ( responseLBS (toEnum s) [] c )
 toMiddleware MethodOverride     = methodOverride
 toMiddleware MethodOverridePost = methodOverridePost
-toMiddleware (BasicAuth realm cred) = basicAuth (\u p -> return $ maybe False (==p) $ lookup u cred ) (fromString realm)
+toMiddleware (BasicAuth realm cred) = basicAuth (\u p -> return $ (Just p ==) $ lookup u cred ) (fromString realm)
 toMiddleware (AddHeaders headers)   = addHeaders headers
 
 -- composeMiddleware :

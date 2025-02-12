@@ -1,38 +1,47 @@
-{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TypeFamilies      #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TypeFamilies #-}
+
 module Keter.Config.V10 where
 
-import           Control.Applicative               ((<$>), (<*>), (<|>))
-import           Data.Aeson                        (FromJSON (..), ToJSON (..), Object,
-                                                    Value (Object, String, Bool),
-                                                    withObject, (.!=), (.:),
-                                                    (.:?), object, (.=))
-import           Keter.Aeson.KeyHelper              as AK (lookup, singleton, empty, insert)
-import qualified Data.CaseInsensitive              as CI
-import           Data.Conduit.Network              (HostPreference)
-import qualified Data.Map                          as Map
-import           Data.Maybe                        (catMaybes, fromMaybe, isJust)
-import qualified Data.Set                          as Set
-import           Data.String                       (fromString)
-import           Data.Vector                       (Vector)
-import qualified Data.Vector                       as V
-import           Data.Word                         (Word)
-import           Keter.Yaml.FilePath
-import qualified System.FilePath                   as F
-import           Keter.Common
-import           Keter.Config.Middleware
-import qualified Keter.Config.V04                   as V04
-import qualified Network.Wai.Handler.Warp          as Warp
-import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
-import           System.Posix.Types                (EpochTime)
-import           Keter.Rewrite(ReverseProxyConfig)
-import           Data.Text                  (Text)
-import           System.FilePath            (FilePath)
-import           Data.Set                   (Set)
-import           Data.Map                   (Map)
+import Control.Applicative ((<$>), (<*>), (<|>))
+import Data.Aeson
+       ( FromJSON(..)
+       , Object
+       , ToJSON(..)
+       , Value(Bool, Object, String)
+       , object
+       , withObject
+       , (.!=)
+       , (.:)
+       , (.:?)
+       , (.=)
+       )
+import Data.CaseInsensitive qualified as CI
+import Data.Conduit.Network (HostPreference)
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.Maybe (catMaybes, fromMaybe, isJust)
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.String (fromString)
+import Data.Text (Text)
+import Data.Vector (Vector)
+import Data.Vector qualified as V
+import Data.Word (Word)
+import Keter.Aeson.KeyHelper as AK (empty, insert, lookup, singleton)
+import Keter.Common
+import Keter.Config.Middleware
+import Keter.Config.V04 qualified as V04
+import Keter.Rewrite (ReverseProxyConfig)
+import Keter.Yaml.FilePath
+import Network.Wai.Handler.Warp qualified as Warp
+import Network.Wai.Handler.WarpTLS qualified as WarpTLS
+import System.FilePath (FilePath)
+import System.FilePath qualified as F
+import System.Posix.Types (EpochTime)
 
 data BundleConfig = BundleConfig
     { bconfigStanzas :: !(Vector (Stanza ()))
@@ -43,7 +52,7 @@ instance ToCurrent BundleConfig where
     type Previous BundleConfig = V04.BundleConfig
     toCurrent (V04.BundleConfig webapp statics redirs) = BundleConfig
         { bconfigStanzas = V.concat
-            [ maybe V.empty V.singleton $ fmap (flip Stanza False . StanzaWebApp . toCurrent) webapp
+            [ maybe V.empty (V.singleton . flip Stanza False . StanzaWebApp . toCurrent) webapp
             , V.fromList $ map (flip Stanza False . StanzaStaticFiles . toCurrent) $ Set.toList statics
             , V.fromList $ map (flip Stanza False . StanzaRedirect . toCurrent) $ Set.toList redirs
             ]

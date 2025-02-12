@@ -1,6 +1,7 @@
+{-# LANGUAGE CPP #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE CPP               #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Keter.Rewrite
   ( ReverseProxyConfig (..)
   , RewriteRule (..)
@@ -9,41 +10,33 @@ module Keter.Rewrite
   )
   where
 
+import Blaze.ByteString.Builder (fromByteString)
 import Control.Applicative
 import Control.Exception (bracket)
-import Data.Function (fix)
-import Data.Monoid ((<>))
-
-import qualified Data.Set as Set
-import Data.Set (Set)
-import qualified Data.Map as Map
-import Data.Map ( Map )
-import Data.Array ((!))
-import Data.Aeson
 import Control.Monad (unless)
-
-import qualified Data.ByteString as S
-import qualified Data.Text as T
-import Data.Text (Text)
-import Data.Text.Encoding (encodeUtf8, decodeUtf8)
-import qualified Data.CaseInsensitive as CI
-
-import Blaze.ByteString.Builder (fromByteString)
-
-import Keter.Common
-
--- Regular expression parsing, replacement, matching
-import Data.Attoparsec.Text (string, takeWhile1, endOfInput, parseOnly, Parser)
-import Text.Regex.TDFA (makeRegex, matchOnceText, MatchText)
-import Text.Regex.TDFA.String (Regex)
+import Data.Aeson
+import Data.Array ((!))
+import Data.Attoparsec.Text (Parser, endOfInput, parseOnly, string, takeWhile1)
+import Data.ByteString qualified as S
+import Data.CaseInsensitive qualified as CI
 import Data.Char (isDigit)
-
--- Reverse proxy apparatus
-import qualified Network.Wai as Wai
-import qualified Network.Wai.Internal as I
+import Data.Function (fix)
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.Monoid ((<>))
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Encoding (decodeUtf8, encodeUtf8)
+import Keter.Common
+import Network.HTTP.Client qualified as NHC
 import Network.HTTP.Client.Conduit
-import qualified Network.HTTP.Client as NHC
 import Network.HTTP.Types
+import Network.Wai qualified as Wai
+import Network.Wai.Internal qualified as I
+import Text.Regex.TDFA (MatchText, makeRegex, matchOnceText)
+import Text.Regex.TDFA.String (Regex)
 
 data RPEntry = RPEntry
     { config :: ReverseProxyConfig
@@ -51,7 +44,7 @@ data RPEntry = RPEntry
     }
 
 instance Show RPEntry where
-  show x = "RPEntry { config = " ++ (show $ config x) ++ " }"
+  show x = "RPEntry { config = " ++ show (config x) ++ " }"
 
 getGroup :: MatchText String -> Int -> String
 getGroup matches i = fst $ matches ! i
@@ -72,7 +65,7 @@ rewrite (before, match, after) input replacement =
           }
       <|> do
           { _ <- string "\\"
-          ; n <- (fmap (read . T.unpack) $ takeWhile1 isDigit) :: Parser Int
+          ; n <- (read . T.unpack <$> takeWhile1 isDigit) :: Parser Int
           ; rest <- parseSubstitute
           ; return $ T.pack (getGroup match n) <> rest
           }

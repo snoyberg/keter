@@ -16,8 +16,8 @@ import Data.Time
 import Yesod.Core
 import Yesod.WebSockets
 
+{-# ANN type App ("HLint: ignore Use newtype instead of data" :: String) #-}
 data App = App (TChan Text)
-
 
 mkYesod "App" [parseRoutes|
 / HomeR GET

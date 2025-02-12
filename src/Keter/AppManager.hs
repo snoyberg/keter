@@ -111,8 +111,8 @@ reloadAppList newApps = do
           m <- readTVar apps
           let currentApps = Set.fromList $ mapMaybe toAppName $ Map.keys m
               allApps = Set.toList $ Map.keysSet newApps `Set.union` currentApps
-          fmap catMaybes $ mapM (getAction m) allApps
-      sequence_ $ rio <$> actions
+          catMaybes <$> mapM (getAction m) allApps
+      mapM_ rio actions
   where
     toAppName AIBuiltin   = Nothing
     toAppName (AINamed x) = Just x
@@ -225,14 +225,14 @@ performNoLock aid action = do
                 return $ launchWorker aid tstate tmnext Nothing action
             Terminate -> return noWorker
 
-launchWorker :: AppId
-             -> TVar AppState
-             -> TVar (Maybe Action)
-             -> Maybe App
-             -> Action
-             -> KeterM AppManager ()
-launchWorker appid tstate tmnext mcurrentApp0 action0 =
-  loop mcurrentApp0 action0
+launchWorker ::
+     AppId
+  -> TVar AppState
+  -> TVar (Maybe Action)
+  -> Maybe App
+  -> Action
+  -> KeterM AppManager ()
+launchWorker appid tstate tmnext = loop
   where
     loop :: Maybe App -> Action -> KeterM AppManager ()
     loop mcurrentApp action = do
@@ -253,9 +253,7 @@ launchWorker appid tstate tmnext mcurrentApp0 action0 =
                             Terminate                       -> Nothing
                     writeTVar tstate $ ASStarting mRunningApp tmtimestamp tmnext
             return mnext
-        case mnext of
-            Nothing   -> return ()
-            Just next -> loop mRunningApp next
+        forM_ mnext (loop mRunningApp)
 
     reloadMsg :: String -> String -> Text
     reloadMsg app input =

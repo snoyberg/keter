@@ -2,6 +2,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
+
 -- | Manages a pool of available ports and allocates them.
 module Keter.PortPool
     ( -- * Types
@@ -74,7 +75,7 @@ getPort (PortPool mstate) =
         addr:_ <- getAddrInfo (Just hints) Nothing (Just port)
         bracketOnError
              (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
-             (close)
+             close
              (\sock -> do
                  setSocketOption sock ReuseAddr 1
                  bind sock (addrAddress addr)

@@ -71,7 +71,7 @@ open addr = do
     setSocketOption sock ReuseAddr 1
     -- If the prefork technique is not used,
     -- set CloseOnExec for the security reasons.
-    withFdSocket sock $ setCloseOnExecIfNeeded
+    withFdSocket sock setCloseOnExecIfNeeded
     bind sock (addrAddress addr)
     listen sock 10
     return sock
@@ -97,11 +97,11 @@ talk conn = do
         Left exception -> liftIO $ sendAll conn ("decode error: " <> T.encodeUtf8 (T.pack $ show exception))
         Right txt -> do
           let res = execParserPure defaultPrefs (info (commandParser <**> helper)
-                                                (fullDesc <> header "server repl" <> progDesc (
-                        "repl for inspecting program state. You can connect to a socket and ask predefined questions")) ) (T.unpack <$> T.words txt)
+                                                (fullDesc <> header "server repl" <> progDesc
+                        "repl for inspecting program state. You can connect to a socket and ask predefined questions") ) (T.unpack <$> T.words txt)
           isLoop <- case res of
-            (Success (CmdListRunningApps)) -> True <$ listRunningApps conn
-            (Success (CmdExit   )) -> False <$ liftIO (sendAll conn "bye\n")
+            (Success CmdListRunningApps) -> True <$ listRunningApps conn
+            (Success CmdExit) -> False <$ liftIO (sendAll conn "bye\n")
             (CompletionInvoked x) -> True <$ liftIO (sendAll conn "completion ignored \n")
             Failure failure        ->
               True <$ liftIO (sendAll conn (T.encodeUtf8 (T.pack $ fst $ renderFailure failure "") <> "\n"))

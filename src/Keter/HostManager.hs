@@ -39,7 +39,6 @@ import Keter.LabelMap (LabelMap)
 import Keter.LabelMap qualified as LabelMap
 import Network.TLS qualified as TLS
 import Prelude hiding (log)
-import System.FilePath (FilePath)
 
 data HostValue = HVActive   !AppId !ProxyAction !TLS.Credentials
                | HVReserved !AppId

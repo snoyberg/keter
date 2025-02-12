@@ -14,7 +14,6 @@ module Keter.PortPool
     , start
     ) where
 
-import Control.Applicative ((<$>))
 import Control.Concurrent.MVar
 import Control.Exception
 import Control.Monad.IO.Class (liftIO)

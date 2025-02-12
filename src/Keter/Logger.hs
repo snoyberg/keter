@@ -10,13 +10,7 @@ module Keter.Logger
     ) where
 
 import Control.Monad.IO.Class
-import Control.Monad.IO.Unlift
-import Control.Monad.Logger
-import Control.Monad.Reader
-import Data.Time
-import Debug.Trace
 import Keter.Config.V10
-import Keter.Context
 import System.Directory
 import System.FilePath
 import System.Log.FastLogger qualified as FL

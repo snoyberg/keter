@@ -5,7 +5,7 @@
 -- | Provides logging, versioning and some type aliases
 module Keter.Common where
 
-import Control.Exception (Exception, SomeException)
+import Control.Exception (Exception)
 import Data.Aeson
        ( FromJSON
        , Object
@@ -19,21 +19,16 @@ import Data.Aeson
        , (.=)
        )
 import Data.ByteString (ByteString)
-import Data.CaseInsensitive (CI, original)
+import Data.CaseInsensitive (CI)
 import Data.Map (Map)
-import Data.Set (Set)
-import Data.Set qualified as Set
 import Data.Text (Text, pack, unpack)
 import Data.Typeable (Typeable)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
 import Data.Yaml qualified
 import Keter.Yaml.FilePath
-import Language.Haskell.TH.Syntax qualified as TH
-import Network.Socket (AddrInfo, SockAddr)
-import Network.Wai qualified as Wai
 import System.Exit (ExitCode)
-import System.FilePath (FilePath, takeBaseName)
+import System.FilePath (takeBaseName)
 
 -- | Name of the application. Should just be the basename of the application
 -- file.

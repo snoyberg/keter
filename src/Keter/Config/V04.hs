@@ -16,7 +16,6 @@ import Keter.Rewrite (ReverseProxyConfig)
 import Keter.Yaml.FilePath
 import Network.TLS.SessionManager qualified as TLSSession
 import Network.Wai.Handler.Warp qualified as Warp
-import Network.Wai.Handler.WarpTLS qualified as WarpTLS
 import Prelude hiding (FilePath)
 import System.FilePath (FilePath)
 import System.FilePath qualified as F

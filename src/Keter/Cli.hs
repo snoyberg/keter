@@ -9,11 +9,10 @@ module Keter.Cli
 import Control.Concurrent (forkFinally)
 import Control.Exception qualified as E
 import Control.Monad (forever, unless, void, when)
-import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Class (liftIO)
 import Control.Monad.IO.Unlift (withRunInIO)
 import Control.Monad.Logger
 import Control.Monad.Reader (ask)
-import Control.Monad.Trans.Class (MonadTrans, lift)
 import Data.ByteString qualified as S
 import Data.Foldable
 import Data.Text qualified as T
@@ -102,7 +101,7 @@ talk conn = do
           isLoop <- case res of
             (Success CmdListRunningApps) -> True <$ listRunningApps conn
             (Success CmdExit) -> False <$ liftIO (sendAll conn "bye\n")
-            (CompletionInvoked x) -> True <$ liftIO (sendAll conn "completion ignored \n")
+            (CompletionInvoked _) -> True <$ liftIO (sendAll conn "completion ignored \n")
             Failure failure        ->
               True <$ liftIO (sendAll conn (T.encodeUtf8 (T.pack $ fst $ renderFailure failure "") <> "\n"))
           when isLoop $ talk conn

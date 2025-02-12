@@ -23,7 +23,6 @@ import Data.Char (isDigit)
 import Data.Function (fix)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Monoid ((<>))
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text)
@@ -182,18 +181,6 @@ instance ToJSON ReverseProxyConfig where
         , "rewrite-response" .= rewriteResponseRules
         , "rewrite-request" .= rewriteRequestRules
         ]
-
-defaultReverseProxyConfig :: ReverseProxyConfig
-defaultReverseProxyConfig = ReverseProxyConfig
-        { reversedHost = ""
-        , reversedPort = 80
-        , reversedUseSSL = False
-        , reversingHost = ""
-        , reversingUseSSL = SSLFalse
-        , reverseTimeout = Nothing
-        , rewriteResponseRules = Set.empty
-        , rewriteRequestRules = Set.empty
-        }
 
 data RewriteRule = RewriteRule
     { ruleHeader :: Text

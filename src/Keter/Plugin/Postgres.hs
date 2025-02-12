@@ -10,7 +10,6 @@ module Keter.Plugin.Postgres
     , load
     ) where
 
-import Control.Applicative (pure, (<$>), (<*>))
 import Control.Concurrent (forkIO)
 import Control.Concurrent.Chan
 import Control.Concurrent.MVar
@@ -21,7 +20,6 @@ import Control.Monad.Trans.State qualified as S
 import Data.Char qualified as C
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
-import Data.Monoid ((<>))
 import Data.Text (Text)
 import Data.Text qualified as T
 import Data.Text.Lazy qualified as TL
@@ -184,9 +182,9 @@ load Settings{..} fp = do
     -- Why not just Data.Char.isAlphaNum and lower it?
     sanitize = T.map sanitize'
     sanitize' c
-        | isAsciiUpper = C.toLower c
-        | isAsciiLower c = c
-        | isDigit c = c
+        | C.isAsciiUpper c = C.toLower c
+        | C.isAsciiLower c = c
+        | C.isDigit c = c
         | otherwise = '_'
 
 edbiToEnv :: Either SomeException DBInfo

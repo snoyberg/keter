@@ -17,30 +17,26 @@ module Keter.App
     , showApp
     ) where
 
-import Control.Applicative ((<$>), (<*>))
 import Control.Arrow ((***))
 import Control.Concurrent (forkIO, threadDelay)
 import Control.Concurrent.STM
 import Control.Exception
        (IOException, SomeException, bracketOnError, catch, throwIO, try)
-import Control.Monad (liftM, void, when)
+import Control.Monad (void, when)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.IO.Unlift (withRunInIO)
 import Control.Monad.Logger
 import Control.Monad.Reader (ask)
-import Data.ByteString (ByteString)
 import Data.CaseInsensitive qualified as CI
-import Data.Foldable (for_, traverse_)
+import Data.Foldable (for_)
 import Data.IORef
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (fromMaybe)
-import Data.Monoid (mempty, (<>))
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text, pack, unpack)
-import Data.Text.Encoding (decodeUtf8With, encodeUtf8)
-import Data.Text.Encoding.Error (lenientDecode)
+import Data.Text.Encoding (encodeUtf8)
 import Data.Vector qualified as V
 import Data.Yaml
 import Keter.Common
@@ -64,11 +60,7 @@ import Network.Socket
 import Network.TLS qualified as TLS
 import Prelude hiding (FilePath)
 import System.Directory
-       ( canonicalizePath
-       , createDirectoryIfMissing
-       , doesFileExist
-       , removeDirectoryRecursive
-       )
+       (canonicalizePath, doesFileExist, removeDirectoryRecursive)
 import System.Environment (getEnvironment)
 import System.FilePath (FilePath, (</>))
 import System.IO (IOMode(..), hClose)
@@ -88,7 +80,7 @@ data App = App
     , appLog           :: !(TVar (Maybe Logger))
     }
 instance Show App where
-  show App {appId, ..} = "App{appId=" <> show appId <> "}"
+  show App {appId} = "App{appId=" <> show appId <> "}"
 
 -- | within an stm context we can show a lot more then the show instance can do
 showApp :: App -> STM Text
@@ -248,7 +240,6 @@ withLogger aid (Just var) f = do
 
 withSanityChecks :: BundleConfig -> KeterM AppStartConfig a -> KeterM AppStartConfig a
 withSanityChecks BundleConfig{..} f = do
-    cfg@AppStartConfig{..} <- ask
     liftIO $ V.mapM_ go bconfigStanzas
     $logInfo "Sanity checks passed"
     f
@@ -313,7 +304,7 @@ withWebApps :: AppId
             -> KeterM AppStartConfig a
 withWebApps aid bconfig mdir appLogger configs0 f =
     withRunInIO $ \rio ->
-      bracketedMap (\wac f -> rio $ alloc wac (liftIO <$> f)) (rio . f) configs0
+      bracketedMap (\wac f' -> rio $ alloc wac (liftIO <$> f')) (rio . f) configs0
   where
     alloc = launchWebApp aid bconfig mdir appLogger
 
@@ -350,7 +341,6 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
             , Map.singleton "APPROOT" $ scheme <> CI.original waconfigApprootHost <> pack extport
             ]
     exec <- liftIO $ canonicalizePath waconfigExec
-    mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (rio $ monitorProcess
             ascProcessTracker
@@ -438,7 +428,7 @@ withBackgroundApps :: AppId
                    -> ([RunningBackgroundApp] -> KeterM AppStartConfig a)
                    -> KeterM AppStartConfig a
 withBackgroundApps aid bconfig mdir appLogger configs f =
-    withRunInIO $ \rio -> bracketedMap (\cfg f -> rio $ alloc cfg (liftIO <$> f)) (rio . f) configs
+    withRunInIO $ \rio -> bracketedMap (\cfg f' -> rio $ alloc cfg (liftIO <$> f')) (rio . f) configs
   where
     alloc = launchBackgroundApp aid bconfig mdir appLogger
 
@@ -475,7 +465,6 @@ launchBackgroundApp aid BundleConfig {..} mdir appLogger BackgroundConfig {..} f
                         (count + 1, count < maxCount)
                     when res delay
                     return res
-    mainLogger <- askLoggerIO
     withRunInIO $ \rio -> bracketOnError
         (rio $ monitorProcess
             ascProcessTracker
@@ -682,8 +671,7 @@ terminateHelper :: AppId
                 -> Maybe FilePath
                 -> Maybe Logger
                 -> KeterM AppStartConfig ()
-terminateHelper aid apps backs mdir appLogger = do
-    AppStartConfig{..} <- ask
+terminateHelper aid apps backs mdir _appLogger = do
     liftIO $ threadDelay $ 20 * 1000 * 1000
     $logInfo $ pack $
         "Sending old process TERM signal: "

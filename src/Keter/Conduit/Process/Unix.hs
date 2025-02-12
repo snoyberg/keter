@@ -47,8 +47,7 @@ import Control.Exception
        , throwIO
        , try
        )
-import Control.Monad (void)
-import Control.Monad.IO.Class
+import Control.Monad (void, when)
 import Control.Monad.IO.Unlift
 import Control.Monad.Logger
 import Data.ByteString (ByteString)
@@ -70,6 +69,7 @@ import Prelude
        , Maybe(..)
        , Monad(..)
        , Show
+       , String
        , const
        , error
        , map
@@ -116,12 +116,12 @@ withProcessHandle_ ph = modifyMVar_ (processHandleMVar ph)
 --
 -- Since 0.1.0
 killProcess :: ProcessHandle -> IO ()
-killProcess ph = withProcessHandle_ ph $ \p_ ->
-    case p_ of
-        ClosedHandle _ -> return p_
-        OpenHandle h -> do
-            signalProcess sigKILL h
-            return p_
+killProcess ph = withProcessHandle_ ph $ \p_ -> case p_ of
+  ClosedHandle _ -> return p_
+  OpenHandle h -> do
+    signalProcess sigKILL h
+    return p_
+  _ -> error "Not implemented"
 
 ignoreExceptions :: IO () -> IO ()
 ignoreExceptions = handle (\(_ :: SomeException) -> return ())
@@ -197,6 +197,7 @@ trackProcess pt ph = mask_ $ do
         OpenHandle pid -> do
             c_track_process pt pid 1
             return $ Pid pid
+        _ -> error "Not implemented"
     ipid <- newIORef mpid'
     baton <- newEmptyMVar
     let tp = TrackedProcess pt ipid (takeMVar baton)
@@ -298,6 +299,7 @@ forkExecuteLog cmd args menv mwdir mstdin log = bracketOnError
                     , S8.pack $ show h
                     , "\n\n"
                     ]
+            _ -> error "Not implemented"
         return p_
 
 data Status = NeedsRestart | NoRestart | Running ProcessHandle
@@ -317,8 +319,8 @@ monitorProcess
 monitorProcess processTracker msetuid exec dir args env' rlog shouldRestart =
     withRunInIO $ \rio -> do
         mstatus <- newMVar NeedsRestart
-        let loop mlast = do $ join
-              (modifyMVar mstatus $ \case
+        let loop mlast = do
+              next <- modifyMVar mstatus $ \case
                 NoRestart -> return (NoRestart, return ())
                 _ -> do
                     now <- getCurrentTime
@@ -348,9 +350,11 @@ monitorProcess processTracker msetuid exec dir args env' rlog shouldRestart =
                                 TrackedProcess _ _ wait <- trackProcess processTracker pid
                                 ec <- wait
                                 shouldRestart' <- shouldRestart ec
-                                when shouldRestart' $ loop (Just now)))
+                                when shouldRestart' $ loop (Just now))
+              next
         _ <- forkIO $ loop Nothing
         return $ MonitoredProcess mstatus
+{-# ANN monitorProcess ("HLint: ignore Use join" :: String) #-}
 
 -- | Abstract type containing information on a process which will be restarted.
 newtype MonitoredProcess = MonitoredProcess (MVar Status)

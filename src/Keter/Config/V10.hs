@@ -6,7 +6,7 @@
 
 module Keter.Config.V10 where
 
-import Control.Applicative ((<$>), (<*>), (<|>))
+import Control.Applicative ((<|>))
 import Data.Aeson
        ( FromJSON(..)
        , Object
@@ -30,7 +30,6 @@ import Data.String (fromString)
 import Data.Text (Text)
 import Data.Vector (Vector)
 import Data.Vector qualified as V
-import Data.Word (Word)
 import Keter.Aeson.KeyHelper as AK (empty, insert, lookup, singleton)
 import Keter.Common
 import Keter.Config.Middleware
@@ -38,8 +37,6 @@ import Keter.Config.V04 qualified as V04
 import Keter.Rewrite (ReverseProxyConfig)
 import Keter.Yaml.FilePath
 import Network.Wai.Handler.Warp qualified as Warp
-import Network.Wai.Handler.WarpTLS qualified as WarpTLS
-import System.FilePath (FilePath)
 import System.FilePath qualified as F
 import System.Posix.Types (EpochTime)
 

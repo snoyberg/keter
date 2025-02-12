@@ -20,12 +20,11 @@ module Keter.AppManager
     ) where
 
 import Control.Applicative
-import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import Control.Concurrent.STM
 import Control.Exception (SomeException)
 import Control.Exception qualified as E
-import Control.Monad (void)
+import Control.Monad (forM_)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.IO.Unlift (withRunInIO)
 import Control.Monad.Logger
@@ -34,7 +33,6 @@ import Data.Foldable (fold)
 import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (catMaybes, mapMaybe)
-import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text, pack, unpack)
 import Data.Text.Lazy qualified as LT
@@ -65,7 +63,7 @@ data AppState = ASRunning App
               | ASTerminated
 
 showAppState :: AppState -> STM Text
-showAppState (ASRunning x) = (\x -> "running(" <> x <> ")") <$> showApp x
+showAppState (ASRunning x) = (\x' -> "running(" <> x' <> ")") <$> showApp x
 showAppState (ASStarting mapp tmtime tmaction) = do
   mtime   <- readTVar tmtime
   maction <- readTVar tmaction
@@ -76,7 +74,7 @@ showAppState ASTerminated = pure "terminated"
 renderApps :: AppManager -> STM Text
 renderApps mngr = do
   appMap <- readTVar $ apps mngr
-  x <- itraverse (\appId tappState -> do
+  x <- itraverse (\_appId tappState -> do
                 state <- readTVar tappState
                 res <- showAppState state
                 pure $ Builder.fromText $ res <> " \n"
@@ -104,7 +102,7 @@ initialize = do
 reloadAppList :: Map Appname (FilePath, EpochTime)
               -> KeterM AppManager ()
 reloadAppList newApps = do
-  am@AppManager{..} <- ask
+  AppManager{..} <- ask
   withRunInIO $ \rio ->
     withMVar mutex $ const $ do
       actions <- atomically $ do
@@ -185,7 +183,7 @@ perform appid action = do
 
 performNoLock :: AppId -> Action -> KeterM AppManager ()
 performNoLock aid action = do
-    am@AppManager{..} <- ask
+    AppManager{..} <- ask
     withRunInIO $ \rio -> E.mask_ $ do
         launchWorker' <- liftIO $ atomically $ do
             m <- readTVar apps
@@ -260,8 +258,8 @@ launchWorker appid tstate tmnext = loop
         pack $ "Reloading from: " <> app <> input
 
     errorStartingBundleMsg :: String -> String -> Text
-    errorStartingBundleMsg name e =
-        pack $ "Error occured when launching bundle " <> name <> ": " <> e
+    errorStartingBundleMsg bundleName e =
+        pack $ "Error occured when launching bundle " <> bundleName <> ": " <> e
 
     processAction :: Maybe App -> Action -> KeterM AppManager (Maybe App)
     processAction Nothing Terminate = return Nothing

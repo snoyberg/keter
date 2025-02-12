@@ -39,6 +39,7 @@ import System.FilePath (FilePath, takeBaseName)
 -- file.
 type Appname = Text
 
+{-# ANN type Plugin ("HLint: ignore Use newtype instead of data" :: String) #-}
 data Plugin = Plugin
     { pluginGetEnv :: Appname -> Object -> IO [(Text, Text)]
     }

@@ -1,5 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
+
 module Keter.Plugin.Postgres
     ( -- * Settings
       Settings
@@ -9,64 +10,60 @@ module Keter.Plugin.Postgres
     , load
     ) where
 
-import           Keter.Common
-import           Control.Applicative       ((<$>), (<*>), pure)
-import           Keter.Aeson.KeyHelper      as AK (lookup)
-import           Control.Concurrent        (forkIO)
-import           Control.Concurrent.Chan
-import           Control.Concurrent.MVar
-import           Control.Exception         (fromException, throwIO, try)
-import           Control.Monad             (forever, mzero, replicateM, void)
-import           Control.Monad.Trans.Class (lift)
-import qualified Control.Monad.Trans.State as S
-import qualified Data.Char                 as C
-import qualified Data.Map                  as Map
-import           Data.Maybe                (fromMaybe)
-import           Data.Monoid               ((<>))
-import qualified Data.Text                 as T
-import qualified Data.Text.Lazy            as TL
-import           Data.Text.Lazy.Builder    (fromText, toLazyText)
-import qualified Data.Vector               as V
-import           Data.Yaml
-import           Prelude                   hiding (FilePath)
-import           System.Directory          (createDirectoryIfMissing,
-                                            doesFileExist, renameFile)
-import           System.FilePath           (takeDirectory, (<.>))
-import           System.IO.Error           (annotateIOError,
-                                            ioeGetFileName,
-                                            isDoesNotExistError)
-import           System.Process            (readProcess)
-import qualified System.Random             as R
-import           Data.Text                  (Text)
-import           System.FilePath            (FilePath)
-import           Control.Exception          (SomeException)
+import Control.Applicative (pure, (<$>), (<*>))
+import Control.Concurrent (forkIO)
+import Control.Concurrent.Chan
+import Control.Concurrent.MVar
+import Control.Exception (SomeException, fromException, throwIO, try)
+import Control.Monad (forever, mzero, replicateM, void)
+import Control.Monad.Trans.Class (lift)
+import Control.Monad.Trans.State qualified as S
+import Data.Char qualified as C
+import Data.Map qualified as Map
+import Data.Maybe (fromMaybe)
+import Data.Monoid ((<>))
+import Data.Text (Text)
+import Data.Text qualified as T
+import Data.Text.Lazy qualified as TL
+import Data.Text.Lazy.Builder (fromText, toLazyText)
+import Data.Vector qualified as V
+import Data.Yaml
+import Keter.Aeson.KeyHelper as AK (lookup)
+import Keter.Common
+import Prelude hiding (FilePath)
+import System.Directory (createDirectoryIfMissing, doesFileExist, renameFile)
+import System.FilePath (FilePath, takeDirectory, (<.>))
+import System.IO.Error (annotateIOError, ioeGetFileName, isDoesNotExistError)
+import System.Process (readProcess)
+import System.Random qualified as R
 
+{-# ANN type Settings ("HLint: ignore Use newtype instead of data" :: String) #-}
 data Settings = Settings
     { setupDBInfo :: DBInfo -> IO ()
       -- ^ How to create the given user/database. Default: uses the @psql@
       -- command line tool and @sudo -u postgres@.
     }
+
 defaultSettings :: Settings
 defaultSettings = Settings
-        { setupDBInfo = \DBInfo{..} -> do
-            let sql = toLazyText $
-                    "CREATE USER "         <> fromText dbiUser <>
-                    " PASSWORD '"          <> fromText dbiPass <>
-                    "';\nCREATE DATABASE " <> fromText dbiName <>
-                    " OWNER "              <> fromText dbiUser <>
-                    ";"
-                (cmd, args) 
-                    | (  dbServer dbiServer == "localhost" 
-                      || dbServer dbiServer == "127.0.0.1") = 
-                        ("sudo", ["-u", "postgres", "psql"])
-                    | otherwise = 
-                        ("psql",
-                        [ "-h", (T.unpack $ dbServer dbiServer)
-                        , "-p", (show $ dbPort dbiServer)
-                        , "-U", "postgres"])
-            _ <- readProcess cmd args $ TL.unpack sql
-            return ()
-        }
+  { setupDBInfo = \DBInfo{..} -> do
+      let sql = toLazyText $
+              "CREATE USER "         <> fromText dbiUser <>
+              " PASSWORD '"          <> fromText dbiPass <>
+              "';\nCREATE DATABASE " <> fromText dbiName <>
+              " OWNER "              <> fromText dbiUser <>
+              ";"
+          (cmd, args)
+              | dbServer dbiServer == "localhost" || dbServer dbiServer == "127.0.0.1" =
+                  ("sudo", ["-u", "postgres", "psql"])
+              | otherwise =
+                  ("psql",
+                  [ "-h", T.unpack (dbServer dbiServer)
+                  , "-p", show (dbPort dbiServer)
+                  , "-U", "postgres"])
+      _ <- readProcess cmd args $ TL.unpack sql
+      return ()
+  }
 
 -- | Information on an individual PostgreSQL database.
 data DBInfo = DBInfo
@@ -85,7 +82,7 @@ data DBServerInfo = DBServerInfo
 
 randomDBI :: DBServerInfo -> R.StdGen -> (DBInfo, R.StdGen)
 randomDBI dbsi =
-    S.runState (DBInfo <$> rt <*> rt <*> rt <*> (pure dbsi)) 
+    S.runState (DBInfo <$> rt <*> rt <*> rt <*> pure dbsi)
   where
     rt = T.pack <$> replicateM 10 (S.state $ R.randomR ('a', 'z'))
 
@@ -149,11 +146,11 @@ load Settings{..} fp = do
                     _ -> return []
             }
       where doenv chan appname dbs = do
-            x <- newEmptyMVar
-            writeChan chan $ GetConfig appname dbs $ putMVar x
-            edbi <- takeMVar x
-            edbiToEnv edbi
-                    
+              x <- newEmptyMVar
+              writeChan chan $ GetConfig appname dbs $ putMVar x
+              edbi <- takeMVar x
+              edbiToEnv edbi
+
     tmpfp = fp <.> "tmp"
 
     loop chan = do
@@ -183,11 +180,13 @@ load Settings{..} fp = do
                                     return $ Right dbi
         lift $ f dbi
 
+    -- TODO: Why so much ceremony here?
+    -- Why not just Data.Char.isAlphaNum and lower it?
     sanitize = T.map sanitize'
     sanitize' c
-        | 'A' <= c && c <= 'Z' = C.toLower c
-        | 'a' <= c && c <= 'z' = c
-        | '0' <= c && c <= '9' = c
+        | isAsciiUpper = C.toLower c
+        | isAsciiLower c = c
+        | isDigit c = c
         | otherwise = '_'
 
 edbiToEnv :: Either SomeException DBInfo

@@ -12,28 +12,10 @@ module Keter.Main
     ( keter
     ) where
 
-import Control.Concurrent.Async (waitAny, withAsync)
-import Control.Monad (unless)
-import Data.Monoid (mempty)
-import Data.String (fromString)
-import Data.Vector qualified as V
-import Keter.App (AppStartConfig(..))
-import Keter.AppManager qualified as AppMan
-import Keter.Common
-import Keter.Config
-import Keter.Config.V10
-import Keter.HostManager qualified as HostMan
-import Keter.Logger qualified as Log
-import Keter.PortPool qualified as PortPool
-import Keter.Proxy qualified as Proxy
-import Keter.TempTarball qualified as TempFolder
-import System.FilePath (FilePath)
-import System.Posix.Files (getFileStatus, modificationTime)
-import System.Posix.Signals (Handler(Catch), installHandler, sigHUP)
-
 import Control.Applicative ((<$>))
+import Control.Concurrent.Async (waitAny, withAsync)
 import Control.Exception (SomeException, bracket, throwIO, try)
-import Control.Monad (forM, void, when)
+import Control.Monad (forM, unless, void, when)
 import Control.Monad.IO.Class (MonadIO, liftIO)
 import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
 import Control.Monad.Logger
@@ -49,11 +31,26 @@ import Control.Monad.Logger qualified as L
 import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
 import Control.Monad.Trans.Class (MonadTrans, lift)
 import Data.Map qualified as Map
+import Data.Monoid (mempty)
+import Data.String (fromString)
 import Data.Text qualified as T
 import Data.Text.Encoding (encodeUtf8)
 import Data.Text.Read qualified
 import Data.Time (getCurrentTime)
+import Data.Vector qualified as V
+import Keter.App (AppStartConfig(..))
+import Keter.AppManager qualified as AppMan
+import Keter.Cli
+import Keter.Common
 import Keter.Conduit.Process.Unix (initProcessTracker)
+import Keter.Config
+import Keter.Config.V10
+import Keter.Context
+import Keter.HostManager qualified as HostMan
+import Keter.Logger qualified as Log
+import Keter.PortPool qualified as PortPool
+import Keter.Proxy qualified as Proxy
+import Keter.TempTarball qualified as TempFolder
 import Keter.Yaml.FilePath
 import Prelude hiding (FilePath, log)
 import System.Directory
@@ -62,17 +59,18 @@ import System.Directory
        , doesFileExist
        , getDirectoryContents
        )
-import System.FilePath (takeDirectory, takeExtension, (</>))
+import System.FilePath (FilePath, takeDirectory, takeExtension, (</>))
 import System.FSNotify qualified as FSN
 import System.Log.FastLogger qualified as FL
+import System.Posix.Files (getFileStatus, modificationTime)
+import System.Posix.Signals (Handler(Catch), installHandler, sigHUP)
 import System.Posix.User
        (getUserEntryForID, getUserEntryForName, userGroupID, userID, userName)
+
 #ifdef SYSTEM_FILEPATH
 import Filesystem.Path qualified as FP (FilePath)
 import Filesystem.Path.CurrentOS (encodeString)
 #endif
-import Keter.Cli
-import Keter.Context
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
@@ -82,13 +80,13 @@ keter input mkPlugins =
         withManagers mkPlugins $ \hostman appMan -> do
             cfg@KeterConfig{..} <- ask
             $logInfo "Launching cli"
-            void $ forM kconfigCliPort $ \port ->
+            forM_ kconfigCliPort $ \port ->
               withMappedConfig
                   (const $ MkCliStates
                       { csAppManager = appMan
                       , csPort       = port
                       })
-                  $ launchCli
+                  launchCli
             $logInfo "Launching initial"
             launchInitial appMan
             $logInfo "Started watching"
@@ -174,7 +172,7 @@ withManagers mkPlugins f = do
             , ascPlugins = plugins
             , ascKeterConfig = cfg
             }
-    appMan <- withMappedConfig (const appStartConfig) $ AppMan.initialize
+    appMan <- withMappedConfig (const appStartConfig) AppMan.initialize
     f hostman appMan
 
 launchInitial :: AppMan.AppManager -> KeterM KeterConfig ()
@@ -197,7 +195,7 @@ isKeter fp = takeExtension fp == ".keter"
 
 startWatching :: AppMan.AppManager -> KeterM KeterConfig ()
 startWatching appMan = do
-    incoming <- getIncoming <$> ask
+    incoming <- asks getIncoming
     -- File system watching
     wm <- liftIO FSN.startManager
     withMappedConfig (const appMan) $ withRunInIO $ \rio -> do
@@ -221,7 +219,7 @@ startWatching appMan = do
                     Right fp -> when (isKeter fp) $ AppMan.addApp $ incoming </> fp
         -- Install HUP handler for cases when inotify cannot be used.
         void $ flip (installHandler sigHUP) Nothing $ Catch $ do
-            bundles <- fmap (filter isKeter) $ listDirectoryTree incoming
+            bundles <- filter isKeter <$> listDirectoryTree incoming
             newMap <- fmap Map.fromList $ forM bundles $ \bundle -> do
                 time <- modificationTime <$> getFileStatus bundle
                 return (getAppname bundle, (bundle, time))

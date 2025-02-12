@@ -1,7 +1,8 @@
-{-# LANGUAGE OverloadedStrings   #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE ViewPatterns        #-}
-{-# LANGUAGE TemplateHaskell     #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ViewPatterns #-}
+
 module Keter.HostManager
     ( -- * Types
       HostManager
@@ -17,28 +18,28 @@ module Keter.HostManager
     , start
     ) where
 
+import Control.Applicative
+import Control.Exception (assert, throwIO)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.Logger
+import Control.Monad.Reader (ask)
+import Data.CaseInsensitive qualified as CI
+import Data.Either (partitionEithers)
+import Data.IORef
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.Text (pack, unpack)
+import Data.Text.Encoding (encodeUtf8)
+import Keter.Common
+import Keter.Config
 import Keter.Context
-import           Control.Applicative
-import           Control.Exception   (assert, throwIO)
-import           Control.Monad.Logger
-import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.Reader    (ask)
-import qualified Data.CaseInsensitive as CI
-import           Data.Either         (partitionEithers)
-import           Data.IORef
-import           Data.Text           (pack, unpack)
-import qualified Data.Map            as Map
-import qualified Data.Set            as Set
-import           Data.Text.Encoding  (encodeUtf8)
-import           Keter.Config
-import           Keter.LabelMap      (LabelMap)
-import qualified Keter.LabelMap      as LabelMap
-import           Prelude             hiding (log)
-import qualified Network.TLS as TLS
-import           Keter.Common
-import           System.FilePath            (FilePath)
-import           Data.Set                   (Set)
-import           Data.Map                   (Map)
+import Keter.LabelMap (LabelMap)
+import Keter.LabelMap qualified as LabelMap
+import Network.TLS qualified as TLS
+import Prelude hiding (log)
+import System.FilePath (FilePath)
 
 data HostValue = HVActive   !AppId !ProxyAction !TLS.Credentials
                | HVReserved !AppId
@@ -70,12 +71,12 @@ reserveHosts :: AppId
              -> KeterM HostManager Reservations
 reserveHosts aid hosts = do
   (HostManager mstate) <- ask
-  $logInfo $ pack $ 
-      "Reserving hosts for app " 
+  $logInfo $ pack $
+      "Reserving hosts for app "
       ++ show aid
-      ++ ": " 
+      ++ ": "
       ++ unwords (map (unpack . CI.original) $ Set.toList hosts)
-  liftIO $ either (throwIO . CannotReserveHosts aid) return 
+  liftIO $ either (throwIO . CannotReserveHosts aid) return
     =<< atomicModifyIORef mstate (\entries0 ->
       case partitionEithers $ map (checkHost entries0) $ Set.toList hosts of
           ([], Set.unions -> toReserve) ->
@@ -83,16 +84,16 @@ reserveHosts aid hosts = do
           (conflicts, _) -> (entries0, Left $ Map.fromList conflicts))
   where
     checkHost entries0 host =
-        case LabelMap.labelAssigned hostBS entries0 of
-            False -> Right $ Set.singleton host
-            True  -> 
-              case LabelMap.lookup hostBS entries0 of
-                Nothing -> Right $ Set.singleton host
-                Just (HVReserved aid') -> assert (aid /= aid')
-                                        $ Left (host, aid')
-                Just (HVActive aid' _ _)
-                    | aid == aid' -> Right Set.empty
-                    | otherwise   -> Left (host, aid')
+        if LabelMap.labelAssigned hostBS entries0
+        then
+          (case LabelMap.lookup hostBS entries0 of
+            Nothing -> Right $ Set.singleton host
+            Just (HVReserved aid') -> assert (aid /= aid')
+                                    $ Left (host, aid')
+            Just (HVActive aid' _ _)
+                | aid == aid' -> Right Set.empty
+                | otherwise   -> Left (host, aid'))
+        else Right $ Set.singleton host
       where hostBS = encodeUtf8 $ CI.original host
 
     hvres = HVReserved aid
@@ -107,10 +108,10 @@ forgetReservations :: AppId
                    -> KeterM HostManager ()
 forgetReservations app hosts = do
     (HostManager mstate) <- ask
-    $logInfo $ pack $ 
-        "Forgetting host reservations for app " 
-        ++ show app 
-        ++ ": " 
+    $logInfo $ pack $
+        "Forgetting host reservations for app "
+        ++ show app
+        ++ ": "
         ++ unwords (map (unpack . CI.original) $ Set.toList hosts)
     liftIO $ atomicModifyIORef mstate $ \state0 ->
         (Set.foldr forget state0 hosts, ())

@@ -1,29 +1,29 @@
-{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE NumericUnderscores #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Main where
 
-import Network.HTTP.Types.Status(ok200)
-import qualified Network.Wai.Handler.Warp as Warp
-import Keter.Config.V10
-import           Control.Concurrent        (forkIO, threadDelay)
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.STM.TQueue
+import Control.Exception (SomeException)
+import Control.Monad
+import Control.Monad.Logger
+import Control.Monad.Reader
+import Control.Monad.STM
+import Data.ByteString (ByteString)
 import Data.Maybe (isJust)
+import Keter.Config.V10
+import Keter.Context
 import Keter.LabelMap as LM
+import Keter.Proxy
+import Network.HTTP.Conduit (Manager)
+import Network.HTTP.Conduit qualified as HTTP
+import Network.HTTP.Types.Status (ok200)
+import Network.Wai qualified as Wai
+import Network.Wai.Handler.Warp qualified as Warp
+import Network.Wreq qualified as Wreq
 import Test.Tasty
 import Test.Tasty.HUnit
-import Control.Monad
-import Control.Monad.Reader
-import Control.Monad.Logger
-import           Control.Exception          (SomeException)
-import           Network.HTTP.Conduit              (Manager)
-import Data.ByteString(ByteString)
-import qualified Network.Wreq as Wreq
-import Control.Monad.STM
-import Control.Concurrent.STM.TQueue
-import qualified Network.Wai                       as Wai
-import qualified Network.HTTP.Conduit      as HTTP
-import Keter.Context
-import Keter.Proxy
 
 main :: IO ()
 main = defaultMain keterTests
@@ -59,17 +59,17 @@ headThenPostNoCrash :: IO ()
 headThenPostNoCrash = do
   manager <- HTTP.newManager HTTP.tlsManagerSettings
   exceptions <- newTQueueIO
-  
+
   forkIO $ do
     Warp.run 6781 $ \req resp -> do
       void $ Wai.strictRequestBody req
       resp $ Wai.responseLBS ok200 [] "ok"
 
-  forkIO $ 
-    flip runReaderT (settings manager) $ 
+  forkIO $
+    flip runReaderT (settings manager) $
       flip runLoggingT (\_ _ _ msg -> atomically $ writeTQueue exceptions msg) $
-        filterLogger isException $ 
-          runKeterM $ 
+        filterLogger isException $
+          runKeterM $
             reverseProxy $ LPInsecure "*" 6780
 
   threadDelay 0_100_000
@@ -83,7 +83,7 @@ headThenPostNoCrash = do
   where
     content :: ByteString
     content = "a"
-    
+
     -- For 'reverseProxy', only exceptions (and strictly exceptions!) are logged as LevelError.
     isException :: LogSource -> LogLevel -> Bool
     isException _ LevelError = True

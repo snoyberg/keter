@@ -47,7 +47,7 @@ data BundleConfig = BundleConfig
 
 instance ParseYamlFile BundleConfig where
     parseYamlFile basedir = withObject "BundleConfig" $ \o -> BundleConfig
-        <$> ((Just <$> parseYamlFile basedir (Object o)) <|> pure Nothing)
+        <$> optional (parseYamlFile basedir (Object o))
         <*> lookupBaseMaybe basedir o "static-hosts" .!= Set.empty
         <*> o .:? "redirects" .!= Set.empty
 
@@ -138,6 +138,7 @@ data PortSettings = PortSettings
     { portRange :: [Port]
       -- ^ Which ports to assign to apps. Defaults to unassigned ranges from IANA
     }
+{-# ANN type PortSettings ("HLint: ignore Use newtype instead of data" :: String) #-}
 
 defaultPortSettings :: PortSettings
 defaultPortSettings = PortSettings
@@ -155,5 +156,5 @@ defaultPortSettings = PortSettings
         }
 
 instance FromJSON PortSettings where
-    parseJSON = withObject "PortSettings" $ \_ -> PortSettings
-        <$> return (portRange defaultPortSettings)
+    parseJSON = withObject "PortSettings" $ \_ ->
+      return (PortSettings (portRange defaultPortSettings))

@@ -69,7 +69,7 @@ unpackTempTar muid tf bundle appname withDir = do
         D.createDirectoryIfMissing True dir
         let entries = Tar.read $ decompress lbs
         Tar.unpack dir entries
-        _ <- forM muid $ \perms ->
+        forM_ muid $ \perms ->
           Tar.foldEntries (setEntryPermission perms) (pure ()) throwIO entries
         withDir dir
 

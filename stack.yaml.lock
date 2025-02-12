@@ -5,19 +5,26 @@
 
 packages:
 - completed:
-    hackage: tar-0.6.2.0@sha256:619828cae098a7b6deeb0316e12f55011101d88f756787ed024ceedb81cf1eba,4576
     pantry-tree:
       sha256: 1dde50961e9d1a6e6f820d918c0edbbd9673c83afdd300e0aae40a691e8151df
       size: 2168
+    hackage: tar-0.6.2.0@sha256:619828cae098a7b6deeb0316e12f55011101d88f756787ed024ceedb81cf1eba,4576
   original:
     hackage: tar-0.6.2.0@sha256:619828cae098a7b6deeb0316e12f55011101d88f756787ed024ceedb81cf1eba,4576
 - completed:
-    hackage: os-string-2.0.2.1@sha256:0bf4ff8f387d7fd05a43c18fa677dd02259c99d63c2d02c5823f152736513bef,3261
     pantry-tree:
       sha256: caa0b78b83a9d429324784e239c9bf33017f9f4a3c34ec8392b3d8a1e8968bd6
       size: 2217
+    hackage: os-string-2.0.2.1@sha256:0bf4ff8f387d7fd05a43c18fa677dd02259c99d63c2d02c5823f152736513bef,3261
   original:
     hackage: os-string-2.0.2.1@sha256:0bf4ff8f387d7fd05a43c18fa677dd02259c99d63c2d02c5823f152736513bef,3261
+- completed:
+    pantry-tree:
+      sha256: 12f171b8932de1a2a1a2a0bbc28fda9315509c2c85873260eec61c697ee118ec
+      size: 388
+    hackage: http-reverse-proxy-0.6.1.0@sha256:5bc151ed0c22e8493a7bb5e6e1a5de51fff0450f47733e9bc5044aaafdf7dac6,2542
+  original:
+    hackage: http-reverse-proxy-0.6.1.0@sha256:5bc151ed0c22e8493a7bb5e6e1a5de51fff0450f47733e9bc5044aaafdf7dac6,2542
 snapshots:
 - completed:
     sha256: 5a59b2a405b3aba3c00188453be172b85893cab8ebc352b1ef58b0eae5d248a2

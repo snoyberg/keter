@@ -97,8 +97,8 @@ showApp App{..} = do
   appRunning' <- readTVar appRunningWebApps
   appHosts'   <- readTVar appHosts
   pure $ pack $
-    (show appId) <>
-    " modtime: " <> (show appModTime') <>  ", webappsRunning: " <>  show appRunning' <> ", hosts: " <> show appHosts'
+    show appId <>
+    " modtime: " <> show appModTime' <>  ", webappsRunning: " <>  show appRunning' <> ", hosts: " <> show appHosts'
 
 
 data RunningWebApp = RunningWebApp
@@ -171,7 +171,7 @@ withReservations aid bconfig f = do
         withRunInIO $ \rio ->
             bracketOnError
               (rio $ withMappedConfig (const ascHostManager) $ reserveHosts aid $ Map.keysSet actions)
-              (\rsvs -> rio $ withMappedConfig (const ascHostManager)  $ forgetReservations aid rsvs)
+              (rio . withMappedConfig (const ascHostManager) . forgetReservations aid)
               (\_ -> rio $ f wacs backs actions)
 
 withActions :: BundleConfig
@@ -233,7 +233,7 @@ appLogName (AINamed x) = "app-" <> unpack x
 
 withLogger :: AppId
            -> Maybe (TVar (Maybe Logger))
-           -> ((TVar (Maybe Logger)) -> Logger -> KeterM AppStartConfig a)
+           -> (TVar (Maybe Logger) -> Logger -> KeterM AppStartConfig a)
            -> KeterM AppStartConfig a
 withLogger aid Nothing f = do
     var <- liftIO $ newTVarIO Nothing
@@ -245,7 +245,6 @@ withLogger aid (Just var) f = do
         Nothing -> withRunInIO $ \rio ->
           bracketOnError (Log.createLoggerViaConfig ascKeterConfig (appLogName aid)) Log.loggerClose (rio . f var)
         Just appLogger ->  f var appLogger
-  where
 
 withSanityChecks :: BundleConfig -> KeterM AppStartConfig a -> KeterM AppStartConfig a
 withSanityChecks BundleConfig{..} f = do
@@ -412,7 +411,7 @@ ensureAlive RunningWebApp {..} = do
               tryToConnect addr =
                 bracketOnError
                   (socket (addrFamily addr) (addrSocketType addr) (addrProtocol addr))
-                  (close)  -- only done if there's an error
+                  close  -- only done if there's an error
                   (\sock -> do
                     connect sock (addrAddress addr)
                     socketToHandle sock ReadWriteMode
@@ -425,10 +424,10 @@ ensureAlive RunningWebApp {..} = do
                           Right x -> return x
                           Left  e -> go (Just e) ps
                  -- All operations failed, throw error if one exists
-                  go Nothing  [] = ioError $ userError $ "connectTo firstSuccessful: empty list"
+                  go Nothing  [] = ioError $ userError "connectTo firstSuccessful: empty list"
                   go (Just e) [] = throwIO e
                   tryIO :: IO a -> IO (Either IOException a)
-                  tryIO m = catch (liftM Right m) (return . Left)
+                  tryIO m = catch (fmap Right m) (return . Left)
 
 
 withBackgroundApps :: AppId
@@ -708,7 +707,7 @@ getTimestamp :: App -> STM (Maybe EpochTime)
 getTimestamp = readTVar . appModTime
 
 pluginsGetEnv :: Plugins -> Appname -> Object -> IO [(Text, Text)]
-pluginsGetEnv ps app o = fmap concat $ mapM (\p -> pluginGetEnv p app o) ps
+pluginsGetEnv ps app o = concat <$> mapM (\p -> pluginGetEnv p app o) ps
 
 -- | For the forward-env option. From a Set of desired variables, create a
 -- Map pulled from the system environment.

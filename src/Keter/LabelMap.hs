@@ -97,7 +97,7 @@ getPortEntry (Assigned e _) = Just e
 getPortEntry (Unassigned _) = Nothing
 
 insert :: ByteString -> a -> LabelMap a -> LabelMap a
-insert h e m = insertTree (hostToLabels h) e m
+insert h = insertTree (hostToLabels h)
 --insert h e m = trace
 --       ( "Inserting hostname " ++ (show h) ++ "\n"
 --       ++"  into tree        " ++ (show m) ++ "\n"
@@ -156,12 +156,10 @@ insertTree (l:ls)   e (WildcardExcept w t) =
 cleanup :: LabelMap a -> LabelMap a
 cleanup EmptyLabelMap = EmptyLabelMap
 cleanup m@(Static t) =
-    case Map.null (Map.filter p t) of
-        True  -> EmptyLabelMap
-        False -> m
-    where
-        p (Unassigned EmptyLabelMap) = False
-        p _ = True
+  if Map.null (Map.filter p t) then EmptyLabelMap else m
+  where
+  p (Unassigned EmptyLabelMap) = False
+  p _ = True
 
 cleanup m@(Wildcard w) =
     case w of
@@ -176,7 +174,7 @@ cleanup m@(WildcardExcept w t) =
         (_,                        False) -> m
 
 delete :: ByteString -> LabelMap a -> LabelMap a
-delete h m = deleteTree (hostToLabels h) m
+delete h = deleteTree (hostToLabels h)
 --delete h m = trace
 --       ( "Deleting hostname  " ++ (show h) ++ "\n"
 --       ++"  into tree        " ++ (show m) ++ "\n"
@@ -225,7 +223,7 @@ deleteTree (l:ls) (WildcardExcept w t) = cleanup $
     l' = CI.mk l
 
 lookup :: ByteString -> LabelMap a -> Maybe a
-lookup h m = lookupTree (hostToLabels h) m
+lookup h = lookupTree (hostToLabels h)
 --lookup h m = trace
 --       ( "Looking up hostname  " ++ (show h) ++ "\n"
 --       ++"  in tree            " ++ (show m) ++ "\n"
@@ -240,7 +238,7 @@ lookupTree [] _ = Nothing
 lookupTree _ EmptyLabelMap = Nothing
 
 lookupTree [l] (Static t)   = Map.lookup (CI.mk l) t >>= getPortEntry
-lookupTree [_] (Wildcard w) = getPortEntry $ w
+lookupTree [_] (Wildcard w) = getPortEntry w
 lookupTree [l] (WildcardExcept w t) =
     case Map.lookup (CI.mk l) t >>= getPortEntry of
         Just e  -> Just e
@@ -273,7 +271,7 @@ lookupTree (l:ls) (WildcardExcept w t) =
 -- Even so, labelAssigned will return false, foo.example.com has not
 -- been explicitly assigned.
 labelAssigned :: ByteString -> LabelMap a -> Bool
-labelAssigned h m = memberTree (hostToLabels h) m
+labelAssigned h = memberTree (hostToLabels h)
 --labelAssigned h m = trace
 --       ( "Checking label assignment for " ++ (show h) ++ "\n"
 --       ++"  in tree            " ++ (show m) ++ "\n"

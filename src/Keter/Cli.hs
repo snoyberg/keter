@@ -1,30 +1,30 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Keter.Cli
     ( launchCli
     , CliStates(..)
     ) where
 
+import Control.Concurrent (forkFinally)
+import Control.Exception qualified as E
+import Control.Monad (forever, unless, void, when)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Unlift (withRunInIO)
+import Control.Monad.Logger
+import Control.Monad.Reader (ask)
+import Control.Monad.Trans.Class (MonadTrans, lift)
+import Data.ByteString qualified as S
+import Data.Foldable
+import Data.Text qualified as T
+import Data.Text.Encoding qualified as T
+import GHC.Conc
+import Keter.AppManager
 import Keter.Common
 import Keter.Context
-import Keter.AppManager
-import Control.Concurrent (forkFinally)
-import qualified Control.Exception as E
-import Control.Monad (unless, forever, void, when)
-import Control.Monad.IO.Class    (MonadIO, liftIO)
-import Control.Monad.IO.Unlift   (withRunInIO)
-import Control.Monad.Trans.Class (MonadTrans, lift)
-import Control.Monad.Logger
-import Control.Monad.Reader      (ask)
-import qualified Data.ByteString as S
 import Network.Socket
 import Network.Socket.ByteString (recv, sendAll)
-import qualified Data.Text as T
-import qualified Data.Text.Encoding as T
 import Options.Applicative
-import Data.Foldable
-import GHC.Conc
 
 data Commands = CmdListRunningApps
               | CmdExit
@@ -37,7 +37,7 @@ data CliStates = MkCliStates
 launchCli :: KeterM CliStates ()
 launchCli = do
   MkCliStates{..} <- ask
-  void $ withRunInIO $ \rio -> forkIO $ 
+  void $ withRunInIO $ \rio -> forkIO $
     withSocketsDo $ do
         addr <- resolve $ show csPort
         E.bracket (open addr) close $ \x -> rio $ do
@@ -80,13 +80,13 @@ loop :: Socket -> KeterM CliStates b
 loop sock = forever $ do
     (conn, peer) <- liftIO $ accept sock
     $logInfo $ T.pack $ "CLI Connection from " <> show peer
-    void $ withRunInIO $ \rio -> 
+    void $ withRunInIO $ \rio ->
         forkFinally (rio $ talk conn) (\_ -> close conn)
 
 listRunningApps :: Socket -> KeterM CliStates ()
 listRunningApps conn = do
   MkCliStates{..} <- ask
-  txt <- liftIO $ atomically $ renderApps csAppManager 
+  txt <- liftIO $ atomically $ renderApps csAppManager
   liftIO $ sendAll conn $ T.encodeUtf8 txt <> "\n"
 
 talk :: Socket -> KeterM CliStates ()

@@ -1,15 +1,15 @@
+{-# LANGUAGE DerivingStrategies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
-{-# LANGUAGE DerivingStrategies         #-}
 
 module Keter.Context where
 
-import           Keter.Common
-import           Control.Monad.Trans       (lift)
-import           Control.Monad.IO.Class   (MonadIO)
-import           Control.Monad.IO.Unlift   (MonadUnliftIO)
-import           Control.Monad.Logger      (MonadLogger, MonadLoggerIO, LoggingT(..), runLoggingT)
-import           Control.Monad.Reader      (MonadReader, ReaderT, runReaderT, ask
-                                           , withReaderT)
+import Control.Monad.IO.Class (MonadIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO)
+import Control.Monad.Logger
+       (LoggingT(..), MonadLogger, MonadLoggerIO, runLoggingT)
+import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT, withReaderT)
+import Control.Monad.Trans (lift)
+import Keter.Common
 
 -- | The top-level keter context monad, carrying around the main logger and some locally relevant configuration structure.
 --
@@ -24,5 +24,5 @@ newtype KeterM cfg a = KeterM { runKeterM :: LoggingT (ReaderT cfg IO) a }
                     MonadReader cfg)
 
 withMappedConfig :: (cfg -> cfg') -> KeterM cfg' a -> KeterM cfg a
-withMappedConfig f (KeterM ctx) = 
+withMappedConfig f (KeterM ctx) =
     KeterM $ LoggingT $ \logger -> withReaderT f $ runLoggingT ctx logger

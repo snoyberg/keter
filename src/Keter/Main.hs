@@ -1,68 +1,75 @@
-{-# LANGUAGE CPP                        #-}
-{-# LANGUAGE OverloadedStrings          #-}
-{-# LANGUAGE RankNTypes                 #-}
-{-# LANGUAGE RecordWildCards            #-}
-{-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE TemplateHaskell            #-}
-{-# LANGUAGE TypeSynonymInstances       #-}
-{-# LANGUAGE FlexibleContexts           #-}
-{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeFamilies #-}
+{-# LANGUAGE TypeSynonymInstances #-}
 
 module Keter.Main
     ( keter
     ) where
 
+import Control.Concurrent.Async (waitAny, withAsync)
+import Control.Monad (unless)
+import Data.Monoid (mempty)
+import Data.String (fromString)
+import Data.Vector qualified as V
+import Keter.App (AppStartConfig(..))
+import Keter.AppManager qualified as AppMan
 import Keter.Common
-import           System.FilePath            (FilePath)
-import qualified Keter.TempTarball as TempFolder
-import           Control.Concurrent.Async  (waitAny, withAsync)
-import           Control.Monad             (unless)
-import qualified Keter.Logger              as Log
-import           Data.Monoid               (mempty)
-import           Data.String               (fromString)
-import qualified Data.Vector               as V
-import           Keter.App                 (AppStartConfig (..))
-import qualified Keter.AppManager          as AppMan
-import qualified Keter.HostManager         as HostMan
-import qualified Keter.PortPool            as PortPool
-import qualified Keter.Proxy               as Proxy
-import           Keter.Config
-import           Keter.Config.V10
-import           System.Posix.Files        (getFileStatus, modificationTime)
-import           System.Posix.Signals      (Handler (Catch), installHandler,
-                                            sigHUP)
+import Keter.Config
+import Keter.Config.V10
+import Keter.HostManager qualified as HostMan
+import Keter.Logger qualified as Log
+import Keter.PortPool qualified as PortPool
+import Keter.Proxy qualified as Proxy
+import Keter.TempTarball qualified as TempFolder
+import System.FilePath (FilePath)
+import System.Posix.Files (getFileStatus, modificationTime)
+import System.Posix.Signals (Handler(Catch), installHandler, sigHUP)
 
-import           Control.Applicative       ((<$>))
-import           Control.Exception         (throwIO, try, bracket, SomeException)
-import           Control.Monad             (forM, void, when)
-import           Control.Monad.IO.Class    (MonadIO, liftIO)
-import           Control.Monad.Trans.Class (MonadTrans, lift)
-import qualified Control.Monad.Logger      as L
-import           Control.Monad.Logger      (MonadLogger, MonadLoggerIO, LoggingT, 
-                                            runLoggingT, askLoggerIO, logInfo, logDebug)
-import           Control.Monad.Reader      (MonadReader, ReaderT, runReaderT, ask)
-import           Control.Monad.IO.Unlift   (MonadUnliftIO, withRunInIO)
-import           Keter.Conduit.Process.Unix (initProcessTracker)
-import qualified Data.Map                  as Map
-import qualified Data.Text                 as T
-import           Data.Text.Encoding        (encodeUtf8)
-import qualified Data.Text.Read
-import           Data.Time                 (getCurrentTime)
-import           Keter.Yaml.FilePath
-import           Prelude                   hiding (FilePath, log)
-import           System.Directory          (createDirectoryIfMissing,
-                                            createDirectoryIfMissing,
-                                            doesDirectoryExist, doesFileExist,
-                                            getDirectoryContents)
-import           System.FilePath           (takeExtension, takeDirectory, (</>))
-import qualified System.FSNotify           as FSN
-import qualified System.Log.FastLogger     as FL
-import           System.Posix.User         (getUserEntryForID,
-                                            getUserEntryForName, userGroupID,
-                                            userID, userName)
+import Control.Applicative ((<$>))
+import Control.Exception (SomeException, bracket, throwIO, try)
+import Control.Monad (forM, void, when)
+import Control.Monad.IO.Class (MonadIO, liftIO)
+import Control.Monad.IO.Unlift (MonadUnliftIO, withRunInIO)
+import Control.Monad.Logger
+       ( LoggingT
+       , MonadLogger
+       , MonadLoggerIO
+       , askLoggerIO
+       , logDebug
+       , logInfo
+       , runLoggingT
+       )
+import Control.Monad.Logger qualified as L
+import Control.Monad.Reader (MonadReader, ReaderT, ask, runReaderT)
+import Control.Monad.Trans.Class (MonadTrans, lift)
+import Data.Map qualified as Map
+import Data.Text qualified as T
+import Data.Text.Encoding (encodeUtf8)
+import Data.Text.Read qualified
+import Data.Time (getCurrentTime)
+import Keter.Conduit.Process.Unix (initProcessTracker)
+import Keter.Yaml.FilePath
+import Prelude hiding (FilePath, log)
+import System.Directory
+       ( createDirectoryIfMissing
+       , doesDirectoryExist
+       , doesFileExist
+       , getDirectoryContents
+       )
+import System.FilePath (takeDirectory, takeExtension, (</>))
+import System.FSNotify qualified as FSN
+import System.Log.FastLogger qualified as FL
+import System.Posix.User
+       (getUserEntryForID, getUserEntryForName, userGroupID, userID, userName)
 #ifdef SYSTEM_FILEPATH
-import qualified Filesystem.Path as FP (FilePath)
-import           Filesystem.Path.CurrentOS (encodeString)
+import Filesystem.Path qualified as FP (FilePath)
+import Filesystem.Path.CurrentOS (encodeString)
 #endif
 import Keter.Cli
 import Keter.Context
@@ -107,7 +114,7 @@ runKeterConfigReader input ctx = do
     runReaderT ctx config
 
 -- | Running the Keter logger requires a context with access to a KeterConfig, hence the
--- MonadReader constraint. This is versatile: 'runKeterConfigReader', or use the free 
+-- MonadReader constraint. This is versatile: 'runKeterConfigReader', or use the free
 -- ((->) KeterConfig) instance.
 runKeterLogger :: (MonadReader KeterConfig m, MonadIO m, MonadUnliftIO m)
                => LoggingT m a
@@ -115,7 +122,7 @@ runKeterLogger :: (MonadReader KeterConfig m, MonadIO m, MonadUnliftIO m)
 runKeterLogger ctx = do
     cfg@KeterConfig{..} <- ask
     withRunInIO $ \rio -> bracket (Log.createLoggerViaConfig cfg "keter") Log.loggerClose $
-        rio . runLoggingT ctx . formatLog 
+        rio . runLoggingT ctx . formatLog
     where
         formatLog logger loc _ lvl msg = do
             now <- liftIO getCurrentTime
@@ -250,7 +257,7 @@ startListening hostman = do
     logger <- askLoggerIO
     settings <- Proxy.makeSettings hostman
     withMappedConfig (const settings) $ withRunInIO $ \rio ->
-        liftIO $ runAndBlock kconfigListeners $ \ls -> 
+        liftIO $ runAndBlock kconfigListeners $ \ls ->
             rio $ Proxy.reverseProxy ls
 
 runAndBlock :: NonEmptyVector a

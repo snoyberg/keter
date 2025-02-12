@@ -1,9 +1,8 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RankNTypes        #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TemplateHaskell   #-}
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE TypeApplications   #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 -- | Used for management of applications.
 module Keter.AppManager
     ( -- * Types
@@ -20,38 +19,37 @@ module Keter.AppManager
     , renderApps
     ) where
 
+import Control.Applicative
+import Control.Concurrent (forkIO)
+import Control.Concurrent.MVar (MVar, newMVar, withMVar)
+import Control.Concurrent.STM
+import Control.Exception (SomeException)
+import Control.Exception qualified as E
+import Control.Monad (void)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Unlift (withRunInIO)
+import Control.Monad.Logger
+import Control.Monad.Reader (ask)
+import Data.Foldable (fold)
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.Maybe (catMaybes, mapMaybe)
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.Text (Text, pack, unpack)
+import Data.Text.Lazy qualified as LT
+import Data.Text.Lazy.Builder qualified as Builder
+import Data.Traversable.WithIndex (itraverse)
+import Keter.App (App, AppStartConfig, showApp)
+import Keter.App qualified as App
 import Keter.Common
+import Keter.Config
 import Keter.Context
-import           Data.Set                   (Set)
-import           Data.Text                  (Text)
-import           System.FilePath            (FilePath)
-import           Data.Map                   (Map)
-import           Control.Exception          (SomeException)
-import           Control.Applicative
-import           Control.Concurrent         (forkIO)
-import           Control.Concurrent.MVar    (MVar, newMVar, withMVar)
-import           Control.Concurrent.STM
-import qualified Control.Exception          as E
-import           Control.Monad              (void)
-import           Control.Monad.IO.Class     (liftIO)
-import           Control.Monad.IO.Unlift    (withRunInIO)
-import           Control.Monad.Logger
-import           Control.Monad.Reader       (ask)
-import           Data.Foldable              (fold)
-import qualified Data.Map                   as Map
-import           Data.Maybe                 (catMaybes, mapMaybe)
-import qualified Data.Set                   as Set
-import           Data.Text                  (pack, unpack)
-import qualified Data.Text.Lazy             as LT
-import qualified Data.Text.Lazy.Builder     as Builder
-import           Data.Traversable.WithIndex (itraverse)
-import           Keter.App                  (App, AppStartConfig, showApp)
-import qualified Keter.App                  as App
-import           Keter.Config
-import           Prelude                    hiding (FilePath, log)
-import           System.Posix.Files         (getFileStatus, modificationTime)
-import           System.Posix.Types         (EpochTime)
-import           Text.Printf                (printf)
+import Prelude hiding (FilePath, log)
+import System.FilePath (FilePath)
+import System.Posix.Files (getFileStatus, modificationTime)
+import System.Posix.Types (EpochTime)
+import Text.Printf (printf)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
@@ -107,7 +105,7 @@ reloadAppList :: Map Appname (FilePath, EpochTime)
               -> KeterM AppManager ()
 reloadAppList newApps = do
   am@AppManager{..} <- ask
-  withRunInIO $ \rio -> 
+  withRunInIO $ \rio ->
     withMVar mutex $ const $ do
       actions <- atomically $ do
           m <- readTVar apps
@@ -182,7 +180,7 @@ getAllApps AppManager {..} = atomically $ do
 perform :: AppId -> Action -> KeterM AppManager ()
 perform appid action = do
     am <- ask
-    withRunInIO $ \rio -> 
+    withRunInIO $ \rio ->
       withMVar (mutex am) $ const $ rio $  performNoLock appid action
 
 performNoLock :: AppId -> Action -> KeterM AppManager ()
@@ -233,7 +231,7 @@ launchWorker :: AppId
              -> Maybe App
              -> Action
              -> KeterM AppManager ()
-launchWorker appid tstate tmnext mcurrentApp0 action0 = 
+launchWorker appid tstate tmnext mcurrentApp0 action0 =
   loop mcurrentApp0 action0
   where
     loop :: Maybe App -> Action -> KeterM AppManager ()
@@ -262,9 +260,9 @@ launchWorker appid tstate tmnext mcurrentApp0 action0 =
     reloadMsg :: String -> String -> Text
     reloadMsg app input =
         pack $ "Reloading from: " <> app <> input
-    
+
     errorStartingBundleMsg :: String -> String -> Text
-    errorStartingBundleMsg name e = 
+    errorStartingBundleMsg name e =
         pack $ "Error occured when launching bundle " <> name <> ": " <> e
 
     processAction :: Maybe App -> Action -> KeterM AppManager (Maybe App)
@@ -276,7 +274,7 @@ launchWorker appid tstate tmnext mcurrentApp0 action0 =
     processAction Nothing (Reload input) = do
         $logInfo (reloadMsg "Nothing" (show input))
         AppManager{..} <- ask
-        eres <- withRunInIO $ \rio -> E.try @SomeException $ 
+        eres <- withRunInIO $ \rio -> E.try @SomeException $
             rio $ withMappedConfig (const appStartConfig) $ App.start appid input
         case eres of
             Left e -> do
@@ -285,7 +283,7 @@ launchWorker appid tstate tmnext mcurrentApp0 action0 =
             Right app -> return $ Just app
     processAction (Just app) (Reload input) = do
         $logInfo (reloadMsg (show $ Just app) (show input))
-        eres <- withRunInIO $ \rio -> E.try @SomeException $ 
+        eres <- withRunInIO $ \rio -> E.try @SomeException $
             rio $ withMappedConfig (const app) $ App.reload input
         case eres of
             Left e -> do

@@ -1,6 +1,6 @@
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
 -- | Utilities for dealing with YAML config files which contain relative file
 -- paths.
 module Keter.Yaml.FilePath
@@ -13,13 +13,27 @@ module Keter.Yaml.FilePath
     ) where
 
 import Control.Applicative ((<$>))
-import Data.Yaml (decodeFileEither, ParseException (AesonException), parseJSON)
-import Prelude (($!), ($), Either (..), return, IO, (.), (>>=), Maybe (..), maybe, mapM, Ord, fail, FilePath)
-import Keter.Aeson.KeyHelper as AK
-import Data.Aeson.Types ((.:), (.:?), Object, Parser, Value, parseEither)
+import Data.Aeson.Types (Object, Parser, Value, parseEither, (.:), (.:?))
+import Data.Set qualified as Set
 import Data.Text (Text, unpack)
-import qualified Data.Set as Set
-import qualified Data.Vector as V
+import Data.Vector qualified as V
+import Data.Yaml (ParseException(AesonException), decodeFileEither, parseJSON)
+import Keter.Aeson.KeyHelper as AK
+import Prelude
+       ( Either(..)
+       , FilePath
+       , IO
+       , Maybe(..)
+       , Ord
+       , fail
+       , mapM
+       , maybe
+       , return
+       , ($!)
+       , ($)
+       , (.)
+       , (>>=)
+       )
 import System.FilePath (takeDirectory, (</>))
 
 -- | The directory from which we're reading the config file.

@@ -1,7 +1,7 @@
-{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TypeApplications    #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TypeApplications #-}
 -- | Manages a pool of available ports and allocates them.
 module Keter.PortPool
     ( -- * Types
@@ -13,18 +13,18 @@ module Keter.PortPool
     , start
     ) where
 
-import           Keter.Common
-import           Keter.Context
-import           Data.Text           (pack)
-import           Control.Applicative     ((<$>))
-import           Control.Concurrent.MVar
-import           Control.Exception
-import           Control.Monad.IO.Class (liftIO)
-import           Control.Monad.IO.Unlift (withRunInIO)
-import           Control.Monad.Logger
-import           Keter.Config
-import           Network.Socket
-import           Prelude                 hiding (log)
+import Control.Applicative ((<$>))
+import Control.Concurrent.MVar
+import Control.Exception
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Unlift (withRunInIO)
+import Control.Monad.Logger
+import Data.Text (pack)
+import Keter.Common
+import Keter.Config
+import Keter.Context
+import Network.Socket
+import Prelude hiding (log)
 
 data PPState = PPState
     { ppAvail    :: ![Port]

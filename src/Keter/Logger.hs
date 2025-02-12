@@ -1,6 +1,6 @@
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
 module Keter.Logger
     ( Logger(..)
     , createLoggerViaConfig
@@ -9,23 +9,23 @@ module Keter.Logger
     , defaultBufferSize
     ) where
 
-import Data.Time
-import Debug.Trace
-import qualified System.Log.FastLogger as FL
-import System.Directory
-import System.FilePath
-import Control.Monad.Logger
-import Control.Monad.Reader
 import Control.Monad.IO.Class
 import Control.Monad.IO.Unlift
-import Keter.Context
+import Control.Monad.Logger
+import Control.Monad.Reader
+import Data.Time
+import Debug.Trace
 import Keter.Config.V10
+import Keter.Context
+import System.Directory
+import System.FilePath
+import System.Log.FastLogger qualified as FL
 
 -- | Record wrapper over a fast logger (log,close) function tuple, just to make it less unwieldy and obscure.
 -- The 'LogType' is also tracked, in case formatting depends on it.
 data Logger = Logger
   { loggerLog :: forall a. FL.ToLogStr a => a -> IO ()
-  , loggerClose :: IO () 
+  , loggerClose :: IO ()
   , loggerType :: FL.LogType
   }
 

@@ -1,6 +1,6 @@
-{-# LANGUAGE BangPatterns      #-}
+{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
+{-# LANGUAGE RecordWildCards #-}
 -- | Handles allocation of temporary directories and unpacking of bundles into
 -- them. Sets owner and group of all created files and directories as
 -- necessary.
@@ -10,27 +10,26 @@ module Keter.TempTarball
     , unpackTempTar
     ) where
 
-import qualified Codec.Archive.Tar         as Tar
-import qualified Codec.Archive.Tar.Check   as Tar
-import qualified Codec.Archive.Tar.Entry   as Tar
-import           Codec.Compression.GZip    (decompress)
-import           Control.Exception         (bracket, bracketOnError, throwIO)
-import           Control.Monad             (unless, when, forM)
-import qualified Data.ByteString.Lazy      as L
-import           Data.ByteString.Unsafe    (unsafeUseAsCStringLen)
-import qualified Data.IORef                as I
-import           Data.Monoid               ((<>))
-import           Data.Text                 (Text, pack, unpack)
-import           Data.Word                 (Word)
-import           System.FilePath ((</>))
-import qualified System.FilePath           as F
-import qualified System.Directory          as D
-import           Foreign.Ptr               (castPtr)
-import           System.Posix.Files        (setFdOwnerAndGroup,
-                                            setOwnerAndGroup)
-import           System.Posix.IO           (FdOption (CloseOnExec), closeFd,
-                                            createFile, fdWriteBuf, setFdOption)
-import           System.Posix.Types        (GroupID, UserID)
+import Codec.Archive.Tar qualified as Tar
+import Codec.Archive.Tar.Check qualified as Tar
+import Codec.Archive.Tar.Entry qualified as Tar
+import Codec.Compression.GZip (decompress)
+import Control.Exception (bracket, bracketOnError, throwIO)
+import Control.Monad (forM, unless, when)
+import Data.ByteString.Lazy qualified as L
+import Data.ByteString.Unsafe (unsafeUseAsCStringLen)
+import Data.IORef qualified as I
+import Data.Monoid ((<>))
+import Data.Text (Text, pack, unpack)
+import Data.Word (Word)
+import Foreign.Ptr (castPtr)
+import System.Directory qualified as D
+import System.FilePath ((</>))
+import System.FilePath qualified as F
+import System.Posix.Files (setFdOwnerAndGroup, setOwnerAndGroup)
+import System.Posix.IO
+       (FdOption(CloseOnExec), closeFd, createFile, fdWriteBuf, setFdOption)
+import System.Posix.Types (GroupID, UserID)
 
 data TempFolder = TempFolder
     { tfRoot    :: FilePath

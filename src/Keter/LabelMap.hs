@@ -1,6 +1,6 @@
+{-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE NoImplicitPrelude #-}
 module Keter.LabelMap
     ( -- * Types
       LabelMap
@@ -12,14 +12,14 @@ module Keter.LabelMap
     , empty
     ) where
 
-import Prelude hiding (lookup)
-import Data.Maybe (isJust)
-import qualified Data.Map as Map
-import Data.Map (Map)
-import qualified Data.ByteString.Char8 as BS
 import Data.ByteString (ByteString)
-import qualified Data.CaseInsensitive as CI
+import Data.ByteString.Char8 qualified as BS
 import Data.CaseInsensitive (CI)
+import Data.CaseInsensitive qualified as CI
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.Maybe (isJust)
+import Prelude hiding (lookup)
 
 type LabelTree a = Map (CI ByteString) (LabelEntry a)
 

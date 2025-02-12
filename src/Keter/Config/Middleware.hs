@@ -1,32 +1,33 @@
-{-# LANGUAGE OverloadedStrings, DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE OverloadedStrings #-}
 
 module Keter.Config.Middleware where
 
 import Data.Aeson
 import GHC.Generics
-import Prelude
 import Network.Wai
+import Prelude
 
-import Control.Monad
 import Control.Arrow ((***))
+import Control.Monad
 
 -- various Middlewares
-import Network.Wai.Middleware.AcceptOverride  (acceptOverride)
-import Network.Wai.Middleware.Autohead        (autohead)
-import Network.Wai.Middleware.Jsonp           (jsonp)
-import Network.Wai.Middleware.Local           (local)
-import Network.Wai.Middleware.AddHeaders      (addHeaders)
-import Network.Wai.Middleware.MethodOverride  (methodOverride)
+import Network.Wai.Middleware.AcceptOverride (acceptOverride)
+import Network.Wai.Middleware.AddHeaders (addHeaders)
+import Network.Wai.Middleware.Autohead (autohead)
+import Network.Wai.Middleware.HttpAuth (basicAuth)
+import Network.Wai.Middleware.Jsonp (jsonp)
+import Network.Wai.Middleware.Local (local)
+import Network.Wai.Middleware.MethodOverride (methodOverride)
 import Network.Wai.Middleware.MethodOverridePost (methodOverridePost)
-import Network.Wai.Middleware.HttpAuth        (basicAuth)
 
-import Data.ByteString.Lazy         as L (ByteString)
-import Data.ByteString  as S (ByteString)
+import Data.ByteString as S (ByteString)
+import Data.ByteString.Lazy as L (ByteString)
 
-import Data.Text.Lazy.Encoding as TL (encodeUtf8, decodeUtf8)
-import Data.Text.Encoding as T (encodeUtf8, decodeUtf8)
 import Data.String (fromString)
-import qualified Keter.Aeson.KeyHelper as AK (toKey, toText, toList, empty)
+import Data.Text.Encoding as T (decodeUtf8, encodeUtf8)
+import Data.Text.Lazy.Encoding as TL (decodeUtf8, encodeUtf8)
+import Keter.Aeson.KeyHelper qualified as AK (empty, toKey, toList, toText)
 
 data MiddlewareConfig = AcceptOverride
                       | Autohead
@@ -68,7 +69,7 @@ instance ToJSON MiddlewareConfig where
                                          ]
   toJSON (AddHeaders headers)   = object [ "headers"    .= object ( map ((AK.toKey . T.decodeUtf8) *** String . T.decodeUtf8) headers)  ]
   toJSON (Local sc msg)         = object [ "local"      .= object [ "status" .= sc
-                                                                  , "message" .=  TL.decodeUtf8 msg 
+                                                                  , "message" .=  TL.decodeUtf8 msg
                                                                   ]
                                          ]
 

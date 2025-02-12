@@ -3,23 +3,23 @@
 -- compatibility in config file format.
 module Keter.Config.V04 where
 
-import           Control.Applicative
-import           Data.Aeson
-import           Data.Bool
-import           Data.Conduit.Network              (HostPreference)
-import           Data.String                       (fromString)
-import           Keter.Yaml.FilePath
-import qualified System.FilePath                   as F
-import           Keter.Common
-import           Keter.Rewrite(ReverseProxyConfig)
-import           Data.Text                  (Text)
-import           System.FilePath            (FilePath)
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
-import qualified Network.Wai.Handler.Warp          as Warp
-import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
-import qualified Network.TLS.SessionManager        as TLSSession
-import           Prelude                           hiding (FilePath)
+import Control.Applicative
+import Data.Aeson
+import Data.Bool
+import Data.Conduit.Network (HostPreference)
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.String (fromString)
+import Data.Text (Text)
+import Keter.Common
+import Keter.Rewrite (ReverseProxyConfig)
+import Keter.Yaml.FilePath
+import Network.TLS.SessionManager qualified as TLSSession
+import Network.Wai.Handler.Warp qualified as Warp
+import Network.Wai.Handler.WarpTLS qualified as WarpTLS
+import Prelude hiding (FilePath)
+import System.FilePath (FilePath)
+import System.FilePath qualified as F
 
 data AppConfig = AppConfig
     { configExec       :: F.FilePath

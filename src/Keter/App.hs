@@ -1,11 +1,11 @@
-{-# LANGUAGE OverloadedStrings   #-}
-{-# LANGUAGE RecordWildCards     #-}
+{-# LANGUAGE NamedFieldPuns #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE TemplateHaskell     #-}
-{-# LANGUAGE TupleSections       #-}
-{-# LANGUAGE NamedFieldPuns      #-}
-{-# LANGUAGE TypeApplications    #-}
-{-# LANGUAGE TypeFamilies        #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeApplications #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Keter.App
     ( App
@@ -17,61 +17,65 @@ module Keter.App
     , showApp
     ) where
 
+import Control.Applicative ((<$>), (<*>))
+import Control.Arrow ((***))
+import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent.STM
+import Control.Exception
+       (IOException, SomeException, bracketOnError, catch, throwIO, try)
+import Control.Monad (liftM, void, when)
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Unlift (withRunInIO)
+import Control.Monad.Logger
+import Control.Monad.Reader (ask)
+import Data.ByteString (ByteString)
+import Data.CaseInsensitive qualified as CI
+import Data.Foldable (for_, traverse_)
+import Data.IORef
+import Data.Map (Map)
+import Data.Map qualified as Map
+import Data.Maybe (fromMaybe)
+import Data.Monoid (mempty, (<>))
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.Text (Text, pack, unpack)
+import Data.Text.Encoding (decodeUtf8With, encodeUtf8)
+import Data.Text.Encoding.Error (lenientDecode)
+import Data.Vector qualified as V
+import Data.Yaml
 import Keter.Common
+import Keter.Conduit.Process.Unix
+       ( MonitoredProcess
+       , ProcessTracker
+       , monitorProcess
+       , printStatus
+       , terminateMonitoredProcess
+       )
+import Keter.Config
 import Keter.Context
-import           Data.Set                   (Set)
-import           Data.Text                  (Text)
-import           Data.ByteString            (ByteString)
-import           System.FilePath            (FilePath)
-import           Data.Map                   (Map)
-import           Keter.Rewrite (ReverseProxyConfig (..))
-import           Keter.TempTarball
-import           Control.Applicative       ((<$>), (<*>))
-import           Control.Arrow             ((***))
-import           Control.Concurrent        (forkIO, threadDelay)
-import           Control.Concurrent.STM
-import           Control.Exception         (IOException, SomeException,
-                                            bracketOnError,
-                                            throwIO, try, catch)
-import           Control.Monad             (void, when, liftM)
-import           Control.Monad.IO.Class    (liftIO)
-import           Control.Monad.IO.Unlift   (withRunInIO)
-import           Control.Monad.Logger      
-import           Control.Monad.Reader      (ask)
-import qualified Data.CaseInsensitive      as CI
-import           Keter.Logger              (Logger)
-import qualified Keter.Logger              as Log
-import           Keter.Conduit.Process.Unix (MonitoredProcess, ProcessTracker,
-                                            monitorProcess,
-                                            terminateMonitoredProcess, printStatus)
-import           Data.Foldable             (for_, traverse_)
-import           Data.IORef
-import qualified Data.Map                  as Map
-import           Data.Maybe                (fromMaybe)
-import           Data.Monoid               ((<>), mempty)
-import qualified Data.Set                  as Set
-import           Data.Text                 (pack, unpack)
-import           Data.Text.Encoding        (decodeUtf8With, encodeUtf8)
-import           Data.Text.Encoding.Error  (lenientDecode)
-import qualified Data.Vector               as V
-import           Data.Yaml
-import           Keter.Yaml.FilePath
-import System.FilePath ((</>))
-import           System.Directory          (canonicalizePath, doesFileExist,
-                                            removeDirectoryRecursive,
-                                            createDirectoryIfMissing)
-import           Keter.HostManager         hiding (start)
-import           Keter.PortPool            (PortPool, getPort, releasePort)
-import           Keter.Config
-import           Network.Socket
-import           Prelude                   hiding (FilePath)
-import           System.Environment        (getEnvironment)
-import           System.IO                 (hClose, IOMode(..))
-import qualified System.Log.FastLogger  as FL
-import           System.Posix.Files        (fileAccess)
-import           System.Posix.Types        (EpochTime, GroupID, UserID)
-import           System.Timeout            (timeout)
-import qualified Network.TLS as TLS
+import Keter.HostManager hiding (start)
+import Keter.Logger (Logger)
+import Keter.Logger qualified as Log
+import Keter.PortPool (PortPool, getPort, releasePort)
+import Keter.Rewrite (ReverseProxyConfig(..))
+import Keter.TempTarball
+import Keter.Yaml.FilePath
+import Network.Socket
+import Network.TLS qualified as TLS
+import Prelude hiding (FilePath)
+import System.Directory
+       ( canonicalizePath
+       , createDirectoryIfMissing
+       , doesFileExist
+       , removeDirectoryRecursive
+       )
+import System.Environment (getEnvironment)
+import System.FilePath (FilePath, (</>))
+import System.IO (IOMode(..), hClose)
+import System.Log.FastLogger qualified as FL
+import System.Posix.Files (fileAccess)
+import System.Posix.Types (EpochTime, GroupID, UserID)
+import System.Timeout (timeout)
 
 data App = App
     { appModTime        :: !(TVar (Maybe EpochTime))
@@ -154,7 +158,7 @@ withConfig :: AppId
 withConfig _aid (AIData bconfig) f = f Nothing bconfig Nothing
 withConfig aid (AIBundle fp modtime) f = do
     withRunInIO $ \rio ->
-        bracketOnError (rio $ unpackBundle fp aid) (\(newdir, _) -> removeDirectoryRecursive newdir) $ \(newdir, bconfig) -> 
+        bracketOnError (rio $ unpackBundle fp aid) (\(newdir, _) -> removeDirectoryRecursive newdir) $ \(newdir, bconfig) ->
             rio $ f (Just newdir) bconfig (Just modtime)
 
 withReservations :: AppId
@@ -185,7 +189,7 @@ withActions bconfig f =
     loop [] wacs backs actions = f wacs backs actions
     loop (Stanza (StanzaWebApp wac) rs:stanzas) wacs backs actions = do
       AppStartConfig{..} <- ask
-      withRunInIO $ \rio -> 
+      withRunInIO $ \rio ->
         liftIO $ bracketOnError
           (rio (getPort ascPortPool) >>= either throwIO
                (\p -> fmap (p,) <$> loadCert $ waconfigSsl wac)
@@ -238,7 +242,7 @@ withLogger aid (Just var) f = do
     AppStartConfig{..} <- ask
     mappLogger <- liftIO $ readTVarIO var
     case mappLogger of
-        Nothing -> withRunInIO $ \rio -> 
+        Nothing -> withRunInIO $ \rio ->
           bracketOnError (Log.createLoggerViaConfig ascKeterConfig (appLogName aid)) Log.loggerClose (rio . f var)
         Just appLogger ->  f var appLogger
   where
@@ -280,7 +284,7 @@ start aid input =
         asc@AppStartConfig{..} <- ask
         liftIO $ mapM_ ensureAlive runningWebapps
         withMappedConfig (const ascHostManager) $ activateApp aid actions
-        liftIO $ 
+        liftIO $
           App
             <$> newTVarIO mmodtime
             <*> newTVarIO runningWebapps
@@ -309,7 +313,7 @@ withWebApps :: AppId
             -> ([RunningWebApp] -> KeterM AppStartConfig a)
             -> KeterM AppStartConfig a
 withWebApps aid bconfig mdir appLogger configs0 f =
-    withRunInIO $ \rio -> 
+    withRunInIO $ \rio ->
       bracketedMap (\wac f -> rio $ alloc wac (liftIO <$> f)) (rio . f) configs0
   where
     alloc = launchWebApp aid bconfig mdir appLogger
@@ -442,7 +446,7 @@ withBackgroundApps aid bconfig mdir appLogger configs f =
 launchBackgroundApp :: AppId
                     -> BundleConfig
                     -> Maybe FilePath
-                    -> Logger 
+                    -> Logger
                     -> BackgroundConfig
                     -> (RunningBackgroundApp -> IO a)
                     -> KeterM AppStartConfig a
@@ -619,7 +623,7 @@ start tf muid processTracker portman plugins appLogger appname bundle removeFrom
 reload :: AppInput -> KeterM App ()
 reload input = do
     App{..} <- ask
-    withMappedConfig (const appAsc) $ 
+    withMappedConfig (const appAsc) $
       withLogger appId (Just appLog) $ \_ appLogger ->
       withConfig appId input $ \newdir bconfig mmodtime ->
       withSanityChecks bconfig $
@@ -628,7 +632,7 @@ reload input = do
       withWebApps appId bconfig newdir appLogger webapps $ \runningWebapps -> do
           liftIO $ mapM_ ensureAlive runningWebapps
           liftIO (readTVarIO appHosts) >>= \hosts ->
-            withMappedConfig (const $ ascHostManager appAsc) $ 
+            withMappedConfig (const $ ascHostManager appAsc) $
               reactivateApp appId actions hosts
           (oldApps, oldBacks, oldDir, oldRlog) <- liftIO $ atomically $ do
               oldApps <- readTVar appRunningWebApps
@@ -642,7 +646,7 @@ reload input = do
               writeTVar appHosts $ Map.keysSet actions
               writeTVar appDir newdir
               return (oldApps, oldBacks, oldDir, oldRlog)
-          void $ withRunInIO $ \rio -> 
+          void $ withRunInIO $ \rio ->
             forkIO $ rio $ terminateHelper appId oldApps oldBacks oldDir oldRlog
 
 terminate :: KeterM App ()
@@ -669,7 +673,7 @@ terminate = do
         deactivateApp appId hosts
 
     void $ withRunInIO $ \rio ->
-      forkIO $ rio $ withMappedConfig (const appAsc) $ 
+      forkIO $ rio $ withMappedConfig (const appAsc) $
         terminateHelper appId apps backs mdir appLogger
     liftIO $ maybe (return ()) Log.loggerClose appLogger
 
@@ -682,11 +686,11 @@ terminateHelper :: AppId
 terminateHelper aid apps backs mdir appLogger = do
     AppStartConfig{..} <- ask
     liftIO $ threadDelay $ 20 * 1000 * 1000
-    $logInfo $ pack $ 
-        "Sending old process TERM signal: " 
+    $logInfo $ pack $
+        "Sending old process TERM signal: "
           ++ case aid of { AINamed t -> unpack t; AIBuiltin -> "builtin" }
     mapM_ killWebApp apps
-    liftIO $ do 
+    liftIO $ do
         mapM_ killBackgroundApp backs
         threadDelay $ 60 * 1000 * 1000
     case mdir of

@@ -1,8 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE RecordWildCards   #-}
-{-# LANGUAGE TupleSections   #-}
-{-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
 -- | A light-weight, minimalistic reverse HTTP proxy.
 module Keter.Proxy
     ( reverseProxy
@@ -11,74 +11,81 @@ module Keter.Proxy
     , TLSConfig (..)
     ) where
 
-import qualified Network.HTTP.Conduit      as HTTP
-import qualified Data.CaseInsensitive      as CI
-import           Data.Functor ((<&>))
-import qualified Keter.HostManager         as HostMan
-import           Blaze.ByteString.Builder          (copyByteString, toByteString)
-import           Blaze.ByteString.Builder.Html.Word(fromHtmlEscapedByteString)
-import           Control.Applicative               ((<$>), (<|>))
-import           Control.Monad.Reader              (ask)
-import           Control.Monad.IO.Unlift           (withRunInIO)
-import           Control.Monad.IO.Class            (liftIO)
-import qualified Data.ByteString                   as S
-import qualified Data.ByteString.Char8             as S8
+import Blaze.ByteString.Builder (copyByteString, toByteString)
+import Blaze.ByteString.Builder.Html.Word (fromHtmlEscapedByteString)
+import Control.Applicative ((<$>), (<|>))
+import Control.Monad.IO.Class (liftIO)
+import Control.Monad.IO.Unlift (withRunInIO)
+import Control.Monad.Reader (ask)
+import Data.ByteString qualified as S
+import Data.ByteString.Char8 qualified as S8
+import Data.CaseInsensitive qualified as CI
+import Data.Functor ((<&>))
+import Keter.HostManager qualified as HostMan
+import Network.HTTP.Conduit qualified as HTTP
 #if MIN_VERSION_http_reverse_proxy(0,6,0)
-import           Network.Wai.Middleware.Gzip       (def)
+import Network.Wai.Middleware.Gzip (def)
 #endif
-import           Data.Monoid                       (mappend, mempty)
-import           Data.Text                         as T (Text, pack, unwords)
-import           Data.Text.Encoding                (decodeUtf8With, encodeUtf8)
-import           Data.Text.Encoding.Error          (lenientDecode)
-import qualified Data.Vector                       as V
-import           GHC.Exts (fromString)
-import           Keter.Config
-import           Keter.Config.Middleware
-import           Network.HTTP.Conduit              (Manager)
+import Data.Monoid (mappend, mempty)
+import Data.Text as T (Text, pack, unwords)
+import Data.Text.Encoding (decodeUtf8With, encodeUtf8)
+import Data.Text.Encoding.Error (lenientDecode)
+import Data.Vector qualified as V
+import GHC.Exts (fromString)
+import Keter.Config
+import Keter.Config.Middleware
+import Network.HTTP.Conduit (Manager)
 
 #if MIN_VERSION_http_reverse_proxy(0,4,2)
-import           Network.HTTP.ReverseProxy         (defaultLocalWaiProxySettings)
+import Network.HTTP.ReverseProxy (defaultLocalWaiProxySettings)
 #endif
 
 #if MIN_VERSION_http_reverse_proxy(0,6,0)
-import           Network.HTTP.ReverseProxy         (defaultWaiProxySettings)
+import Network.HTTP.ReverseProxy (defaultWaiProxySettings)
 #endif
 
-import           Network.HTTP.ReverseProxy         (ProxyDest (ProxyDest),
-                                                    SetIpHeader (..),
-                                                    WaiProxyResponse (..),
-                                                    LocalWaiProxySettings,
-                                                    setLpsTimeBound,
-                                                    waiProxyToSettings,
-                                                    wpsSetIpHeader,
-                                                    wpsOnExc,
-                                                    wpsGetDest)
-import qualified Keter.Rewrite as Rewrite
-import           Data.ByteString            (ByteString)
+import Control.Exception (SomeException)
+import Control.Monad.Logger
+import Data.ByteString (ByteString)
 import Keter.Common
-import           System.FilePath            (FilePath)
-import           Control.Monad.Logger
-import           Control.Exception          (SomeException)
-import           Network.HTTP.Types                (mkStatus,
-                                                    status200,
-                                                    status301, status302,
-                                                    status303, status307,
-                                                    status404, status502)
-import qualified Network.Wai                       as Wai
-import           Network.Wai.Application.Static    (defaultFileServerSettings,
-                                                    ssListing, staticApp)
-import qualified Network.Wai.Handler.Warp          as Warp
-import qualified Network.Wai.Handler.WarpTLS       as WarpTLS
-import qualified Network.TLS.SessionManager        as TLSSession
-import           Network.Wai.Middleware.Gzip       (gzip, GzipSettings(..), GzipFiles(..))
-import           Prelude                           hiding (FilePath, (++))
-import           WaiAppStatic.Listing              (defaultListing)
-import qualified Network.TLS as TLS
-import qualified System.Directory as Dir
 import Keter.Context
+import Keter.Rewrite qualified as Rewrite
+import Network.HTTP.ReverseProxy
+       ( LocalWaiProxySettings
+       , ProxyDest(ProxyDest)
+       , SetIpHeader(..)
+       , WaiProxyResponse(..)
+       , setLpsTimeBound
+       , waiProxyToSettings
+       , wpsGetDest
+       , wpsOnExc
+       , wpsSetIpHeader
+       )
+import Network.HTTP.Types
+       ( mkStatus
+       , status200
+       , status301
+       , status302
+       , status303
+       , status307
+       , status404
+       , status502
+       )
+import Network.TLS qualified as TLS
+import Network.TLS.SessionManager qualified as TLSSession
+import Network.Wai qualified as Wai
+import Network.Wai.Application.Static
+       (defaultFileServerSettings, ssListing, staticApp)
+import Network.Wai.Handler.Warp qualified as Warp
+import Network.Wai.Handler.WarpTLS qualified as WarpTLS
+import Network.Wai.Middleware.Gzip (GzipFiles(..), GzipSettings(..), gzip)
+import Prelude hiding (FilePath, (++))
+import System.Directory qualified as Dir
+import System.FilePath (FilePath)
+import WaiAppStatic.Listing (defaultListing)
 
-import           Data.Version (showVersion)
-import qualified Paths_keter as Pkg
+import Data.Version (showVersion)
+import Paths_keter qualified as Pkg
 
 #if !MIN_VERSION_http_reverse_proxy(0,6,0)
 defaultWaiProxySettings = def

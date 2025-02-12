@@ -1,15 +1,15 @@
 {-# LANGUAGE OverloadedStrings #-}
 
-import           Control.Monad.IO.Class
-import qualified Data.ByteString.Lazy.Char8           as L8
-import           Network.HTTP.Types
-import           Network.Wai
-import           Network.Wai.Handler.Warp
-import           Network.Wai.Middleware.RequestLogger
-import           System.Directory
-import           System.Environment
-import           System.IO
-import           Control.Concurrent
+import Control.Concurrent
+import Control.Monad.IO.Class
+import Data.ByteString.Lazy.Char8 qualified as L8
+import Network.HTTP.Types
+import Network.Wai
+import Network.Wai.Handler.Warp
+import Network.Wai.Middleware.RequestLogger
+import System.Directory
+import System.Environment
+import System.IO
 
 
 main :: IO ()

@@ -1,30 +1,39 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-{-# LANGUAGE OverloadedStrings  #-}
-{-# LANGUAGE TypeFamilies       #-}
+{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TypeFamilies #-}
 
 -- | Provides logging, versioning and some type aliases
 module Keter.Common where
 
-import qualified Network.Wai                       as Wai
-import           Control.Exception          (Exception, SomeException)
-import           Data.Aeson                 (FromJSON, Object, ToJSON,
-                                             Value (Bool), object, withBool,
-                                             withObject, (.!=), (.:?), (.=))
-import           Data.ByteString            (ByteString)
-import           Data.CaseInsensitive       (CI, original)
-import           Data.Map                   (Map)
-import           Data.Set                   (Set)
-import qualified Data.Set                   as Set
-import           Data.Text                  (Text, pack, unpack)
-import           Data.Typeable              (Typeable)
-import           Data.Vector                (Vector)
-import qualified Data.Vector                as V
-import qualified Data.Yaml
-import           Keter.Yaml.FilePath
-import qualified Language.Haskell.TH.Syntax as TH
-import           Network.Socket             (AddrInfo, SockAddr)
-import           System.Exit                (ExitCode)
-import           System.FilePath            (FilePath, takeBaseName)
+import Control.Exception (Exception, SomeException)
+import Data.Aeson
+       ( FromJSON
+       , Object
+       , ToJSON
+       , Value(Bool)
+       , object
+       , withBool
+       , withObject
+       , (.!=)
+       , (.:?)
+       , (.=)
+       )
+import Data.ByteString (ByteString)
+import Data.CaseInsensitive (CI, original)
+import Data.Map (Map)
+import Data.Set (Set)
+import Data.Set qualified as Set
+import Data.Text (Text, pack, unpack)
+import Data.Typeable (Typeable)
+import Data.Vector (Vector)
+import Data.Vector qualified as V
+import Data.Yaml qualified
+import Keter.Yaml.FilePath
+import Language.Haskell.TH.Syntax qualified as TH
+import Network.Socket (AddrInfo, SockAddr)
+import Network.Wai qualified as Wai
+import System.Exit (ExitCode)
+import System.FilePath (FilePath, takeBaseName)
 
 -- | Name of the application. Should just be the basename of the application
 -- file.

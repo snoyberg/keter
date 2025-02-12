@@ -1,11 +1,12 @@
 {-# LANGUAGE NoImplicitPrelude #-}
 {-# LANGUAGE OverloadedStrings #-}
-import Prelude (error, (++), ($), IO, putStrLn)
-import System.Environment (getArgs, getProgName)
-import Keter.Main (keter)
-import Paths_keter (version)
+
 import Data.Version (showVersion)
-import qualified Keter.Plugin.Postgres as Postgres
+import Keter.Main (keter)
+import Keter.Plugin.Postgres qualified as Postgres
+import Paths_keter (version)
+import Prelude (IO, error, putStrLn, ($), (++))
+import System.Environment (getArgs, getProgName)
 import System.FilePath ((</>))
 
 main :: IO ()

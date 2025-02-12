@@ -14,14 +14,17 @@ But will try to install the other dependencies on it's own.
 2. Extract
 
 3. Run the packaging script.
+
    ```{sh}
    keter $ cd packaging
    keter/packaging $ ./mkketerdeb.sh
    ```
-   This should produce a `.deb` file in the `keter-X.Y.Z` folder.  
+
+   This should produce a `.deb` file in the `keter-X.Y.Z` folder.
    *Note*: if the above command fails, try running it again.
 
-## Building libgmp if not avaiable.
+## Building libgmp if not avaiable
 
-Similarly to building keter, `mklibgmp10deb.sh` can be used to build a `.deb` package of `libgmp10` on which keter depends.
-This should only be necessary for *Debian __6__*.
+Similarly to building keter, `mklibgmp10deb.sh` can be used to build a `.deb`
+package of `libgmp10` on which keter depends. This should only be necessary for
+*Debian __6__*.

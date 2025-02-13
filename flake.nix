@@ -39,6 +39,8 @@
                 stylish-haskell.enable = true;
               };
             };
+
+            integratedTests = pkgs.callPackage ./vm.nix { inherit self; };
           };
 
           devShells.default = pkgs.haskellPackages.shellFor {

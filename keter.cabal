@@ -76,9 +76,6 @@ library
     , yaml                  >=0.8.4    && <0.12
     , zlib                  >=0.6.2    && <0.7     || ^>=0.7.0
 
-  if impl(ghc <7.6)
-    build-depends: ghc-prim
-
   exposed-modules:
     Keter.App
     Keter.AppManager

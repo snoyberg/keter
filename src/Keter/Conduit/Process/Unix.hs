@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE DeriveDataTypeable #-}
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE LambdaCase #-}
@@ -98,13 +97,7 @@ import System.Process
 import System.Process.Internals (ProcessHandle(..), ProcessHandle__(..))
 
 processHandleMVar :: ProcessHandle -> MVar ProcessHandle__
-#if MIN_VERSION_process(1, 6, 0)
 processHandleMVar (ProcessHandle m _ _) = m
-#elif MIN_VERSION_process(1, 2, 0)
-processHandleMVar (ProcessHandle m _) = m
-#else
-processHandleMVar (ProcessHandle m) = m
-#endif
 
 withProcessHandle_ ::
      ProcessHandle
@@ -253,21 +246,13 @@ forkExecuteLog cmd args menv mwdir mstdin log = bracketOnError
             , std_err = UseHandle writerH
             , close_fds = True
             , create_group = True
-#if MIN_VERSION_process(1, 5, 0)
             , use_process_jobs = False
-#endif
-#if MIN_VERSION_process(1, 2, 0)
             , delegate_ctlc = False
-#endif
-#if MIN_VERSION_process(1, 3, 0)
             , detach_console = True
             , create_new_console = False
             , new_session = True
-#endif
-#if MIN_VERSION_process(1, 4, 0)
             , child_group = Nothing
             , child_user = Nothing
-#endif
             }
         ignoreExceptions $ addAttachMessage pipes ph
         void $ forkIO $ ignoreExceptions $

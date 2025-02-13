@@ -1,4 +1,3 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
@@ -54,11 +53,6 @@ import System.Posix.Files (getFileStatus, modificationTime)
 import System.Posix.Signals (Handler(Catch), installHandler, sigHUP)
 import System.Posix.User
        (getUserEntryForID, getUserEntryForName, userGroupID, userID, userName)
-
-#ifdef SYSTEM_FILEPATH
-import Filesystem.Path qualified as FP (FilePath)
-import Filesystem.Path.CurrentOS (encodeString)
-#endif
 
 keter :: FilePath -- ^ root directory or config file
       -> [FilePath -> IO Plugin]
@@ -191,14 +185,14 @@ startWatching appMan = do
                 e' <-
                     case e of
                         FSN.Removed fp _ _ -> do
-                            rio $ $logInfo $ "Watched file removed: " <> T.pack (fromFilePath fp)
-                            return $ Left $ fromFilePath fp
+                            rio $ $logInfo $ "Watched file removed: " <> T.pack fp
+                            return $ Left fp
                         FSN.Added fp _ _ -> do
-                            rio $ $logInfo $ "Watched file added: " <> T.pack (fromFilePath fp)
-                            return $ Right $ fromFilePath fp
+                            rio $ $logInfo $ "Watched file added: " <> T.pack fp
+                            return $ Right fp
                         FSN.Modified fp _ _ -> do
-                            rio $ $logInfo $ "Watched file modified: " <> T.pack (fromFilePath fp)
-                            return $ Right $ fromFilePath fp
+                            rio $ $logInfo $ "Watched file modified: " <> T.pack fp
+                            return $ Right fp
                         _ -> do
                             rio $ $logInfo $ "Watched file unknown" <> T.pack mempty
                             return $ Left []
@@ -212,17 +206,6 @@ startWatching appMan = do
                 time <- modificationTime <$> getFileStatus bundle
                 return (getAppname bundle, (bundle, time))
             rio $ AppMan.reloadAppList newMap
-
-
--- compatibility with older versions of fsnotify which used
--- 'Filesystem.Path'
-#ifdef SYSTEM_FILEPATH
-fromFilePath :: FP.FilePath -> String
-fromFilePath = encodeString
-#else
-fromFilePath :: forall a. a -> a
-fromFilePath = id
-#endif
 
 listDirectoryTree :: FilePath -> IO [FilePath]
 listDirectoryTree fp = do

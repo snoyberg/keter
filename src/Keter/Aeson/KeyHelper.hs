@@ -1,7 +1,8 @@
-{-# LANGUAGE CPP #-}
 {-# LANGUAGE NoImplicitPrelude #-}
 
 -- | Utilities for dealing with Aeson version update
+--
+-- TODO: This is no longer necessary, and should be removed.
 module Keter.Aeson.KeyHelper
   ( module KeyMap
   , toKey

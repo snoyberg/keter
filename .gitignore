@@ -24,3 +24,5 @@ cabal.sandbox.config
 *.sublime-*
 dist-newstyle/
 .pre-commit-config.yaml
+result
+.nixos-test-history

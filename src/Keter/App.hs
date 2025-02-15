@@ -235,7 +235,11 @@ withLogger aid (Just var) f = do
     mappLogger <- liftIO $ readTVarIO var
     case mappLogger of
         Nothing -> withRunInIO $ \rio ->
-          bracketOnError (Log.createLoggerViaConfig ascKeterConfig (appLogName aid)) Log.loggerClose (rio . f var)
+          bracketOnError (Log.createLoggerViaConfig ascKeterConfig (appLogName aid))
+                         Log.loggerClose
+                       $ \appLogger -> do
+                           atomically $ writeTVar var $ Just appLogger
+                           rio $ f var appLogger
         Just appLogger ->  f var appLogger
 
 withSanityChecks :: BundleConfig -> KeterM AppStartConfig a -> KeterM AppStartConfig a

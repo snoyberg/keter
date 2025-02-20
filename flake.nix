@@ -40,7 +40,8 @@
               };
             };
 
-            integratedTests = pkgs.callPackage ./vm.nix { inherit self; };
+            test0 = pkgs.callPackage ./nix/test0.nix { inherit self; };
+            test1 = pkgs.callPackage ./nix/test1.nix { inherit self; };
           };
 
           devShells.default = pkgs.haskellPackages.shellFor {

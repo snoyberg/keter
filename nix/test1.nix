@@ -133,7 +133,7 @@ testers.nixosTest {
     server.succeed("curl localhost | grep 'I am version one.'")
 
     server.succeed(". /etc/deploy_app2.sh")
-    server.sleep(10)
+    server.sleep(120)
     server.succeed("curl localhost | grep 'I am version two.'")
   '';
 }

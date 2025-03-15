@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.1.9
+- Add integration tests (@jezen)
+- bump random package (@jappeace)
+- fix log rotation bug (@jezen & @ktak-007)
+- bunch of cleanup and formatting (@jezen)
+
 ## 2.1.8
 
 - Bump tls, make it build with new release

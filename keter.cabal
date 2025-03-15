@@ -102,6 +102,9 @@ library
     Keter.Aeson.KeyHelper
     Paths_keter
 
+  autogen-modules:
+    Paths_keter
+
   ghc-options:        -Wall
   c-sources:          cbits/process-tracker.c
   hs-source-dirs:     src

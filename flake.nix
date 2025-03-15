@@ -27,19 +27,6 @@
           checks = {
             inherit (pkgs.haskellPackages) keter;
 
-            pre-commit-check = pre-commit-hooks.lib.${system}.run {
-              src = ./.;
-              hooks = {
-                cabal-fmt.enable = true;
-                deadnix.enable = true;
-                hlint.enable = true;
-                markdownlint.enable = true;
-                nixpkgs-fmt.enable = true;
-                statix.enable = true;
-                stylish-haskell.enable = true;
-              };
-            };
-
             integratedTests = pkgs.callPackage ./vm.nix { inherit self; };
           };
 

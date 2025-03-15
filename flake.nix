@@ -39,7 +39,6 @@
               cabal-install
               hlint
             ];
-            inherit shellHook;
           };
         }) // {
       overlays.default = _: prev: {

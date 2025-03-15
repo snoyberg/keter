@@ -8,10 +8,10 @@ jobs:
       fail-fast: false
       matrix:
         ghc: # should mirror current stable releases: https://www.haskell.org/ghc/download.html
+          - '9.10'
           - '9.8'
           - '9.6'
           - '9.4'
-          - '9.2'
         os: [ubuntu-latest, macOS-latest]
 
     steps:

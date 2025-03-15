@@ -39,7 +39,7 @@
               cabal-install
               hlint
             ];
-            inherit (self.checks.${system}.pre-commit-check) shellHook;
+            inherit shellHook;
           };
         }) // {
       overlays.default = _: prev: {

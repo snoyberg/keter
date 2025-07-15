@@ -1,5 +1,8 @@
 # Changelog
 
+## 2.1.10
+- bump optparse applicative
+
 ## 2.1.9
 - Add integration tests (@jezen)
 - bump random package (@jappeace)

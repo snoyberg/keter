@@ -7,7 +7,6 @@
 module Keter.AppManager
     ( -- * Types
       AppManager
-    , Action (..)
       -- * Actions
     , perform
     , reloadAppList
@@ -34,42 +33,26 @@ import Data.Map (Map)
 import Data.Map qualified as Map
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Set qualified as Set
-import Data.Text (Text, pack, unpack)
+import Data.Text (Text, pack)
 import Data.Text.Lazy qualified as LT
 import Data.Text.Lazy.Builder qualified as Builder
 import Data.Traversable.WithIndex (itraverse)
-import Keter.App (App, AppStartConfig, showApp)
 import Keter.App qualified as App
 import Keter.Common
 import Keter.Config
 import Keter.Context
+import Keter.SharedData.App (App, AppStartConfig)
+import Keter.SharedData.AppManager
 import Prelude hiding (FilePath, log)
 import System.FilePath (FilePath)
 import System.Posix.Files (getFileStatus, modificationTime)
 import System.Posix.Types (EpochTime)
-import Text.Printf (printf)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
     , appStartConfig :: !AppStartConfig
     , mutex          :: !(MVar ())
     }
-
-data AppState = ASRunning App
-              | ASStarting
-                    !(Maybe App)
-                    !(TVar (Maybe EpochTime))
-                    !(TVar (Maybe Action)) -- ^ the next one to try
-              | ASTerminated
-
-showAppState :: AppState -> STM Text
-showAppState (ASRunning x) = (\x' -> "running(" <> x' <> ")") <$> showApp x
-showAppState (ASStarting mapp tmtime tmaction) = do
-  mtime   <- readTVar tmtime
-  maction <- readTVar tmaction
-  mtext <- traverse showApp mapp
-  pure $ pack $ printf "starting app %s, time %s, action %s \n" (unpack $ fold mtext) (show mtime) (show maction)
-showAppState ASTerminated = pure "terminated"
 
 renderApps :: AppManager -> STM Text
 renderApps mngr = do
@@ -80,9 +63,6 @@ renderApps mngr = do
                 pure $ Builder.fromText $ res <> " \n"
                ) appMap
   pure $ LT.toStrict $ Builder.toLazyText $ fold x
-
-data Action = Reload AppInput | Terminate
- deriving Show
 
 initialize :: KeterM AppStartConfig AppManager
 initialize = do

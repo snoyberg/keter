@@ -94,6 +94,8 @@ library
     Keter.Plugin.Postgres
     Keter.PortPool
     Keter.Proxy
+    Keter.SharedData.App
+    Keter.SharedData.AppManager
     Keter.Rewrite
     Keter.TempTarball
     Keter.Yaml.FilePath

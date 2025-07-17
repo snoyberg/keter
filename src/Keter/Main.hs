@@ -25,7 +25,6 @@ import Data.Text qualified as T
 import Data.Text.Read qualified
 import Data.Time (getCurrentTime)
 import Data.Vector qualified as V
-import Keter.App (AppStartConfig(..))
 import Keter.AppManager qualified as AppMan
 import Keter.Cli
 import Keter.Common
@@ -37,6 +36,8 @@ import Keter.HostManager qualified as HostMan
 import Keter.Logger qualified as Log
 import Keter.PortPool qualified as PortPool
 import Keter.Proxy qualified as Proxy
+import Keter.SharedData.App (AppStartConfig(..))
+import Keter.SharedData.AppManager qualified as AppMan
 import Keter.TempTarball qualified as TempFolder
 import Keter.Yaml.FilePath
 import Prelude hiding (FilePath, log)

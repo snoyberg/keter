@@ -8,13 +8,10 @@
 {-# LANGUAGE TypeFamilies #-}
 
 module Keter.App
-    ( App
-    , AppStartConfig (..)
-    , start
+    ( start
     , reload
     , getTimestamp
     , Keter.App.terminate
-    , showApp
     ) where
 
 import Control.Arrow ((***))
@@ -41,9 +38,7 @@ import Data.Vector qualified as V
 import Data.Yaml
 import Keter.Common
 import Keter.Conduit.Process.Unix
-       ( MonitoredProcess
-       , ProcessTracker
-       , monitorProcess
+       ( monitorProcess
        , printStatus
        , terminateMonitoredProcess
        )
@@ -52,8 +47,10 @@ import Keter.Context
 import Keter.HostManager hiding (start)
 import Keter.Logger (Logger)
 import Keter.Logger qualified as Log
-import Keter.PortPool (PortPool, getPort, releasePort)
+import Keter.PortPool (getPort, releasePort)
 import Keter.Rewrite (ReverseProxyConfig(..))
+import Keter.SharedData.App
+import Keter.SharedData.AppManager (AppState(..))
 import Keter.TempTarball
 import Keter.Yaml.FilePath
 import Network.Socket
@@ -66,45 +63,8 @@ import System.FilePath (FilePath, (</>))
 import System.IO (IOMode(..), hClose)
 import System.Log.FastLogger qualified as FL
 import System.Posix.Files (fileAccess)
-import System.Posix.Types (EpochTime, GroupID, UserID)
+import System.Posix.Types (EpochTime)
 import System.Timeout (timeout)
-
-data App = App
-    { appModTime        :: !(TVar (Maybe EpochTime))
-    , appRunningWebApps :: !(TVar [RunningWebApp])
-    , appBackgroundApps :: !(TVar [RunningBackgroundApp])
-    , appId             :: !AppId
-    , appHosts          :: !(TVar (Set Host))
-    , appDir            :: !(TVar (Maybe FilePath))
-    , appAsc            :: !AppStartConfig
-    , appLog           :: !(TVar (Maybe Logger))
-    }
-instance Show App where
-  show App {appId} = "App{appId=" <> show appId <> "}"
-
--- | within an stm context we can show a lot more then the show instance can do
-showApp :: App -> STM Text
-showApp App{..} = do
-  appModTime' <- readTVar appModTime
-  appRunning' <- readTVar appRunningWebApps
-  appHosts'   <- readTVar appHosts
-  pure $ pack $
-    show appId <>
-    " modtime: " <> show appModTime' <>  ", webappsRunning: " <>  show appRunning' <> ", hosts: " <> show appHosts'
-
-
-data RunningWebApp = RunningWebApp
-    { rwaProcess            :: !MonitoredProcess
-    , rwaPort               :: !Port
-    , rwaEnsureAliveTimeOut :: !Int
-    }
-
-instance Show RunningWebApp where
-  show (RunningWebApp {..})  = "RunningWebApp{rwaPort=" <> show rwaPort <> ", rwaEnsureAliveTimeOut=" <> show rwaEnsureAliveTimeOut <> ",..}"
-
-newtype RunningBackgroundApp = RunningBackgroundApp
-    { rbaProcess :: MonitoredProcess
-    }
 
 unpackBundle :: FilePath
              -> AppId
@@ -132,16 +92,6 @@ unpackBundle bundle aid = do
         case aid of
             AIBuiltin -> "__builtin__"
             AINamed x -> x
-
-data AppStartConfig = AppStartConfig
-    { ascTempFolder     :: !TempFolder
-    , ascSetuid         :: !(Maybe (Text, (UserID, GroupID)))
-    , ascProcessTracker :: !ProcessTracker
-    , ascHostManager    :: !HostManager
-    , ascPortPool       :: !PortPool
-    , ascPlugins        :: !Plugins
-    , ascKeterConfig    :: !KeterConfig
-    }
 
 withConfig :: AppId
            -> AppInput

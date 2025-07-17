@@ -19,11 +19,12 @@ module Keter.AppManager
     ) where
 
 import Control.Applicative
+import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import Control.Concurrent.STM
 import Control.Exception (SomeException)
 import Control.Exception qualified as E
-import Control.Monad (forM_)
+import Control.Monad (forM_, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.IO.Unlift (withRunInIO)
 import Control.Monad.Logger
@@ -210,7 +211,8 @@ launchWorker ::
   -> Maybe App
   -> Action
   -> KeterM AppManager ()
-launchWorker appid tstate tmnext = loop
+launchWorker appid tstate tmnext mcurrentApp' action' =
+  void $ withRunInIO $ \rio -> forkIO $ rio $ loop mcurrentApp' action'
   where
     loop :: Maybe App -> Action -> KeterM AppManager ()
     loop mcurrentApp action = do
@@ -251,7 +253,7 @@ launchWorker appid tstate tmnext = loop
         $logInfo (reloadMsg "Nothing" (show input))
         AppManager{..} <- ask
         eres <- withRunInIO $ \rio -> E.try @SomeException $
-            rio $ withMappedConfig (const appStartConfig) $ App.start appid input
+            rio $ withMappedConfig (const appStartConfig) $ App.start appid input tstate
         case eres of
             Left e -> do
                 $logError (errorStartingBundleMsg (show name) (show e))
@@ -260,7 +262,7 @@ launchWorker appid tstate tmnext = loop
     processAction (Just app) (Reload input) = do
         $logInfo (reloadMsg (show $ Just app) (show input))
         eres <- withRunInIO $ \rio -> E.try @SomeException $
-            rio $ withMappedConfig (const app) $ App.reload input
+            rio $ withMappedConfig (const app) $ App.reload input tstate
         case eres of
             Left e -> do
                 $logError (errorStartingBundleMsg (show name) (show e))

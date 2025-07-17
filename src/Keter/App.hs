@@ -29,7 +29,7 @@ import Data.Foldable (for_)
 import Data.IORef
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (fromMaybe)
+import Data.Maybe (fromMaybe, isJust)
 import Data.Set (Set)
 import Data.Set qualified as Set
 import Data.Text (Text, pack, unpack)
@@ -217,8 +217,9 @@ withSanityChecks BundleConfig{..} f = do
 
 start :: AppId
       -> AppInput
+      -> TVar AppState
       -> KeterM AppStartConfig App
-start aid input =
+start aid input tstate =
     withLogger aid Nothing $ \tAppLogger appLogger ->
     withConfig aid input $ \newdir bconfig mmodtime ->
     withSanityChecks bconfig $
@@ -226,7 +227,7 @@ start aid input =
     withBackgroundApps aid bconfig newdir appLogger backs $ \runningBacks ->
     withWebApps aid bconfig newdir appLogger webapps $ \runningWebapps -> do
         asc@AppStartConfig{..} <- ask
-        liftIO $ mapM_ ensureAlive runningWebapps
+        liftIO $ mapM_ (ensureAlive tstate) runningWebapps
         withMappedConfig (const ascHostManager) $ activateApp aid actions
         liftIO $
           App
@@ -323,8 +324,8 @@ killWebApp RunningWebApp {..} = do
     $logInfo $ pack $ "Killing " <> unpack status <> " running on port: "  <> show rwaPort
     liftIO $ terminateMonitoredProcess rwaProcess
 
-ensureAlive :: RunningWebApp -> IO ()
-ensureAlive RunningWebApp {..} = do
+ensureAlive :: TVar AppState -> RunningWebApp -> IO ()
+ensureAlive tstate RunningWebApp {..} = do
     didAnswer <- testApp rwaPort
     if didAnswer
         then return ()
@@ -342,10 +343,18 @@ ensureAlive RunningWebApp {..} = do
             threadDelay $ 2 * 1000 * 1000
             eres <- try $ connectTo "127.0.0.1" $ show port
             case eres of
-                Left (_ :: IOException) -> testApp'
+                Left (_ :: IOException) -> do
+                    testApp'required <- not <$> hasNextStartingAction
+                    if testApp'required then testApp' else return False
                 Right handle -> do
                     hClose handle
                     return True
+        hasNextStartingAction :: IO Bool
+        hasNextStartingAction = do
+            state <- readTVarIO tstate
+            case state of
+                ASStarting _app _time tmaction -> isJust <$> readTVarIO tmaction
+                _ -> return False
         connectTo host serv = do
             let hints = defaultHints { addrFlags = [AI_ADDRCONFIG]
                                      , addrSocketType = Stream }
@@ -562,8 +571,8 @@ start tf muid processTracker portman plugins appLogger appname bundle removeFrom
         terminateOld = forkKIO $ do
     -}
 
-reload :: AppInput -> KeterM App ()
-reload input = do
+reload :: AppInput -> TVar AppState -> KeterM App ()
+reload input tstate = do
     App{..} <- ask
     withMappedConfig (const appAsc) $
       withLogger appId (Just appLog) $ \_ appLogger ->
@@ -572,7 +581,7 @@ reload input = do
       withReservations appId bconfig $ \webapps backs actions ->
       withBackgroundApps appId bconfig newdir appLogger backs $ \runningBacks ->
       withWebApps appId bconfig newdir appLogger webapps $ \runningWebapps -> do
-          liftIO $ mapM_ ensureAlive runningWebapps
+          liftIO $ mapM_ (ensureAlive tstate) runningWebapps
           liftIO (readTVarIO appHosts) >>= \hosts ->
             withMappedConfig (const $ ascHostManager appAsc) $
               reactivateApp appId actions hosts

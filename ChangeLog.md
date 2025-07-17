@@ -1,7 +1,8 @@
 # Changelog
 
 ## 2.1.10
-- bump optparse applicative
+- bump optparse applicative @jappeace
+- Fix reloading stuck on crash-looping bundles @ktak-007 [314](https://github.com/snoyberg/keter/pull/314)
 
 ## 2.1.9
 - Add integration tests (@jezen)

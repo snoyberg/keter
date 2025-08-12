@@ -49,6 +49,23 @@
           # override for all compilers
           packageOverrides = prev.lib.composeExtensions prev.haskell.packageOverrides (_: hprev: {
 
+            http-reverse-proxy =
+              let
+                minVersion = "0.6.2.0";
+              in
+              if prev.lib.versionAtLeast hprev.http-reverse-proxy.version minVersion then
+                builtins.trace
+                  "Note: nixpkgs already has http-reverse-proxy ${hprev.http-reverse-proxy.version} (>= ${minVersion}), override not needed"
+                  hprev.http-reverse-proxy
+              else
+                hprev.callHackageDirect
+                  {
+                    pkg = "http-reverse-proxy";
+                    ver = minVersion;
+                    sha256 = "sha256-cknEOvB2t2Qcyv5yFKCEWFvC4gjkCU0k7AFAA4VQ3yA=";
+                  }
+                  { };
+
             tar = hprev.tar_0_6_3_0;
 
             keter =

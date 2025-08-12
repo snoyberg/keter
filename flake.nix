@@ -2,10 +2,9 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
-    pre-commit-hooks.url = "github:cachix/pre-commit-hooks.nix";
   };
 
-  outputs = { self, nixpkgs, flake-utils, pre-commit-hooks }:
+  outputs = { self, nixpkgs, flake-utils }:
     flake-utils.lib.eachDefaultSystem
       (system:
         let
@@ -24,11 +23,15 @@
             default = pkgs.haskellPackages.keter;
           };
 
-          checks = {
-            inherit (pkgs.haskellPackages) keter;
-
-            integratedTests = pkgs.callPackage ./vm.nix { inherit self; };
-          };
+          checks =
+            let
+              basic = pkgs.callPackage ./vm.nix { inherit self; };
+              ipFromHeader = pkgs.callPackage ./vm-ip-from-header.nix { inherit self; };
+            in
+            {
+              inherit (pkgs.haskellPackages) keter;
+              inherit basic ipFromHeader;
+            };
 
           devShells.default = pkgs.haskellPackages.shellFor {
             packages =

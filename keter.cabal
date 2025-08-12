@@ -44,7 +44,7 @@ library
     , fsnotify              >=0.3.0    && <0.5
     , http-client           >=0.7.11   && <0.8
     , http-conduit          >=2.3.8    && <2.4
-    , http-reverse-proxy    >=0.6.1    && <0.7
+    , http-reverse-proxy    >=0.6.1    && <0.6.2
     , http-types            >=0.12.3   && <0.13
     , indexed-traversable   >=0.1.2    && <0.2
     , lifted-base           >=0.2.3    && <0.3
@@ -60,7 +60,7 @@ library
     , template-haskell      >=2.17.0   && <3.0
     , text                  >=1.2.5    && <3.0
     , time                  >=1.9.3    && <2.0
-    , tls                   >=1.5.7    && <2.2     
+    , tls                   >=1.5.7    && <2.2
     , tls-session-manager   >=0.0.4    && <0.1
     , transformers          >=0.5.6    && <0.7
     , unix                  >=2.7.2    && <2.9
@@ -94,9 +94,9 @@ library
     Keter.Plugin.Postgres
     Keter.PortPool
     Keter.Proxy
+    Keter.Rewrite
     Keter.SharedData.App
     Keter.SharedData.AppManager
-    Keter.Rewrite
     Keter.TempTarball
     Keter.Yaml.FilePath
 
@@ -104,9 +104,7 @@ library
     Keter.Aeson.KeyHelper
     Paths_keter
 
-  autogen-modules:
-    Paths_keter
-
+  autogen-modules:    Paths_keter
   ghc-options:        -Wall
   c-sources:          cbits/process-tracker.c
   hs-source-dirs:     src

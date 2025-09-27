@@ -3,7 +3,6 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE DoAndIfThenElse #-}
 -- | Used for management of applications.
 module Keter.AppManager
     ( -- * Types
@@ -20,12 +19,12 @@ module Keter.AppManager
     ) where
 
 import Control.Applicative
-import Control.Concurrent (forkIO, threadDelay)
+import Control.Concurrent (forkIO)
 import Control.Concurrent.MVar (MVar, newMVar, withMVar)
 import Control.Concurrent.STM
 import Control.Exception (SomeException)
 import Control.Exception qualified as E
-import Control.Monad (forM_, void, when)
+import Control.Monad (forM_, void)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.IO.Unlift (withRunInIO)
 import Control.Monad.Logger
@@ -49,13 +48,11 @@ import Prelude hiding (FilePath, log)
 import System.FilePath (FilePath)
 import System.Posix.Files (getFileStatus, modificationTime)
 import System.Posix.Types (EpochTime)
-import System.Directory (getFileSize, getModificationTime)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
     , appStartConfig :: !AppStartConfig
     , mutex          :: !(MVar ())
-    , loads          :: !(TVar [FilePath])
     }
 
 renderApps :: AppManager -> STM Text
@@ -75,7 +72,6 @@ initialize = do
       <$> newTVarIO Map.empty
       <*> return asc
       <*> newMVar ()
-      <*> newTVarIO []
 
 -- | Reset which apps are running.
 --
@@ -241,7 +237,7 @@ launchWorker appid tstate tmnext mcurrentApp' action' =
 
     reloadMsg :: String -> String -> Text
     reloadMsg app input =
-        pack $ "Reloading from: " <> app <> ", " <> input
+        pack $ "Reloading from: " <> app <> input
 
     errorStartingBundleMsg :: String -> String -> Text
     errorStartingBundleMsg bundleName e =
@@ -250,7 +246,7 @@ launchWorker appid tstate tmnext mcurrentApp' action' =
     processAction :: Maybe App -> Action -> KeterM AppManager (Maybe App)
     processAction Nothing Terminate = return Nothing
     processAction (Just app) Terminate = do
-        $logInfo $ pack ("Terminating " <> show app)
+        $logInfo $ pack ("Terminating" <> show app)
         withMappedConfig (const app) App.terminate
         return Nothing
     processAction Nothing (Reload input) = do
@@ -282,27 +278,8 @@ launchWorker appid tstate tmnext mcurrentApp' action' =
 
 addApp :: FilePath -> KeterM AppManager ()
 addApp bundle = do
-    AppManager {..} <- ask
-    withRunInIO $ \rio -> do
-        waitAndPerform' <- liftIO $ atomically $ do
-            loads' <- readTVar loads
-            if bundle `elem` loads'
-            then return skipLoading
-            else do
-                putBundleIntoQueue loads
-                return waitAndPerform
-        void $ forkIO $ rio waitAndPerform'
-    where
-    skipLoading = do
-        return ()
-    waitAndPerform = do
-        waitUntilStable bundle
-        AppManager {..} <- ask
-        removeBundleFromQueue loads
-        (input, action) <- liftIO $ getInputForBundle bundle
-        perform input action
-    putBundleIntoQueue loads = modifyTVar loads (bundle:)
-    removeBundleFromQueue loads = liftIO $ atomically $ modifyTVar loads $ filter (/= bundle)
+    (input, action) <- liftIO $ getInputForBundle bundle
+    perform input action
 
 getInputForBundle :: FilePath -> IO (AppId, Action)
 getInputForBundle bundle = do
@@ -311,14 +288,3 @@ getInputForBundle bundle = do
 
 terminateApp :: Appname -> KeterM AppManager ()
 terminateApp appname = perform (AINamed appname) Terminate
-
-waitUntilStable :: FilePath -> KeterM AppManager ()
-waitUntilStable path = liftIO $ loop Nothing
-    where
-    loop old = do
-        size <- getFileSize path
-        time <- getModificationTime path
-        let new = Just (size, time)
-        when (new /= old) $ do
-            threadDelay 1000000 -- wait 1 sec
-            loop new

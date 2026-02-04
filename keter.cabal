@@ -132,12 +132,14 @@ test-suite test
   hs-source-dirs:     test
   default-extensions: ImportQualifiedPost
   main-is:            Spec.hs
-  other-modules:      Keter.Proxy.MiddlewareSpec
+  other-modules:      Keter.Config.V10Spec
+                    , Keter.Proxy.MiddlewareSpec
   type:               exitcode-stdio-1.0
   build-depends:
     , aeson
     , base
     , bytestring
+    , containers
     , conduit
     , http-client
     , http-conduit
@@ -151,6 +153,7 @@ test-suite test
     , stm
     , tasty
     , tasty-hunit
+    , temporary
     , tls
     , transformers
     , unix
@@ -158,6 +161,7 @@ test-suite test
     , wai
     , warp
     , wreq
+    , yaml
 
   ghc-options:        -Wall -threaded
 

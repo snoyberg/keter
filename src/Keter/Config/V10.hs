@@ -427,6 +427,10 @@ data WebAppConfig port = WebAppConfig
      -- | stanza-local WAI middlewares applied by Keter (e.g., rate limiter).
      -- Parsed from YAML key "middleware". Default: [].
     , waconfigMiddleware  :: ![ MiddlewareConfig ]
+     -- | Extra environment variable names that should also receive the
+     -- assigned port value (in addition to @PORT@).
+     -- Parsed from YAML key "port-env-vars". Default: empty.
+    , waconfigPortEnvVars :: !(Set Text)
     }
     deriving Show
 
@@ -444,6 +448,7 @@ instance ToCurrent (WebAppConfig ()) where
         , waconfigTimeout = Nothing
         , waconfigEnsureAliveTimeout = Nothing
         , waconfigMiddleware = []
+        , waconfigPortEnvVars = Set.empty
         }
 
 instance ParseYamlFile (WebAppConfig ()) where
@@ -469,6 +474,7 @@ instance ParseYamlFile (WebAppConfig ()) where
             <*> o .:? "connection-time-bound"
             <*> o .:? "ensure-alive-time-bound"
             <*> o .:? "middleware" .!= []
+            <*> o .:? "port-env-vars" .!= Set.empty
 
 instance ToJSON (WebAppConfig ()) where
     toJSON WebAppConfig {..} = object
@@ -481,6 +487,7 @@ instance ToJSON (WebAppConfig ()) where
         , "connection-time-bound" .= waconfigTimeout
         , "ensure-alive-time-bound" .= waconfigEnsureAliveTimeout
         , "middleware" .= waconfigMiddleware
+        , "port-env-vars" .= waconfigPortEnvVars
         ]
 
 data AppInput = AIBundle !FilePath !EpochTime

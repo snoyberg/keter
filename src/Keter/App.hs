@@ -294,6 +294,7 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
             if waconfigSsl == SSLFalse
                 then ("http://",  if httpPort  ==  80 then "" else ':' : show httpPort)
                 else ("https://", if httpsPort == 443 then "" else ':' : show httpsPort)
+        portText = pack $ show waconfigPort
         env = Map.toList $ Map.unions
             -- Ordering chosen specifically to precedence rules: app specific,
             -- plugins, global, and then auto-set Keter variables.
@@ -301,7 +302,7 @@ launchWebApp aid BundleConfig {..} mdir appLogger WebAppConfig {..} f = do
             , forwardedEnv
             , Map.fromList otherEnv
             , kconfigEnvironment ascKeterConfig
-            , Map.singleton "PORT" $ pack $ show waconfigPort
+            , Map.fromList $ map (, portText) ("PORT" : Set.toList waconfigPortEnvVars)
             , Map.singleton "APPROOT" $ scheme <> CI.original waconfigApprootHost <> pack extport
             ]
     exec <- liftIO $ canonicalizePath waconfigExec
@@ -343,7 +344,8 @@ ensureAlive tstate RunningWebApp {..} = do
         else error $ "ensureAlive failed, this means keter couldn't " <>
                       "detect your app at port " <> show rwaPort <>
                       ", check your app logs detailed errors. " <>
-                      " Also make sure your app binds to the PORT environment variable (not YESOD_PORT for example)." -- TODO domain name would be good to add as well
+                      " Also make sure your app binds to the PORT environment variable" <>
+                      " (or use port-env-vars in keter.yaml to set additional env var names like YESOD_PORT)."
   where
     testApp :: Port -> IO Bool
     testApp port = do

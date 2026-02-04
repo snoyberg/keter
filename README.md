@@ -59,6 +59,21 @@ or similar strategy.
    variable in `config/settings.yaml` from `YESOD_PORT` to `PORT` for
    compatibility with Keter.
 
+   Alternatively, you can use `port-env-vars` in your `config/keter.yaml` to
+   have Keter set the port under additional environment variable names:
+
+   ```yaml
+   stanzas:
+     - type: webapp
+       exec: ../dist/bin/myapp
+       host: www.example.com
+       port-env-vars:
+         - YESOD_PORT
+   ```
+
+   With this configuration, both `PORT` and `YESOD_PORT` will be set to
+   the same Keter-assigned port, so you don't need to modify your app.
+
 2. Create a file `config/keter.yaml`. The minimal file just has two settings:
 
    ```yaml

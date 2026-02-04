@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Add `port-env-vars` option for webapp stanzas. Allows specifying additional
+  environment variable names (e.g., `YESOD_PORT`) that receive the same
+  port value as `PORT`. This avoids the need to change app configuration
+  when deploying with Keter.
+
 ## 2.3.0
 
 - Add integration with keter-rate-limiting-plugin. [301](https://github.com/snoyberg/keter/issues/301), thanks @Oleksandr-Zhabenko

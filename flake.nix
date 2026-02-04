@@ -27,10 +27,11 @@
             let
               basic = pkgs.callPackage ./vm.nix { inherit self; };
               ipFromHeader = pkgs.callPackage ./vm-ip-from-header.nix { inherit self; };
+              portEnvVars = pkgs.callPackage ./vm-port-env-vars.nix { inherit self; };
             in
             {
               inherit (pkgs.haskellPackages) keter;
-              inherit basic ipFromHeader;
+              inherit basic ipFromHeader portEnvVars;
             };
 
           devShells.default = pkgs.haskellPackages.shellFor {

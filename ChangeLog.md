@@ -1,11 +1,14 @@
 # Changelog
 
-## Unreleased
+## 2.3.1
 
 - Add `port-env-vars` option for webapp stanzas. Allows specifying additional
   environment variable names (e.g., `YESOD_PORT`) that receive the same
   port value as `PORT`. This avoids the need to change app configuration
   when deploying with Keter.
+- Add `preserve-host` option for reverse proxy stanzas. When set to `true`,
+  preserves the original `Host` header when proxying requests.
+  [299](https://github.com/snoyberg/keter/issues/299)
 
 ## 2.3.0
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.2
+
+- Bump `tls` upper bound from `<2.2` to `<2.4` to allow tls 2.2.x and 2.3.x.
+- Bump `tls-session-manager` to allow `^>=0.1.0` (needed for tls 2.3.x support).
+
 ## 2.3.1
 
 - Add `port-env-vars` option for webapp stanzas. Allows specifying additional

@@ -6,6 +6,7 @@ module Keter.Rewrite
   , RewriteRule (..)
   , RPEntry (..)
   , simpleReverseProxy
+  , filterHeaders
   )
   where
 
@@ -94,12 +95,12 @@ regexRewrite (RewriteRule _ regex' replacement) input =
     strInput = T.unpack . decodeUtf8 $ input
     strReplacement = T.unpack replacement
 
-filterHeaders :: [Header] -> [Header]
-filterHeaders = filter useHeader
+filterHeaders :: Bool -> [Header] -> [Header]
+filterHeaders preserveHost = filter useHeader
   where
     useHeader ("Transfer-Encoding", _) = False
     useHeader ("Content-Length", _)    = False
-    useHeader ("Host", _)              = False
+    useHeader ("Host", _)              = preserveHost
     useHeader _                        = True
 
 mkRuleMap :: Set RewriteRule -> Map HeaderName RewriteRule
@@ -116,7 +117,7 @@ mkRequest rpConfig request =
       , port   = reversedPort rpConfig
       , path   = Wai.rawPathInfo request
       , queryString = Wai.rawQueryString request
-      , requestHeaders = filterHeaders $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
+      , requestHeaders = filterHeaders (reversePreserveHost rpConfig) $ rewriteHeaders reqRuleMap (Wai.requestHeaders request)
       , requestBody =
           case Wai.requestBodyLength request of
             Wai.ChunkedBody   -> RequestBodyStreamChunked ($ I.getRequestBodyChunk request)
@@ -155,6 +156,7 @@ data ReverseProxyConfig = ReverseProxyConfig
     , reverseTimeout :: Maybe Int
     , rewriteResponseRules :: Set RewriteRule
     , rewriteRequestRules :: Set RewriteRule
+    , reversePreserveHost :: Bool
     } deriving (Eq, Ord, Show)
 
 instance FromJSON ReverseProxyConfig where
@@ -167,6 +169,7 @@ instance FromJSON ReverseProxyConfig where
         <*> o .:? "timeout" .!= Nothing
         <*> o .:? "rewrite-response" .!= Set.empty
         <*> o .:? "rewrite-request" .!= Set.empty
+        <*> o .:? "preserve-host" .!= False
     parseJSON _ = fail "Wanted an object"
 
 instance ToJSON ReverseProxyConfig where
@@ -179,6 +182,7 @@ instance ToJSON ReverseProxyConfig where
         , "timeout" .= reverseTimeout
         , "rewrite-response" .= rewriteResponseRules
         , "rewrite-request" .= rewriteRequestRules
+        , "preserve-host" .= reversePreserveHost
         ]
 
 data RewriteRule = RewriteRule

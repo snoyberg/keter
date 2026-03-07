@@ -25,6 +25,7 @@ import Test.Tasty
 import Test.Tasty.HUnit
 import qualified Keter.Config.V10Spec as V10
 import qualified Keter.Proxy.MiddlewareSpec as ProxyMW
+import qualified Keter.RewriteSpec as Rewrite
 
 main :: IO ()
 main = defaultMain keterTests
@@ -38,6 +39,7 @@ keterTests =
     , testCase "Head then post doesn't crash" headThenPostNoCrash
     , ProxyMW.tests
     , V10.tests
+    , Rewrite.tests
     ]
 
 caseSubdomainIntegrity :: IO ()

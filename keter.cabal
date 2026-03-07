@@ -134,6 +134,7 @@ test-suite test
   main-is:            Spec.hs
   other-modules:      Keter.Config.V10Spec
                     , Keter.Proxy.MiddlewareSpec
+                    , Keter.RewriteSpec
   type:               exitcode-stdio-1.0
   build-depends:
     , aeson

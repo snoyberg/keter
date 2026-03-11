@@ -3,7 +3,6 @@
 ## 2.3.3
 
 - Bump wai-app-static upper bound to include 3.2.x
-- set tls bound to be bigger then 2.3.0, this forces the solver to include ram on any comming version
 
 ## 2.3.2
 
@@ -11,7 +10,6 @@
 - Bump `tls-session-manager` to allow `^>=0.1.0` (needed for tls 2.3.x support).
 
 ## 2.3.1
-
 - Add `port-env-vars` option for webapp stanzas. Allows specifying additional
   environment variable names (e.g., `YESOD_PORT`) that receive the same
   port value as `PORT`. This avoids the need to change app configuration

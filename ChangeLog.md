@@ -4,6 +4,7 @@
 
 - Bump wai-app-static upper bound to include 3.2.x
 - Add crypton dependency bounds (>=1.1.0 && <1.2) to support upstream RAM changes
+- Add http-client-tls dependency bounds (>=0.4.0 && <0.5)
 
 ## 2.3.2
 

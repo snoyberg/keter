@@ -48,7 +48,7 @@
       overlays.default = _: prev: {
         haskell = prev.haskell // {
           # override for all compilers
-          packageOverrides = prev.lib.composeExtensions prev.haskell.packageOverrides (hself: hprev: {
+          packageOverrides = prev.lib.composeExtensions prev.haskell.packageOverrides (_: hprev: {
 
             http-reverse-proxy =
               let
@@ -79,35 +79,6 @@
                 buildInputs = (oldAttrs.buildInputs or []) ++ [ prev.zlib ];
               });
 
-            # ram is not yet in nixpkgs, needed by crypton >= 1.1.0
-            ram = hprev.callHackageDirect
-              {
-                pkg = "ram";
-                ver = "0.21.1";
-                sha256 = "sha256-J+gP+rZft1xkxzxmvXcktnDIymRkjg5u5wmhEge3+GQ=";
-              }
-              { };
-
-            crypton =
-              let
-                minVersion = "1.1.0";
-              in
-              if prev.lib.versionAtLeast hprev.crypton.version minVersion then
-                builtins.trace
-                  "Note: nixpkgs already has crypton ${hprev.crypton.version} (>= ${minVersion}), override not needed"
-                  hprev.crypton
-              else
-                prev.haskell.lib.overrideCabal hprev.crypton (drv: {
-                  version = minVersion;
-                  sha256 = "sha256-Pwxfg4fbg+crD0Bu1FPWB4I10VmHxAz+1mjwmKH0Pig=";
-                  revision = null;
-                  editedCabalFile = null;
-                  libraryHaskellDepends = (drv.libraryHaskellDepends or []) ++ [
-                    hself.base16
-                    hself.ram
-                  ];
-                });
-
             keter =
               let
                 haskellSourceFilter = prev.lib.sourceFilesBySuffices ./. [
@@ -117,7 +88,11 @@
                   "LICENSE"
                 ];
               in
-              hprev.callCabal2nix "keter" haskellSourceFilter { };
+              # doJailbreak: nixpkgs has crypton 1.0.x but cabal file requires >= 1.1.0.
+              # The bound is correct for Hackage/cabal users; jailbreak lets nix CI pass
+              # until nixpkgs updates crypton. Remove once nixpkgs has crypton >= 1.1.0.
+              prev.haskell.lib.doJailbreak
+                (hprev.callCabal2nix "keter" haskellSourceFilter { });
 
           });
         };

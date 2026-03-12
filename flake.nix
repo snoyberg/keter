@@ -88,7 +88,11 @@
                   "LICENSE"
                 ];
               in
-              hprev.callCabal2nix "keter" haskellSourceFilter { };
+              # doJailbreak: nixpkgs has crypton 1.0.x but cabal file requires >= 1.1.0.
+              # The bound is correct for Hackage/cabal users; jailbreak lets nix CI pass
+              # until nixpkgs updates crypton. Remove once nixpkgs has crypton >= 1.1.0.
+              prev.haskell.lib.doJailbreak
+                (hprev.callCabal2nix "keter" haskellSourceFilter { });
 
           });
         };

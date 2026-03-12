@@ -79,6 +79,15 @@
                 buildInputs = (oldAttrs.buildInputs or []) ++ [ prev.zlib ];
               });
 
+            # ram is not yet in nixpkgs, needed by crypton >= 1.1.0
+            ram = hprev.callHackageDirect
+              {
+                pkg = "ram";
+                ver = "0.21.1";
+                sha256 = "sha256-J+gP+rZft1xkxzxmvXcktnDIymRkjg5u5wmhEge3+GQ=";
+              }
+              { };
+
             crypton =
               let
                 minVersion = "1.1.0";
@@ -93,6 +102,10 @@
                   sha256 = "sha256-Pwxfg4fbg+crD0Bu1FPWB4I10VmHxAz+1mjwmKH0Pig=";
                   revision = null;
                   editedCabalFile = null;
+                  libraryHaskellDepends = (drv.libraryHaskellDepends or []) ++ [
+                    hprev.base16
+                    hprev.ram
+                  ];
                 });
 
             keter =

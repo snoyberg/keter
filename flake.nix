@@ -79,6 +79,23 @@
                 buildInputs = (oldAttrs.buildInputs or []) ++ [ prev.zlib ];
               });
 
+            crypton =
+              let
+                minVersion = "1.1.0";
+              in
+              if prev.lib.versionAtLeast hprev.crypton.version minVersion then
+                builtins.trace
+                  "Note: nixpkgs already has crypton ${hprev.crypton.version} (>= ${minVersion}), override not needed"
+                  hprev.crypton
+              else
+                hprev.callHackageDirect
+                  {
+                    pkg = "crypton";
+                    ver = minVersion;
+                    sha256 = "sha256-cUzdVyz77mFyiKq8gbpN+7+mv2+9vX694EvvRyVh2KQ=";
+                  }
+                  { };
+
             keter =
               let
                 haskellSourceFilter = prev.lib.sourceFilesBySuffices ./. [

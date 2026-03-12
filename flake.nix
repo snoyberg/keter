@@ -48,7 +48,7 @@
       overlays.default = _: prev: {
         haskell = prev.haskell // {
           # override for all compilers
-          packageOverrides = prev.lib.composeExtensions prev.haskell.packageOverrides (_: hprev: {
+          packageOverrides = prev.lib.composeExtensions prev.haskell.packageOverrides (hself: hprev: {
 
             http-reverse-proxy =
               let
@@ -103,8 +103,8 @@
                   revision = null;
                   editedCabalFile = null;
                   libraryHaskellDepends = (drv.libraryHaskellDepends or []) ++ [
-                    hprev.base16
-                    hprev.ram
+                    hself.base16
+                    hself.ram
                   ];
                 });
 

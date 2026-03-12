@@ -88,13 +88,12 @@
                   "Note: nixpkgs already has crypton ${hprev.crypton.version} (>= ${minVersion}), override not needed"
                   hprev.crypton
               else
-                hprev.callHackageDirect
-                  {
-                    pkg = "crypton";
-                    ver = minVersion;
-                    sha256 = "sha256-cUzdVyz77mFyiKq8gbpN+7+mv2+9vX694EvvRyVh2KQ=";
-                  }
-                  { };
+                prev.haskell.lib.overrideCabal hprev.crypton (drv: {
+                  version = minVersion;
+                  sha256 = "sha256-Pwxfg4fbg+crD0Bu1FPWB4I10VmHxAz+1mjwmKH0Pig=";
+                  revision = null;
+                  editedCabalFile = null;
+                });
 
             keter =
               let

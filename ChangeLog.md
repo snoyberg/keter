@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.3.3
+
+- Bump wai-app-static upper bound to include 3.2.x
+- set tls bound to be bigger then 2.3.0, this forces the solver to include ram on any comming version
+
 ## 2.3.2
 
 - Bump `tls` upper bound from `<2.2` to `<2.4` to allow tls 2.2.x and 2.3.x.

@@ -6,6 +6,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE TypeSynonymInstances #-}
+{-# LANGUAGE CPP #-}
 
 module Keter.Main
     ( keter
@@ -188,12 +189,27 @@ startWatching appMan = do
                         FSN.Removed fp _ _ -> do
                             rio $ $logInfo $ "Watched file removed: " <> T.pack fp
                             return $ Left fp
-                        FSN.Added fp _ _ -> do
+#if linux_BUILD_OS
+                        FSN.Added fp _ _ True -> do
+                            rio $ $logInfo $ "Watched file added atomically: " <> T.pack fp
+                            return $ Right fp
+                        FSN.Added fp _ _ False -> do
+                            rio $ $logInfo $ "Watched file added: " <> T.pack fp
+                            return $ Left []
+                        FSN.Modified fp _ _ -> do
+                            rio $ $logInfo $ "Watched file modified: " <> T.pack fp
+                            return $ Left []
+                        FSN.CloseWrite fp _ _ -> do
+                            rio $ $logInfo $ "Watched file close write: " <> T.pack fp
+                            return $ Right fp
+#else
+                        FSN.Added fp _ _ _ -> do
                             rio $ $logInfo $ "Watched file added: " <> T.pack fp
                             return $ Right fp
                         FSN.Modified fp _ _ -> do
                             rio $ $logInfo $ "Watched file modified: " <> T.pack fp
                             return $ Right fp
+#endif
                         _ -> do
                             rio $ $logInfo $ "Watched file unknown" <> T.pack mempty
                             return $ Left []

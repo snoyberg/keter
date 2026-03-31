@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.4
+
+- Widen `tls` upper bound from `<2.4` to `<2.5` for tls 2.4.x compatibility
+
 ## 2.3.3
 
 - Bump wai-app-static upper bound to include 3.2.x

@@ -12,6 +12,7 @@ module Keter.Conduit.Process.Unix
       -- ** Types
       ProcessTracker
       -- ** Functions
+    , forkExecuteLog
     , initProcessTracker
 
       -- * Monitored process

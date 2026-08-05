@@ -31,7 +31,7 @@ import Control.Monad (forM_, void, when, unless)
 import Control.Monad.IO.Class (liftIO)
 import Control.Monad.IO.Unlift (withRunInIO)
 import Control.Monad.Logger
-import Control.Monad.Reader (ask)
+import Control.Monad.Reader (ask, asks)
 import Control.Monad.State (runStateT, StateT, modify)
 import Data.Binary (Word32)
 import Data.Binary.Get (getWord32le, runGet)
@@ -43,9 +43,9 @@ import Data.Conduit (yield)
 import Data.Foldable (fold)
 import Data.Map (Map)
 import Data.Map qualified as Map
-import Data.Maybe (catMaybes, mapMaybe)
+import Data.Maybe (catMaybes, mapMaybe, isJust)
 import Data.Set qualified as Set
-import Data.Text (Text, pack)
+import Data.Text (Text, pack, unpack)
 import Data.Text.Lazy qualified as LT
 import Data.Text.Lazy.Builder qualified as Builder
 import Data.Traversable.WithIndex (itraverse)
@@ -53,13 +53,16 @@ import Keter.App qualified as App
 import Keter.Common
 import Keter.Config
 import Keter.Context
-import Keter.SharedData.App (App, AppStartConfig)
+import Keter.SharedData.App (App, AppStartConfig (ascKeterConfig))
 import Keter.SharedData.AppManager
 import Prelude hiding (FilePath, log)
+import System.Directory (getFileSize, getModificationTime)
+import System.Exit (ExitCode(ExitSuccess))
 import System.FilePath (FilePath)
+import System.IO (hGetContents)
 import System.Posix.Files (getFileStatus, modificationTime)
 import System.Posix.Types (EpochTime)
-import System.Directory (getFileSize, getModificationTime)
+import System.Process (shell, CreateProcess (env, std_err), waitForProcess, StdStream (CreatePipe), withCreateProcess)
 
 data AppManager = AppManager
     { apps           :: !(TVar (Map AppId (TVar AppState)))
@@ -271,8 +274,11 @@ launchWorker appid tstate tmnext mcurrentApp' action' =
         case eres of
             Left e -> do
                 $logError (errorStartingBundleMsg (show name) (show e))
+                callUserHook $ userHookEnvFailed e Nothing
                 return Nothing
-            Right app -> return $ Just app
+            Right app -> do
+                callUserHook userHookEnvSuccess
+                return $ Just app
     processAction (Just app) (Reload input) = do
         $logInfo (reloadMsg (show $ Just app) (show input))
         eres <- withRunInIO $ \rio -> E.try @SomeException $
@@ -280,15 +286,47 @@ launchWorker appid tstate tmnext mcurrentApp' action' =
         case eres of
             Left e -> do
                 $logError (errorStartingBundleMsg (show name) (show e))
+                callUserHook $ userHookEnvFailed e $ Just app
                 -- reloading will /always/ result in a valid app, either the old one
                 -- will continue running or the new one will replace it.
                 return (Just app)
-            Right () -> return $ Just app
+            Right () -> do
+                callUserHook userHookEnvSuccess
+                return $ Just app
 
     name =
         case appid of
             AIBuiltin -> "<builtin>"
             AINamed x -> x
+
+    callUserHook :: [(String, String)] -> KeterM AppManager ()
+    callUserHook envVars =
+        asks (kconfigUserHook . ascKeterConfig . appStartConfig) >>= mapM_
+            (\hook -> withRunInIO $ \rio -> do
+                withCreateProcess (shell $ unpack hook)
+                                  { env = Just envVars
+                                  , std_err = CreatePipe
+                                  }
+                                  $ \_ _ mbStderr ph -> do
+                    exitCode <- waitForProcess ph
+                    when (exitCode /= ExitSuccess) $ do
+                        err <- case mbStderr of
+                                   Just stderr -> (": "<>) <$> hGetContents stderr
+                                   Nothing -> return ""
+                        rio $ $logError $ "Failed to start user hook '" <> hook <> "'" <> pack err
+            )
+    userHookEnvSuccess :: [(String, String)]
+    userHookEnvSuccess =
+        [ ("NAME", unpack name)
+        , ("STATUS", "started")
+        ]
+    userHookEnvFailed :: SomeException -> Maybe App -> [(String, String)]
+    userHookEnvFailed err mbApp =
+        [ ("NAME", unpack name)
+        , ("STATUS", "failure")
+        , ("FAILURE", show err)
+        , ("FALLBACK", show $ isJust mbApp)
+        ] ++ maybe [] (\app -> [("FALLBACK_APP", show app)]) mbApp
 
 addApp :: FilePath -> KeterM AppManager ()
 addApp bundle = do

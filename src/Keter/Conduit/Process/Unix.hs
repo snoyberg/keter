@@ -2,6 +2,7 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 
@@ -61,6 +62,8 @@ import Data.Text.Encoding (decodeUtf8)
 import Data.Time (diffUTCTime, getCurrentTime)
 import Data.Typeable (Typeable)
 import Foreign.C.Types
+import Keter.GHC.Hotswap
+import Keter.GHC.Types
 import Prelude
        ( Bool(..)
        , Either(..)
@@ -325,6 +328,13 @@ monitorProcess processTracker msetuid exec dir args env' rlog shouldRestart =
                         (Just dir)
                         (Just $ return ())
                         rlog
+                    -- This is an approximate place for initialization
+                    -- Probably, it is required to check the results of the initialization
+                    -- Most likely this is the very place where we need to save the SOHanles to call middleware plugin function.
+                    so <- registerHotswap "hs_soHandles" "./dist-newstyle/build/x86_64-linux/ghc-9.8.4/ghc-hotswap-so-0.1.0.0/build/HSghc-hotswap-so-0.1.0.0-inplace.o"
+                    withSO so $ \SOHandles{..} -> do
+                        rio $ $logDebug $ pack $ "someData = " <> show someData
+                        initialize 7
                     case res of
                         Left e -> do
                             rio $ $logError $ "Data.Conduit.Process.Unix.monitorProcess: " <> pack (show (e :: SomeException))

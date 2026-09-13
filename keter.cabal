@@ -24,7 +24,7 @@ extra-source-files:
   README.md
 
 library
-  default-language:   Haskell98
+  default-language:   Haskell2010
   default-extensions: ImportQualifiedPost
   build-depends:
     , aeson                 >=2.0.0    && <2.2     || ^>=2.2.0.0 || ^>=2.3.0.0
@@ -77,6 +77,9 @@ library
     , warp-tls              ^>=3.0.3   || ^>=3.1   || ^>=3.2      || ^>=3.3 || ^>=3.4
     , yaml                  >=0.8.4    && <0.12
     , zlib                  >=0.6.2    && <0.7     || ^>=0.7.0
+    , concurrent-extra
+    , deepseq
+    , ghci
 
   exposed-modules:
     Keter.App
@@ -103,6 +106,9 @@ library
     Keter.TempTarball
     Keter.Yaml.FilePath
 
+    Keter.GHC.Hotswap
+    Keter.GHC.Types
+
   other-modules:
     Keter.Aeson.KeyHelper
     Paths_keter
@@ -123,9 +129,11 @@ executable keter
     , filepath
     , keter
 
-  ghc-options:        -threaded -Wall
+  ghc-options:        -threaded -Wall -rdynamic -fwhole-archive-hs-libs -no-hs-main
   other-modules:      Paths_keter
   autogen-modules:    Paths_keter
+  c-sources:          src/main/HotswapMain.c
+  extra-libraries:    pthread
 
 test-suite test
   default-language:   Haskell98

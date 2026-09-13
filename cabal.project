@@ -1,4 +1,6 @@
 packages: .
+        , */*.cabal
+        -- ^ to find user's ghc-hotswap-so in the root.
 
 source-repository-package
   type: git

@@ -67,12 +67,13 @@ import Network.Wai.Application.Static
        (defaultFileServerSettings, ssListing, staticApp)
 import Network.Wai.Handler.Warp qualified as Warp
 import Network.Wai.Handler.WarpTLS qualified as WarpTLS
-import Network.Wai.Middleware.Gzip (GzipFiles(..), GzipSettings(..), def, gzip)
+import Network.Wai.Middleware.Gzip (GzipFiles(..), GzipSettings(..), defaultGzipSettings, gzip)
 import Paths_keter qualified as Pkg
 import Prelude hiding (FilePath, (++))
 import System.Directory qualified as Dir
 import System.FilePath (FilePath)
 import WaiAppStatic.Listing (defaultListing)
+import Network.Wai (Middleware)
 
 data ProxySettings = MkProxySettings
   { -- | Mapping from virtual hostname to action, credentials
@@ -116,6 +117,14 @@ taggedReadFile tag (Just file) fallback processContents = do
   where
     quote = ("'" <>) . (<> "'") . fromString
 
+testMiddleware :: Middleware
+testMiddleware app req respond = do
+  putStrLn "Hello from test middleware"
+  app req respond
+
+withMiddleware :: Middleware -> Wai.Application -> KeterM ProxySettings Wai.Application
+withMiddleware middleware app = return $ middleware app
+
 reverseProxy :: ListeningPort -> KeterM ProxySettings ()
 reverseProxy listener = do
   settings <- ask
@@ -130,7 +139,11 @@ reverseProxy listener = do
                           (V.toList chainCerts)
                           key)
                       (warp host port), True)
-  withClient isSecure >>= run . gzip def{gzipFiles = GzipPreCompressed GzipIgnore}
+  -- withClient isSecure >>= run . gzip def{gzipFiles = GzipPreCompressed GzipIgnore}
+  -- Here I need to call plugin's middleware instead of testMiddleware
+  withClient isSecure >>=
+    withMiddleware testMiddleware >>=
+    run . gzip defaultGzipSettings {gzipFiles = GzipPreCompressed GzipIgnore}
   where
     warp host port = Warp.setHost host
                    $ Warp.setPort port

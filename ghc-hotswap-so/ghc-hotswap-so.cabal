@@ -1,0 +1,32 @@
+name:                ghc-hotswap-so
+version:             0.1.0.0
+synopsis:            An example cabal project to build a hotswappable shared object
+description:
+  Skeleton configuration for a hotswappable shared object. Includes examples
+  of raw data as well as functions that originate in a shared object.
+  It must be configured with `--enable-library-for-ghci` to properly link all
+  symbols via cabal.
+-- homepage:            https://github.com/fbsamples/ghc-hotswap
+-- bug-reports:         https://github.com/fbsamples/ghc-hotswap/issues
+-- license:             OtherLicense
+-- license-files:       LICENSE,PATENTS
+-- author:              Facebook, Inc.
+-- maintainer:          The Haxl Team <haxl-team@fb.com>
+-- copyright:           (c) 2017-present, Facebook, Inc. All rights reserved.
+build-type:          Simple
+cabal-version:       >=1.10
+stability:           alpha
+
+library
+  exposed-modules:     Plugin.Handles
+  other-modules:       Plugin.Body
+  build-depends:       base
+                       -- >= 4.9 && < 4.12
+                       -- , ghc-hotswap-types >= 0.1 && < 0.2
+                       , keter
+  default-language:    Haskell2010
+
+
+-- source-repository head
+--   type:     git
+--   location: https://github.com/fbsamples/ghc-hotswap/ghc-hotswap/ghc-hotswap-so
